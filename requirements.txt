@@ -9,3 +9,15 @@ chromadb
 sentence-transformers
 python-dotenv
 anthropic
+python-dotenv
+python-docx
+tqdm
+langchain-anthropic
+langchain-huggingface
+pypdf2
+rich
+openpyxl
+serpapi
+langchain-chroma
+langchain-text-splitter
+google-search-results
