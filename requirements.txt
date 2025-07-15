@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+streamlit
+requests
+langchain
+langchain-community
+chromadb
+sentence-transformers
+python-dotenv
+anthropic
