@@ -12,7 +12,7 @@ from app.embedd_manifest import load_manifest, save_manifest
 # LangChain setup
 os.environ["LANGCHAIN_ENDPOINT"] = "none"
 
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -86,22 +86,36 @@ def ingest_documents():
         batch_embeddings = embedding_model.embed_documents(batch)
         embeddings.extend(batch_embeddings)
 
-    # Reattach embeddings to documents
-    for i, emb in enumerate(embeddings):
-        docs[i].metadata["embedding"] = emb  # Optional for debugging
+    # Remove embedding from metadata to prevent Chroma error
+    for doc in docs:
+        if "embedding" in doc.metadata:
+            del doc.metadata["embedding"]
 
-    # Load existing vectorstore if present
-    rprint("\n[bold cyan]💾 Saving to Chroma vectorstore...[/]")
-    vectorstore = Chroma(persist_directory=CHROMA_DB_PATH, embedding_function=embedding_model)
-
+    # Save to Chroma
+    rprint(f"\n[bold cyan]💾 Saving to Chroma vectorstore at: {Path(CHROMA_DB_PATH).resolve()}[/]")
     try:
-        vectorstore.add_documents(docs)
-        vectorstore.persist()
-        rprint(f"✅ Saved {len(docs)} chunks to ChromaDB at: [green]{CHROMA_DB_PATH}[/]")
+        vectorstore = Chroma(
+            persist_directory=CHROMA_DB_PATH,
+            embedding_function=embedding_model
+        )
+
+        for i in tqdm(range(0, len(docs), batch_size), desc="Saving to vectorstore"):
+            batch_docs = docs[i:i + batch_size]
+            vectorstore.add_documents(batch_docs)
+
+        rprint(f"✅ Saved {len(docs)} chunks to ChromaDB.")
     except Exception as e:
         rprint(f"[red]❌ Failed to save to Chroma: {e}[/]")
         return
 
+    # Vectorstore count
+    try:
+        count = vectorstore._collection.count()
+        rprint(f"ℹ️ Vectorstore now contains {count} vectors.")
+    except Exception as e:
+        rprint(f"[yellow]⚠️ Could not get vectorstore count: {e}[/]")
+
+    # Save manifest
     embedded_files.update(newly_embedded_files)
     save_manifest(embedded_files)
     rprint(f"[bold green]📝 Updated embed manifest with {len(newly_embedded_files)} new files.[/]")
