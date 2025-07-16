@@ -16,5 +16,5 @@ def get_claude_llm():
         model_name=CLAUDE_MODEL,
         temperature=0.3,
         timeout=60,
-        stop=None,  # Add a suitable value or list of stop sequences if needed
+        stop=None,  # Provide a suitable value or list of stop sequences if needed
     )
