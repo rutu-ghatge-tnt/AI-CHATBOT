@@ -9,6 +9,11 @@ __pycache__/
 # C extensions
 *.so
 
+chroma_db/
+venv311/
+venv311/docx-template/docProps/thumbnail.jpeg
+venv311/pyvenv.cfg
+
 # Distribution / packaging
 .Python
 build/
@@ -204,3 +209,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+

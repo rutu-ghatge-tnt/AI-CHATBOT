@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 pydantic
-streamlit
 requests
 langchain
 langchain-community
@@ -19,5 +18,4 @@ rich
 openpyxl
 serpapi
 langchain-chroma
-langchain-text-splitter
 google-search-results

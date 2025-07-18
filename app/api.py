@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.rag_pipeline import get_rag_chain
-from serpapi import GoogleSearch # type: ignore
+from serpapi import GoogleSearch 
 
 router = APIRouter()
 rag_chain = get_rag_chain()
@@ -43,22 +43,39 @@ def web_search_and_summarize(query: str) -> str:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    user_query = request.query.strip()
+    user_query = request.query.strip().lower()
 
+    # ✅ Normalize query and handle identity questions
+    clean_query = user_query.lower().strip().rstrip("?!.")
+    identity_triggers = {
+        "who are you", "what is your name", "tell me about yourself",
+        "who is skinsage", "are you a bot", "your identity"
+    }
+    if clean_query in identity_triggers:
+        return ChatResponse(
+            answer="Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant! I specialize in helping you understand skincare ingredients, create routines, and find the right products for your skin."
+        )
+
+    # 🚫 Offensive check
     if is_offensive(user_query):
         return ChatResponse(
             answer="I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"
         )
 
-    rag_result = rag_chain({"query": user_query})
+    # 🔍 Run RAG chain
+    rag_result = rag_chain.invoke({"query": user_query})
+
     answer = rag_result.get("answer") or rag_result.get("result") or ""
 
+    # 🤖 Web fallback detection
     no_info_phrases = [
-        "don’t have enough information here",
+        "don't have enough information here",
         "i do not have that information",
         "sorry, i don't know",
         "cannot find",
-        "don't have an answer"
+        "don't have an answer",
+        "i'm not sure about that",
+        "i'd be happy to help with anything skincare-related"
     ]
 
     if any(phrase in answer.lower() for phrase in no_info_phrases):
