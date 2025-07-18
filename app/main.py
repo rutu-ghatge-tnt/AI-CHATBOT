@@ -11,10 +11,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Local origin
-        "https://tt.skintruth.in"  # Development origin
-    ],
+    allow_origins=["https://tt.skintruth.in"],  # Explicit frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
