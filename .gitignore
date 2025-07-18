@@ -204,3 +204,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Database folder
+chroma_db/
+
+# Exclude verify_embeddings.py file
+verify_embeddings.py
