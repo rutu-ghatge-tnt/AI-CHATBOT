@@ -11,7 +11,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TEMPORARILY allow everything
+    allow_origins=["https://tt.skintruth.in"],  # TEMPORARILY allow everything
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
