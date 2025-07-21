@@ -10,13 +10,14 @@ def get_rag_chain():
     # Initialize the vector database with sentence embeddings
     vector_db = Chroma(
         persist_directory=CHROMA_DB_PATH,
-        embedding_function=HuggingFaceEmbeddings(model_name="intfloat/e5-base-v2")
+        embedding_function=HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
     )
 
     # Configure retriever with top-k similarity search
     retriever = vector_db.as_retriever(
         search_type="mmr",  # more diverse context
-        search_kwargs={"k": 6, "fetch_k": 12}  # higher fetch_k ensures better context
+        search_kwargs={"k": 8, "fetch_k": 12}  # higher fetch_k ensures better context
     )
 
 

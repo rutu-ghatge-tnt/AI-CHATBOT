@@ -74,7 +74,9 @@ def ingest_documents():
 
     # Load embedding model
     rprint("\n[bold]🔗 Loading embedding model...[/]")
-    embedding_model = HuggingFaceEmbeddings(model_name="intfloat/e5-base-v2")
+    embedding_model = HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2"
+    )
 
     rprint("[yellow]💡 Creating embeddings...[/]")
     texts = [doc.page_content for doc in docs]
