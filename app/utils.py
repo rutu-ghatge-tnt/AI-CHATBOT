@@ -16,13 +16,29 @@ def extract_text(file_path: Path) -> str:
         elif suffix in [".csv", ".tsv"]:
             df = pd.read_csv(file_path, sep="\t" if suffix == ".tsv" else ",", dtype=str)
             df.fillna("", inplace=True)
-            rows = df.apply(lambda row: " | ".join([f"{col.strip()}: {val.strip()}" for col, val in row.items() if val.strip()]), axis=1)
+            rows = df.apply(
+lambda row: " | ".join([
+f"{col.strip()}: {str(val).strip()}"  # Convert val to string before strip
+for col, val in row.items()
+if str(val).strip() != ""
+]),
+axis=1
+)
+
             return "\n".join(rows)
 
         elif suffix in [".xls", ".xlsx"]:
             df = pd.read_excel(file_path, engine="openpyxl", dtype=str)
             df.fillna("", inplace=True)
-            rows = df.apply(lambda row: " | ".join([f"{col.strip()}: {val.strip()}" for col, val in row.items() if val.strip()]), axis=1)
+            rows = df.apply(
+    lambda row: " | ".join([
+        f"{col.strip()}: {str(val).strip()}"  # Convert val to string before strip
+        for col, val in row.items()
+        if str(val).strip() != ""
+    ]),
+    axis=1
+)
+
             return "\n".join(rows)
 
         elif suffix in [".txt", ".md"]:

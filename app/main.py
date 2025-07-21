@@ -11,11 +11,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://tt.skintruth.in"],  # Explicit frontend origin
+    allow_origins=["*"],  # TEMPORARILY allow everything
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(api_router, prefix="/api")
 

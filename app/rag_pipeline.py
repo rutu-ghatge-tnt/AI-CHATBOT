@@ -10,14 +10,15 @@ def get_rag_chain():
     # Initialize the vector database with sentence embeddings
     vector_db = Chroma(
         persist_directory=CHROMA_DB_PATH,
-        embedding_function=HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        embedding_function=HuggingFaceEmbeddings(model_name="intfloat/e5-base-v2")
     )
 
     # Configure retriever with top-k similarity search
     retriever = vector_db.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": 4}
+        search_type="mmr",  # more diverse context
+        search_kwargs={"k": 6, "fetch_k": 12}  # higher fetch_k ensures better context
     )
+
 
     # Prompt template used by the Claude model
     prompt_template = PromptTemplate.from_template(
@@ -31,6 +32,12 @@ def get_rag_chain():
         - Automatically expand those terms to their full scientific names (e.g., HA → Hyaluronic Acid)
         - Use the expanded version to match the context for the most relevant answer
         - If something is ambiguous, interpret it in a helpful way, or kindly ask for clarification
+        - Pay attention to price information like MRP and selling price when answering.
+        - If the context doesn't provide enough information, politely inform the user and suggest they ask a skincare-related question.
+        - If the question is off-topic, kindly say something helpful like:
+          "I'm not sure about that, but I'd be happy to help with anything skincare-related!"
+        - If the question is about your identity, respond with:
+          "Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant
      
         Answer accurately using the most relevant information from the provided context below.
 

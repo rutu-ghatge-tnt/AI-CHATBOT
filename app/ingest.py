@@ -52,7 +52,7 @@ def ingest_documents():
                 continue
 
             total_chars += len(text)
-            splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+            splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=400)
             chunks = splitter.split_text(text)
 
             for chunk in chunks:
@@ -74,24 +74,23 @@ def ingest_documents():
 
     # Load embedding model
     rprint("\n[bold]🔗 Loading embedding model...[/]")
-    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embedding_model = HuggingFaceEmbeddings(model_name="intfloat/e5-base-v2")
 
     rprint("[yellow]💡 Creating embeddings...[/]")
     texts = [doc.page_content for doc in docs]
-    embeddings = []
     batch_size = 100
 
+    # embeddings are created here but not directly used; can be omitted if unnecessary
     for i in tqdm(range(0, len(texts), batch_size), desc="Embedding chunks"):
         batch = texts[i:i + batch_size]
-        batch_embeddings = embedding_model.embed_documents(batch)
-        embeddings.extend(batch_embeddings)
+        _ = embedding_model.embed_documents(batch)  # call to warm up or generate embeddings if needed
 
-    # Remove embedding from metadata to prevent Chroma error
+    # Remove any existing 'embedding' from metadata to avoid Chroma errors
     for doc in docs:
         if "embedding" in doc.metadata:
             del doc.metadata["embedding"]
 
-    # Save to Chroma
+    # Save documents to Chroma vectorstore
     rprint(f"\n[bold cyan]💾 Saving to Chroma vectorstore at: {Path(CHROMA_DB_PATH).resolve()}[/]")
     try:
         vectorstore = Chroma(
@@ -103,19 +102,20 @@ def ingest_documents():
             batch_docs = docs[i:i + batch_size]
             vectorstore.add_documents(batch_docs)
 
+        # No explicit persist() call needed — auto-persist enabled by persist_directory
         rprint(f"✅ Saved {len(docs)} chunks to ChromaDB.")
     except Exception as e:
         rprint(f"[red]❌ Failed to save to Chroma: {e}[/]")
         return
 
-    # Vectorstore count
+    # Print vector count
     try:
         count = vectorstore._collection.count()
         rprint(f"ℹ️ Vectorstore now contains {count} vectors.")
     except Exception as e:
         rprint(f"[yellow]⚠️ Could not get vectorstore count: {e}[/]")
 
-    # Save manifest
+    # Update manifest file with newly embedded files
     embedded_files.update(newly_embedded_files)
     save_manifest(embedded_files)
     rprint(f"[bold green]📝 Updated embed manifest with {len(newly_embedded_files)} new files.[/]")
