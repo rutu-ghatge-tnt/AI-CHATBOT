@@ -28,3 +28,6 @@ app.include_router(api_router, prefix="/api")
 @app.get("/")
 async def root():
     return {"message": "Welcome to SkinBB AI Chatbot API. Use POST /api/chat to interact v1."}
+
+
+#changes check
