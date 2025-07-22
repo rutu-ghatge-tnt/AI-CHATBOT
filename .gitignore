@@ -211,3 +211,5 @@ chroma_db/
 
 # Exclude verify_embeddings.py file
 verify_embeddings.py
+chroma_db/chroma.sqlite3
+chroma_db/chroma.sqlite3
