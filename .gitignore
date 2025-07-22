@@ -210,6 +210,18 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+
+# Database folder
+chroma_db/
+
+# Exclude verify_embeddings.py file
+verify_embeddings.py
+chroma_db/chroma.sqlite3
+chroma_db/chroma.sqlite3
+chroma_db/chroma.sqlite3
+chroma_db/chroma.sqlite3
+
+
 venv311/pyvenv.cfg
 venv311/docx-template/docProps/thumbnail.jpeg
 .gitignore
