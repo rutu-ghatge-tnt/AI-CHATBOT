@@ -14,8 +14,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://tt.skintruth.in"],  # Specific frontend origin
-    #allow_origins= ["http://localhost:5173"], 
-    allow_origins= ["https://tt.skintruth.in"], 
+    #allow_origins= ["http://localhost:5173"],  
     allow_credentials=True,
     allow_methods=["*"],  # Allows GET, POST, PUT, DELETE, OPTIONS
     allow_headers=["*"],  # Allows all headers like Content-Type, Authorization
