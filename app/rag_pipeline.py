@@ -10,7 +10,7 @@ def get_rag_chain():
     # Initialize the vector database with sentence embeddings
     vector_db = Chroma(
         persist_directory=CHROMA_DB_PATH,
-        embedding_function=HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 
     )
 

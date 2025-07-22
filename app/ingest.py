@@ -4,7 +4,7 @@ from pathlib import Path
 from tqdm import tqdm
 from rich import print as rprint
 import traceback
-
+import pandas as pd
 from app.config import CHROMA_DB_PATH
 from app.utils import extract_text
 from app.embedd_manifest import load_manifest, save_manifest
@@ -45,6 +45,46 @@ def ingest_documents():
             rprint(f"[dim]⏭️ Skipping {f.name} — already embedded.[/]")
             continue
 
+        if f.suffix == ".xlsx":
+            try:
+                df = pd.read_excel(f)
+                df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+                
+                for i, row in df.iterrows():
+                    product_text = f"""
+                    Product Name: {row.get('product_name', '')}
+                    Brand: {row.get('brand_name', '')}
+                    Key Ingredients: {row.get('key_ingredients', '')}
+                    All Ingredients: {row.get('all_ingredients', '')}
+                    MRP: ₹{row.get('mrp', '')}
+                    Description: {row.get('product_description', '')}
+                    Features & Benefits: {row.get('key_features_&_benefits', '')}
+                    How To Use: {row.get('how_to_use', '')}
+                    About Brand: {row.get('about_the_brand', '')}
+                    Age Suitability: {row.get('age', '')}
+                    Skin Type: {row.get('skin_type', '')}
+                    Hair Type: {row.get('hair_type', '')}
+                    Skin Tone: {row.get('skin_tone', '')}
+                    SPF: {row.get('spf', '')}
+                    Super Ingredients: {row.get('super_ingredients', '')}
+                    Benefits: {row.get('benefits', '')}
+                    Fragrance Family: {row.get('fragrance_family', '')}
+                    Makeup Finish: {row.get('make_up_finish', '')}
+                    Dimensions: {row.get('dimensions', '')}
+                    Imported By: {row.get('imported_by', '')}
+                    """
+
+                    docs.append(Document(page_content=product_text.strip(), metadata={"source": f.name}))
+                
+                newly_embedded_files.add(f.name)
+                rprint(f"[green]📘 {f.name} — embedded {len(df)} Excel rows[/]")
+                continue  # Skip default chunking/extract for Excel
+
+            except Exception as e:
+                rprint(f"[red]❌ Failed to process Excel file {f.name}: {e}[/]")
+                traceback.print_exc()
+                continue
+
         try:
             text = extract_text(f)
             if not text.strip():
@@ -74,9 +114,9 @@ def ingest_documents():
 
     # Load embedding model
     rprint("\n[bold]🔗 Loading embedding model...[/]")
-    embedding_model = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2"
+    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2"
     )
+
 
     rprint("[yellow]💡 Creating embeddings...[/]")
     texts = [doc.page_content for doc in docs]

@@ -211,3 +211,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 venv311/pyvenv.cfg
+venv311/docx-template/docProps/thumbnail.jpeg
+.gitignore
+venv311/pyvenv.cfg

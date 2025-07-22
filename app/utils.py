@@ -17,29 +17,18 @@ def extract_text(file_path: Path) -> str:
             df = pd.read_csv(file_path, sep="\t" if suffix == ".tsv" else ",", dtype=str)
             df.fillna("", inplace=True)
             rows = df.apply(
-lambda row: " | ".join([
-f"{col.strip()}: {str(val).strip()}"  # Convert val to string before strip
-for col, val in row.items()
-if str(val).strip() != ""
-]),
-axis=1
-)
-
+                lambda row: " | ".join([
+                    f"{col.strip()}: {str(val).strip()}"
+                    for col, val in row.items()
+                    if str(val).strip() != ""
+                ]),
+                axis=1
+            )
             return "\n".join(rows)
 
         elif suffix in [".xls", ".xlsx"]:
-            df = pd.read_excel(file_path, engine="openpyxl", dtype=str)
-            df.fillna("", inplace=True)
-            rows = df.apply(
-    lambda row: " | ".join([
-        f"{col.strip()}: {str(val).strip()}"  # Convert val to string before strip
-        for col, val in row.items()
-        if str(val).strip() != ""
-    ]),
-    axis=1
-)
-
-            return "\n".join(rows)
+            # SKIP Excel here — handled in ingest.py for structured row-level embedding
+            return ""
 
         elif suffix in [".txt", ".md"]:
             return file_path.read_text(encoding="utf-8", errors="ignore")
