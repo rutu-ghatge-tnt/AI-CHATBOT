@@ -2,6 +2,9 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from app.rag_pipeline import get_rag_chain
 from serpapi import GoogleSearch 
+from fastapi import Request
+from app.memory import get_or_create_session_id, get_history, add_to_history
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 rag_chain = get_rag_chain()
@@ -43,26 +46,33 @@ def web_search_and_summarize(query: str) -> str:
         return "Sorry, I couldn't fetch online information right now."
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, raw_request: Request):
     user_query = request.query.strip().lower()
     clean_query = user_query.rstrip("?!.")
     identity_triggers = {
         "who are you", "what is your name", "tell me about yourself",
         "who is skinsage", "are you a bot", "your identity"
     }
+
+    session_id = get_or_create_session_id(raw_request)
+    history = get_history(session_id)
+
+    # Check identity or offensive
     if clean_query in identity_triggers:
-        return ChatResponse(
-            answer="Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant! How can I help you today?"
-        )
+        return JSONResponse(content={"answer": "Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant! How can I help you today?"}, headers={"Set-Cookie": f"session_id={session_id}"})
 
     if is_offensive(user_query):
-        return ChatResponse(
-            answer="I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"
-        )
+        return JSONResponse(content={"answer": "I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"}, headers={"Set-Cookie": f"session_id={session_id}"})
+
+    # Combine history into prompt
+    chat_context = ""
+    for turn in history[-5:]:  # last 5 turns
+        chat_context += f"User: {turn['query']}\nAssistant: {turn['response']}\n"
+    chat_context += f"User: {user_query}"
 
     try:
-        rag_result = rag_chain.invoke({"query": user_query})
-        print("RAG Result:", rag_result)  # Debug print to terminal/log
+        rag_result = rag_chain.invoke({"question": chat_context})
+        print("RAG Result:", rag_result)
         answer = rag_result.get("result", "").strip()
     except Exception as e:
         print("Error from RAG chain:", e)
@@ -86,4 +96,8 @@ async def chat_endpoint(request: ChatRequest):
             + web_answer
         )
 
-    return ChatResponse(answer=answer)
+    # Save to history
+    add_to_history(session_id, user_query, answer)
+
+    # Return with cookie
+    return JSONResponse(content={"answer": answer}, headers={"Set-Cookie": f"session_id={session_id}"})
