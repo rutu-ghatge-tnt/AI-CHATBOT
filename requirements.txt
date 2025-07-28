@@ -12,7 +12,7 @@ google-cloud-vision>=3.4.5
 langchain-anthropic>=0.1.11
 
 # LangChain integrations
-ngchain-community>=0.0.30
+ngchain-community>=0.1.16
 langchain>=0.1.16
 langchain-chroma>=0.1.4
 langchain-huggingface>=0.0.5
