@@ -40,3 +40,4 @@ rich>=13.7.1   # ✅ Already noted, now explicitly listed
 # Utilities
 tqdm>=4.66.4
 pydantic>=2.7.1
+google-search-results
