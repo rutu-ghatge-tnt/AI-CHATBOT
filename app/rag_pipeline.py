@@ -28,7 +28,7 @@ def get_rag_chain():
 
         Your task is to answer user questions based on the provided context. You should:
         - Use the most relevant information from the context to provide accurate and helpful answers
-        When answering the user's question:
+        When answering the question of the user, please follow these guidelines:
         - Identify any skincare-related abbreviations or slang (e.g., HA, AHA, BHA, Vit C, Niac, Ret, Sal)
         - Automatically expand those terms to their full scientific names (e.g., HA → Hyaluronic Acid)
         - Use the expanded version to match the context for the most relevant answer
