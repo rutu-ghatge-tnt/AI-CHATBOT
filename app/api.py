@@ -1,3 +1,4 @@
+#app/api.py
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.rag_pipeline import get_rag_chain
@@ -71,7 +72,7 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
     chat_context += f"User: {user_query}"
 
     try:
-        rag_result = rag_chain.invoke({"question": chat_context})
+        rag_result = rag_chain.invoke({"query": chat_context})
         print("RAG Result:", rag_result)
         answer = rag_result.get("result", "").strip()
     except Exception as e:
