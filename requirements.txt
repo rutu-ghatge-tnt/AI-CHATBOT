@@ -1,21 +1,42 @@
-fastapi
-uvicorn
-pydantic
-requests
-langchain
-langchain-community
-chromadb
-sentence-transformers
-python-dotenv
-anthropic
-python-dotenv
-python-docx
-tqdm
-langchain-anthropic
-langchain-huggingface
-pypdf2
-rich
-openpyxl
-serpapi
-langchain-chroma
-google-search-results
+# FastAPI + Uvicorn
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Google Cloud Vision API
+google-cloud-vision>=3.4.5
+
+# Claude (Anthropic) via LangChain
+langchain-anthropic>=0.1.11
+
+# LangChain integrations
+ngchain-community>=0.0.30
+langchain>=0.1.16
+langchain-chroma>=0.1.4
+langchain-huggingface>=0.0.5
+
+# Vector DB + HuggingFace
+chromadb>=0.4.24
+huggingface-hub>=0.21.4
+transformers>=4.41.0
+torch>=2.2.2
+
+# Claude-compatible .env loader
+python-dotenv>=1.0.1
+
+# SerpAPI
+serpapi>=0.1.4
+
+# Document handling
+pandas>=2.2.1
+python-docx>=1.1.0
+pypdf>=3.17.1  # ✅ Added PDF support
+
+# Terminal formatting
+rich>=13.7.1   # ✅ Already noted, now explicitly listed
+
+# Utilities
+tqdm>=4.66.4
+pydantic>=2.7.1
