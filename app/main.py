@@ -14,8 +14,7 @@ app = FastAPI(
 # ✅ CORS Configuration: Allow only your frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://tt.skintruth.in"],
-
+    allow_origins=["https://tt.skintruth.in", "http://localhost:5173"],     
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
