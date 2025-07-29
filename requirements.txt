@@ -47,3 +47,7 @@ sentence-transformers
 python-multipart
 
 pypdf2
+
+pdf2image
+
+pillow

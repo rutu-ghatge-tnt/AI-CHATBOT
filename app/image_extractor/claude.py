@@ -1,5 +1,4 @@
-# app/image_extractor/claude.py
-
+#claude.py
 import os
 import httpx
 import re
@@ -29,21 +28,26 @@ async def extract_structured_info(ocr_text: str) -> dict:
         ]
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(CLAUDE_API_URL, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(CLAUDE_API_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.ReadTimeout:
+        return {"error": "Claude API timed out. Try again later."}
+    except httpx.RequestError as e:
+        return {"error": f"Claude API request failed: {str(e)}"}
+
+    try:
+        raw_text = data["content"][0]["text"]
+    except Exception:
+        return {"error": "Claude response parsing failed", "raw": str(data)}
+
+    match = re.search(r"\{[\s\S]*\}", raw_text)
+    if match:
         try:
-            # Claude returns a list under 'content' -> extract text
-            raw_text = data["content"][0]["text"]
-        except Exception as e:
-            return {"error": "Claude response parsing failed", "raw": str(data)}
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            return {"error": "Failed to parse JSON", "raw": raw_text}
 
-        match = re.search(r"\{[\s\S]*\}", raw_text)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                return {"error": "Failed to parse JSON", "raw": raw_text}
-
-        return {"error": "No JSON found in Claude response", "raw": raw_text}
+    return {"error": "No JSON found in Claude response", "raw": raw_text}
