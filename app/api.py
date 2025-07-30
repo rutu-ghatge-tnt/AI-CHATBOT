@@ -62,14 +62,14 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
     if clean_query in identity_triggers:
         return JSONResponse(
             content={"answer": "Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant! How can I help you today?"},
-            headers={"Set-Cookie": f"session_id={session_id}"}
+            headers={"Set-Cookie": f"session_id={session_id}; Path=/; SameSite=Lax"}
         )
 
     # Handle offensive messages
     if is_offensive(user_query):
         return JSONResponse(
             content={"answer": "I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"},
-            headers={"Set-Cookie": f"session_id={session_id}"}
+            headers={"Set-Cookie": f"session_id={session_id}; Path=/; SameSite=Lax"}
         )
 
     # Build conversation context
@@ -80,7 +80,12 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
 
     async def stream_response():
         try:
-            rag_result = rag_chain.invoke({"query": chat_context})
+            rag_result = rag_chain.invoke({
+    "question": user_query,
+    "context": "",
+    "history": chat_context  # your built context from past turns
+})
+
             print("RAG Result:", rag_result)
             answer = rag_result.get("result", "").strip()
         except Exception as e:
@@ -126,5 +131,5 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
     return StreamingResponse(
         stream_response(),
         media_type="application/json",
-        headers={"Set-Cookie": f"session_id={session_id}"}
+        headers={"Set-Cookie": f"session_id={session_id}; Path=/; SameSite=Lax"}
     )
