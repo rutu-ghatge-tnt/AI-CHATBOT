@@ -29,6 +29,23 @@ def get_rag_chain():
         Your task is to answer user questions based on the provided context. You should:
         - Use the most relevant information from the context to provide accurate and helpful answers
         When answering the question of the user, please follow these guidelines:
+        - Use structured **Markdown format** like this when possible:
+
+            ### ✅ Key Insights
+            - Bullet points summarizing your main answer
+            - Expand any skincare terms or abbreviations clearly
+
+            ### 🧴 Related Products (if any)
+            1. **Product Name**  
+               - Purpose and key benefit  
+               - Relevant ingredients
+
+            ### 💡 Tips / Recommendations
+            - Tips based on skin type or routine
+            - Any safety or usage notes
+
+            ### 🧬 Summary
+            - Final advice or TL;DR style wrap-up
         - Identify any skincare-related abbreviations or slang (e.g., HA, AHA, BHA, Vit C, Niac, Ret, Sal)
         - Automatically expand those terms to their full scientific names (e.g., HA → Hyaluronic Acid)
         - Use the expanded version to match the context for the most relevant answer
