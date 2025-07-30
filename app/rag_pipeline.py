@@ -46,6 +46,9 @@ def get_rag_chain():
 
             ### 🧬 Summary
             - Final advice or TL;DR style wrap-up
+        - Make sure to add **explicit line breaks** using `\n` between each section and bullet point.
+        - Use **Markdown headings** like ### Key Insights, ### Related Products, etc.
+        - Use **bullet points** for clarity and readability.    
         - Identify any skincare-related abbreviations or slang (e.g., HA, AHA, BHA, Vit C, Niac, Ret, Sal)
         - Automatically expand those terms to their full scientific names (e.g., HA → Hyaluronic Acid)
         - Use the expanded version to match the context for the most relevant answer
