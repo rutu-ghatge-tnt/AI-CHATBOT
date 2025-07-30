@@ -6,8 +6,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from serpapi import GoogleSearch
 import asyncio
 import json
-import time
-from datetime import datetime
 
 router = APIRouter()
 rag_chain = get_rag_chain()
@@ -87,10 +85,16 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
             answer = rag_result.get("result", "").strip()
         except Exception as e:
             print("Error from RAG chain:", e)
-            answer = "Sorry, something went wrong while processing your question."
+            error_msg = "Sorry, something went wrong while processing your question."
+            yield json.dumps({"response": error_msg + "\n", "done": False}) + "\n"
+            yield json.dumps({"response": "", "done": True}) + "\n"
+            return
 
         if not answer:
-            answer = "I couldn't find any relevant information in my documents. Please try asking something else!"
+            no_answer_msg = "I couldn't find any relevant information in my documents. Please try asking something else!"
+            yield json.dumps({"response": no_answer_msg + "\n", "done": False}) + "\n"
+            yield json.dumps({"response": "", "done": True}) + "\n"
+            return
 
         no_info_phrases = [
             "sorry, something went wrong while processing your question.",
@@ -106,16 +110,18 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
 
         add_to_history(session_id, user_query, answer)
 
-        # Stream response sentence-by-sentence
-        for sentence in answer.split("\n"):
-            if sentence.strip():
-                chunk = {"response": sentence + "\n", "done": False}
+        # Replace escaped newlines "\\n" with actual newlines
+        clean_answer = answer.replace("\\n", "\n")
+
+        # Stream line by line (not word by word)
+        for line in clean_answer.splitlines():
+            if line.strip():
+                chunk = {"response": line + "\n", "done": False}
                 yield json.dumps(chunk) + "\n"
                 await asyncio.sleep(0.05)
 
-        # Final chunk
+        # Final chunk to indicate completion
         yield json.dumps({"response": "", "done": True}) + "\n"
-
 
     return StreamingResponse(
         stream_response(),
