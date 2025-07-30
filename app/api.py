@@ -106,15 +106,16 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
 
         add_to_history(session_id, user_query, answer)
 
-        # Send as JSON per word
-        words = answer.split()
-        for word in words:
-            chunk = {"response": word, "done": False}
-            yield json.dumps(chunk) + "\n"
-            await asyncio.sleep(0.03)
-        
+        # Stream response sentence-by-sentence
+        for sentence in answer.split("\n"):
+            if sentence.strip():
+                chunk = {"response": sentence + "\n", "done": False}
+                yield json.dumps(chunk) + "\n"
+                await asyncio.sleep(0.05)
+
         # Final chunk
         yield json.dumps({"response": "", "done": True}) + "\n"
+
 
     return StreamingResponse(
         stream_response(),
