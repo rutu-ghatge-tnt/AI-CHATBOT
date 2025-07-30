@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from serpapi import GoogleSearch
 import asyncio
 import json
+import time
+from datetime import datetime
 
 router = APIRouter()
 rag_chain = get_rag_chain()
@@ -62,14 +64,14 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
     if clean_query in identity_triggers:
         return JSONResponse(
             content={"answer": "Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant! How can I help you today?"},
-            headers={"Set-Cookie": f"session_id={session_id}; Path=/; SameSite=Lax"}
+            headers={"Set-Cookie": f"session_id={session_id}"}
         )
 
     # Handle offensive messages
     if is_offensive(user_query):
         return JSONResponse(
             content={"answer": "I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"},
-            headers={"Set-Cookie": f"session_id={session_id}; Path=/; SameSite=Lax"}
+            headers={"Set-Cookie": f"session_id={session_id}"}
         )
 
     # Build conversation context
@@ -80,26 +82,15 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
 
     async def stream_response():
         try:
-            rag_result = rag_chain.invoke({
-    "question": user_query,
-    "context": "",
-    "history": chat_context  # your built context from past turns
-})
-
+            rag_result = rag_chain.invoke({"query": chat_context})
             print("RAG Result:", rag_result)
             answer = rag_result.get("result", "").strip()
         except Exception as e:
             print("Error from RAG chain:", e)
-            error_msg = "Sorry, something went wrong while processing your question."
-            yield json.dumps({"response": error_msg + "\n", "done": False}) + "\n"
-            yield json.dumps({"response": "", "done": True}) + "\n"
-            return
+            answer = "Sorry, something went wrong while processing your question."
 
         if not answer:
-            no_answer_msg = "I couldn't find any relevant information in my documents. Please try asking something else!"
-            yield json.dumps({"response": no_answer_msg + "\n", "done": False}) + "\n"
-            yield json.dumps({"response": "", "done": True}) + "\n"
-            return
+            answer = "I couldn't find any relevant information in my documents. Please try asking something else!"
 
         no_info_phrases = [
             "sorry, something went wrong while processing your question.",
@@ -115,21 +106,19 @@ async def chat_endpoint(request: ChatRequest, raw_request: Request):
 
         add_to_history(session_id, user_query, answer)
 
-        # Replace escaped newlines "\\n" with actual newlines
-        clean_answer = answer.replace("\\n", "\n")
-
-        # Stream line by line (not word by word)
-        for line in clean_answer.splitlines():
-            if line.strip():
-                chunk = {"response": line + "\n", "done": False}
+        # Stream response sentence-by-sentence
+        for sentence in answer.split("\n"):
+            if sentence.strip():
+                chunk = {"response": sentence + "\n", "done": False}
                 yield json.dumps(chunk) + "\n"
                 await asyncio.sleep(0.05)
 
-        # Final chunk to indicate completion
+        # Final chunk
         yield json.dumps({"response": "", "done": True}) + "\n"
+
 
     return StreamingResponse(
         stream_response(),
         media_type="application/json",
-        headers={"Set-Cookie": f"session_id={session_id}; Path=/; SameSite=Lax"}
+        headers={"Set-Cookie": f"session_id={session_id}"}
     )

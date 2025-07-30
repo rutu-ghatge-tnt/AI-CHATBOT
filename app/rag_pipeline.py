@@ -23,7 +23,7 @@ def get_rag_chain():
 
     # Prompt template for Claude with structured Markdown + newline enforcement
     prompt_template = PromptTemplate.from_template(
-    """
+        """
 You are SkinSage, a friendly and expert virtual skincare assistant inside the SkinBB Metaverse.
 
 Your task is to answer user questions using the context provided below. Follow these rules:
@@ -57,25 +57,20 @@ Special cases:
 - If the question is **just a greeting**, respond with:  
   "🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!"
 
-Answer using the context and memory below.
+Answer only using the relevant context below.
 
 ---
 Context:
 {context}
 
 ---
-Conversation History:
-{history}
-
----
-Current Question:
+User Question:
 {question}
 
 ---
 Your structured response (in Markdown with \\n line breaks):
 """
-)
-
+    )
 
     # Return the chain
     return RetrievalQA.from_chain_type(
