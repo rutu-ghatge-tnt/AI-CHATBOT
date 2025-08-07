@@ -43,14 +43,15 @@ async def chat_endpoint(request: ChatRequest):
         })
 
     # Format frontend-passed history
-    chat_context = ""
-    for turn in request.history[-5:]:
-        chat_context += f"User: {turn.query}\nAssistant: {turn.response}\n"
+    chat_context = "\n".join([
+        f"User: {turn.query}\nAssistant: {turn.response}"
+        for turn in request.history[-5:]
+        if turn.query and turn.response
+    ])
 
-    # Build input for RAG
     rag_inputs = {
         "query": user_query,
-        "history": chat_context.strip()
+        "history": chat_context
     }
 
     async def stream_response():
