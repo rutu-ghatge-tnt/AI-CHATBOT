@@ -7,23 +7,19 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from app.llm_claude import get_claude_llm
 
-
 def get_rag_chain():
-    # Load vector DB with embedding model
     vector_db = Chroma(
         persist_directory=CHROMA_DB_PATH,
         embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
     )
 
-    # Configure retriever with MMR and diversity
     retriever = vector_db.as_retriever(
         search_type="mmr",
         search_kwargs={"k": 8, "fetch_k": 12}
     )
 
-    # Prompt template for Claude with structured Markdown + newline enforcement
     prompt_template = PromptTemplate.from_template(
-        """
+    """
 You are SkinSage, a friendly and expert virtual skincare assistant inside the SkinBB Metaverse.
 
 Your task is to answer user questions using the context provided below. Follow these rules:
@@ -60,8 +56,8 @@ Special cases:
 Answer only using the relevant context below.
 
 ---
-Context:
-{context}
+Chat History:
+{history}
 
 ---
 User Question:
@@ -70,13 +66,15 @@ User Question:
 ---
 Your structured response (in Markdown with \\n line breaks):
 """
-    )
+)
 
-    # Return the chain
     return RetrievalQA.from_chain_type(
-        llm=get_claude_llm(),
-        chain_type="stuff",
-        retriever=retriever,
-        chain_type_kwargs={"prompt": prompt_template},
-        return_source_documents=True
-    )
+    llm=get_claude_llm(),
+    chain_type="stuff",
+    retriever=retriever,
+    chain_type_kwargs={
+        "prompt": prompt_template,
+        "document_variable_name": "history"  # 🔧 This is the fix
+    },
+    return_source_documents=True
+)
