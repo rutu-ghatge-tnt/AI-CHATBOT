@@ -15,6 +15,7 @@ from app.ai_ingredient_intelligence.db.collections import (
     functional_categories_col,
     chemical_classes_col
 )
+from app.ai_ingredient_intelligence.db.mongodb import db
 from app.ai_ingredient_intelligence.logic.matcher import build_category_tree
 from app.ai_ingredient_intelligence.models.schemas import (
     IngredientInfoRequest,
@@ -949,13 +950,13 @@ async def get_ingredients_info(
                         break
             
             if doc:
-                doc = ingredient_map[ing_name_lower]
+                # FIX: Don't reassign doc - use the one already found through matching strategies
                 ing_id = str(doc["_id"])
                 
                 # Get enhanced_description if available, otherwise fallback to description
                 description = doc.get("enhanced_description") or doc.get("description")
                 
-                # Get supplier info
+                # Get supplier info (primary supplier)
                 supplier_info = None
                 supplier_id = doc.get("supplier_id")
                 if supplier_id:
@@ -968,6 +969,169 @@ async def get_ingredients_info(
                             supplier_id=supplier_id_str,
                             supplier_name=supplier_name
                         )
+                
+                # Get all suppliers linked to this ingredient (by ingredient_id)
+                supplier_list = []
+                try:
+                    # Find all branded ingredients with the same ingredient_id (should be just one, but check for consistency)
+                    # Also find suppliers that have ingredients with matching names/INCI
+                    ingredient_doc_id = ObjectId(ing_id)
+                    
+                    # Get supplier from current ingredient
+                    if supplier_id:
+                        supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
+                        supplier_name = supplier_map.get(supplier_id_obj)
+                        if supplier_name:
+                            supplier_list.append(SupplierInfo(
+                                supplier_id=str(supplier_id_obj),
+                                supplier_name=supplier_name
+                            ))
+                    
+                    # Also check for other ingredients with same INCI names that might have different suppliers
+                    ingredient_name_for_search = doc.get("ingredient_name", "")
+                    original_inci_for_search = doc.get("original_inci_name", "")
+                    
+                    # Find other branded ingredients with same name or INCI
+                    additional_supplier_ids = set()
+                    if supplier_id:
+                        additional_supplier_ids.add(supplier_id_obj if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id))
+                    
+                    # Search for ingredients with matching names or INCI
+                    matching_ingredients = await branded_ingredients_col.find({
+                        "$or": [
+                            {"ingredient_name": {"$regex": f"^{re.escape(ingredient_name_for_search)}$", "$options": "i"}},
+                            {"original_inci_name": {"$regex": f"^{re.escape(original_inci_for_search)}$", "$options": "i"}}
+                        ],
+                        "_id": {"$ne": ingredient_doc_id}  # Exclude current ingredient
+                    }).to_list(length=None)
+                    
+                    for match_doc in matching_ingredients:
+                        match_supplier_id = match_doc.get("supplier_id")
+                        if match_supplier_id:
+                            try:
+                                match_supplier_id_obj = match_supplier_id if isinstance(match_supplier_id, ObjectId) else ObjectId(match_supplier_id)
+                                if match_supplier_id_obj not in additional_supplier_ids:
+                                    match_supplier_name = supplier_map.get(match_supplier_id_obj)
+                                    if match_supplier_name:
+                                        supplier_list.append(SupplierInfo(
+                                            supplier_id=str(match_supplier_id_obj),
+                                            supplier_name=match_supplier_name
+                                        ))
+                                        additional_supplier_ids.add(match_supplier_id_obj)
+                            except:
+                                pass
+                except Exception as e:
+                    print(f"Warning: Error fetching supplier list: {e}")
+                    # Continue with existing supplier_info if available and not already in list
+                    if supplier_info:
+                        # Check if supplier_id already exists in list
+                        supplier_ids_in_list = {s.supplier_id for s in supplier_list if s.supplier_id}
+                        if supplier_info.supplier_id and supplier_info.supplier_id not in supplier_ids_in_list:
+                            supplier_list.append(supplier_info)
+                
+                # Get distributor list for this ingredient
+                distributor_list = []
+                try:
+                    # Search distributors by ingredientIds (handle both ObjectId and string formats)
+                    ingredient_doc_id = ObjectId(ing_id)
+                    dist_cursor = distributor_col.find({
+                        "$or": [
+                            {"ingredientIds": ingredient_doc_id},  # ObjectId format
+                            {"ingredientIds": ing_id}  # String format
+                        ]
+                    }).sort("createdAt", -1)
+                    
+                    async for dist_doc in dist_cursor:
+                        dist_dict = {
+                            "_id": str(dist_doc.get("_id", "")),
+                            "ingredientName": dist_doc.get("ingredientName", ""),
+                            "supplierName": dist_doc.get("supplierName", ""),
+                            "pricePerKg": dist_doc.get("pricePerKg"),
+                            "createdAt": dist_doc.get("createdAt")
+                        }
+                        # Remove None values for cleaner response
+                        dist_dict = {k: v for k, v in dist_dict.items() if v is not None}
+                        distributor_list.append(dist_dict)
+                    
+                    # Also search by ingredient name (backward compatibility)
+                    ingredient_name_for_search = doc.get("ingredient_name", "")
+                    if ingredient_name_for_search:
+                        dist_cursor_by_name = distributor_col.find({
+                            "ingredientName": {"$regex": f"^{re.escape(ingredient_name_for_search)}$", "$options": "i"}
+                        }).sort("createdAt", -1)
+                        
+                        async for dist_doc in dist_cursor_by_name:
+                            # Check if not already added
+                            dist_id = str(dist_doc.get("_id", ""))
+                            if not any(d.get("_id") == dist_id for d in distributor_list):
+                                dist_dict = {
+                                    "_id": dist_id,
+                                    "ingredientName": dist_doc.get("ingredientName", ""),
+                                    "supplierName": dist_doc.get("supplierName", ""),
+                                    "pricePerKg": dist_doc.get("pricePerKg"),
+                                    "createdAt": dist_doc.get("createdAt")
+                                }
+                                dist_dict = {k: v for k, v in dist_dict.items() if v is not None}
+                                distributor_list.append(dist_dict)
+                except Exception as e:
+                    print(f"Warning: Error fetching distributor list: {e}")
+                
+                # Get product count from externalproducts collection
+                total_product_count = 0
+                try:
+                    external_products_col = db["externalproducts"]
+                    
+                    # Normalize ingredient name and INCI names for matching
+                    # Products store ingredients as normalized (lowercase, spaces normalized)
+                    def normalize_for_product_match(name: str) -> str:
+                        if not name:
+                            return ""
+                        normalized = re.sub(r"\s+", " ", name.strip()).lower()
+                        return normalized
+                    
+                    # Build search terms: ingredient name and all INCI names
+                    search_terms = []
+                    ingredient_name_normalized = normalize_for_product_match(ingredient_name)
+                    if ingredient_name_normalized:
+                        search_terms.append(ingredient_name_normalized)
+                    
+                    # Also search by original ingredient name from doc
+                    original_ing_name = doc.get("ingredient_name", "")
+                    if original_ing_name:
+                        original_normalized = normalize_for_product_match(original_ing_name)
+                        if original_normalized and original_normalized not in search_terms:
+                            search_terms.append(original_normalized)
+                    
+                    # Search by INCI names
+                    original_inci = doc.get("original_inci_name", "")
+                    if original_inci:
+                        inci_normalized = normalize_for_product_match(original_inci)
+                        if inci_normalized and inci_normalized not in search_terms:
+                            search_terms.append(inci_normalized)
+                    
+                    # Count products that contain any of these search terms in their ingredients array
+                    if search_terms:
+                        # Products store ingredients as array of strings (normalized)
+                        # Use $elemMatch with $in for exact matches, or regex for partial matches
+                        query_conditions = []
+                        for term in search_terms:
+                            # Try exact match first (more efficient)
+                            query_conditions.append({"ingredients": term})
+                            # Also try case-insensitive regex match for variations
+                            query_conditions.append({"ingredients": {"$regex": f"^{re.escape(term)}$", "$options": "i"}})
+                        
+                        if query_conditions:
+                            # Get all matching product IDs (distinct)
+                            matching_products = await external_products_col.find({
+                                "$or": query_conditions,
+                                "ingredients": {"$exists": True, "$ne": None, "$ne": []}
+                            }, {"_id": 1}).to_list(length=None)
+                            
+                            # Get unique product count
+                            unique_product_ids = set(str(p.get("_id", "")) for p in matching_products)
+                            total_product_count = len(unique_product_ids)
+                except Exception as e:
+                    print(f"Warning: Error counting products: {e}")
                 
                 # Get category
                 category = doc.get("category_decided", "")
@@ -1033,6 +1197,9 @@ async def get_ingredients_info(
                     ingredient_name=ingredient_name,
                     description=description,
                     supplier=supplier_info,
+                    supplier_list=supplier_list,
+                    distributor_list=distributor_list,
+                    total_product_count=total_product_count,
                     category=category or None,
                     inci_names=inci_names,
                     functional_categories=functional_categories,
@@ -1047,6 +1214,9 @@ async def get_ingredients_info(
                     ingredient_name=ingredient_name,
                     description=None,
                     supplier=None,
+                    supplier_list=[],
+                    distributor_list=[],
+                    total_product_count=0,
                     category=None,
                     inci_names=[],
                     functional_categories=[],
