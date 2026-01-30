@@ -866,7 +866,6 @@ class IngredientInfoFull(BaseModel):
     ingredient_id: str = Field(..., description="Ingredient ID")
     ingredient_name: str = Field(..., description="Ingredient name")
     description: Optional[str] = Field(None, description="Description (uses enhanced_description if available, otherwise falls back to description)")
-    supplier: Optional[SupplierInfo] = Field(None, description="Supplier information")
     supplier_list: List[SupplierInfo] = Field(default_factory=list, description="List of all suppliers linked to this ingredient")
     distributor_list: List[Dict[str, Any]] = Field(default_factory=list, description="List of all distributors for this ingredient")
     total_product_count: int = Field(0, description="Total count of products in externalproducts collection that contain this ingredient")

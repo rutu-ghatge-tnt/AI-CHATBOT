@@ -956,19 +956,8 @@ async def get_ingredients_info(
                 # Get enhanced_description if available, otherwise fallback to description
                 description = doc.get("enhanced_description") or doc.get("description")
                 
-                # Get supplier info (primary supplier)
-                supplier_info = None
+                # Get supplier_id for later use
                 supplier_id = doc.get("supplier_id")
-                if supplier_id:
-                    supplier_id_str = str(supplier_id) if isinstance(supplier_id, ObjectId) else supplier_id
-                    supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
-                    
-                    supplier_name = supplier_map.get(supplier_id_obj)
-                    if supplier_name:
-                        supplier_info = SupplierInfo(
-                            supplier_id=supplier_id_str,
-                            supplier_name=supplier_name
-                        )
                 
                 # Get all suppliers linked to this ingredient (by ingredient_id)
                 supplier_list = []
@@ -1022,16 +1011,13 @@ async def get_ingredients_info(
                                 pass
                 except Exception as e:
                     print(f"Warning: Error fetching supplier list: {e}")
-                    # Continue with existing supplier_info if available and not already in list
-                    if supplier_info:
-                        # Check if supplier_id already exists in list
-                        supplier_ids_in_list = {s.supplier_id for s in supplier_list if s.supplier_id}
-                        if supplier_info.supplier_id and supplier_info.supplier_id not in supplier_ids_in_list:
-                            supplier_list.append(supplier_info)
                 
                 # Get distributor list for this ingredient
                 distributor_list = []
                 try:
+                    # Get ingredient name from the ingredient document (used for distributor_list)
+                    ingredient_name_for_dist = doc.get("ingredient_name", "")
+                    
                     # Search distributors by ingredientIds (handle both ObjectId and string formats)
                     ingredient_doc_id = ObjectId(ing_id)
                     dist_cursor = distributor_col.find({
@@ -1042,10 +1028,20 @@ async def get_ingredients_info(
                     }).sort("createdAt", -1)
                     
                     async for dist_doc in dist_cursor:
+                        # Get supplier name from supplier_map using supplierId
+                        supplier_name_for_dist = ""
+                        supplier_id_from_dist = dist_doc.get("supplierId")
+                        if supplier_id_from_dist:
+                            try:
+                                supplier_id_obj = supplier_id_from_dist if isinstance(supplier_id_from_dist, ObjectId) else ObjectId(supplier_id_from_dist)
+                                supplier_name_for_dist = supplier_map.get(supplier_id_obj, "")
+                            except:
+                                pass
+                        
                         dist_dict = {
                             "_id": str(dist_doc.get("_id", "")),
-                            "ingredientName": dist_doc.get("ingredientName", ""),
-                            "supplierName": dist_doc.get("supplierName", ""),
+                            "ingredientName": ingredient_name_for_dist,  # Use ingredient name from ingredient document
+                            "supplierName": supplier_name_for_dist,  # Use supplier name from supplier_map
                             "pricePerKg": dist_doc.get("pricePerKg"),
                             "createdAt": dist_doc.get("createdAt")
                         }
@@ -1064,10 +1060,20 @@ async def get_ingredients_info(
                             # Check if not already added
                             dist_id = str(dist_doc.get("_id", ""))
                             if not any(d.get("_id") == dist_id for d in distributor_list):
+                                # Get supplier name from supplier_map using supplierId
+                                supplier_name_for_dist = ""
+                                supplier_id_from_dist = dist_doc.get("supplierId")
+                                if supplier_id_from_dist:
+                                    try:
+                                        supplier_id_obj = supplier_id_from_dist if isinstance(supplier_id_from_dist, ObjectId) else ObjectId(supplier_id_from_dist)
+                                        supplier_name_for_dist = supplier_map.get(supplier_id_obj, "")
+                                    except:
+                                        pass
+                                
                                 dist_dict = {
                                     "_id": dist_id,
-                                    "ingredientName": dist_doc.get("ingredientName", ""),
-                                    "supplierName": dist_doc.get("supplierName", ""),
+                                    "ingredientName": ingredient_name_for_dist,  # Use ingredient name from ingredient document
+                                    "supplierName": supplier_name_for_dist,  # Use supplier name from supplier_map
                                     "pricePerKg": dist_doc.get("pricePerKg"),
                                     "createdAt": dist_doc.get("createdAt")
                                 }
@@ -1196,7 +1202,6 @@ async def get_ingredients_info(
                     ingredient_id=ing_id,
                     ingredient_name=ingredient_name,
                     description=description,
-                    supplier=supplier_info,
                     supplier_list=supplier_list,
                     distributor_list=distributor_list,
                     total_product_count=total_product_count,
