@@ -1028,12 +1028,11 @@ async def get_ingredients_info(
                     }).sort("createdAt", -1)
                     
                     async for dist_doc in dist_cursor:
-                        # Get supplier name from supplier_map using supplierId
+                        # Get supplier name from supplier_map using supplier_id from ingredient document
                         supplier_name_for_dist = ""
-                        supplier_id_from_dist = dist_doc.get("supplierId")
-                        if supplier_id_from_dist:
+                        if supplier_id:
                             try:
-                                supplier_id_obj = supplier_id_from_dist if isinstance(supplier_id_from_dist, ObjectId) else ObjectId(supplier_id_from_dist)
+                                supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
                                 supplier_name_for_dist = supplier_map.get(supplier_id_obj, "")
                             except:
                                 pass
@@ -1060,12 +1059,11 @@ async def get_ingredients_info(
                             # Check if not already added
                             dist_id = str(dist_doc.get("_id", ""))
                             if not any(d.get("_id") == dist_id for d in distributor_list):
-                                # Get supplier name from supplier_map using supplierId
+                                # Get supplier name from supplier_map using supplier_id from ingredient document
                                 supplier_name_for_dist = ""
-                                supplier_id_from_dist = dist_doc.get("supplierId")
-                                if supplier_id_from_dist:
+                                if supplier_id:
                                     try:
-                                        supplier_id_obj = supplier_id_from_dist if isinstance(supplier_id_from_dist, ObjectId) else ObjectId(supplier_id_from_dist)
+                                        supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
                                         supplier_name_for_dist = supplier_map.get(supplier_id_obj, "")
                                     except:
                                         pass
