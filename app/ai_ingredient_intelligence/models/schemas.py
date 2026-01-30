@@ -686,6 +686,7 @@ class MakeWishRequest(BaseModel):
     claims: List[str] = Field(default_factory=list, description="Product claims to support (e.g., Vegan, Dermatologist-tested)")
     targetAudience: List[str] = Field(default_factory=list, description="Target audience (e.g., oily-skin, young-adults)")
     additionalNotes: Optional[str] = Field(None, description="Additional notes or requirements")
+    mode: Optional[str] = Field("advanced", description="Mode: 'basic' for simplified layman-friendly flow, 'advanced' for formulator/scientist flow (default: advanced)")
     # Auto-save fields (optional)
     name: Optional[str] = Field(None, description="Name for saving to history (required for auto-save)")
     tag: Optional[str] = Field(None, description="Tag for categorization")
