@@ -866,8 +866,10 @@ class IngredientInfoFull(BaseModel):
     """Schema for full ingredient information"""
     ingredient_id: str = Field(..., description="Ingredient ID")
     ingredient_name: str = Field(..., description="Ingredient name")
-    description: Optional[str] = Field(None, description="Enhanced description (only enhanced_description, no fallback)")
-    supplier: Optional[SupplierInfo] = Field(None, description="Supplier information")
+    description: Optional[str] = Field(None, description="Description (uses enhanced_description if available, otherwise falls back to description)")
+    supplier_list: List[SupplierInfo] = Field(default_factory=list, description="List of all suppliers linked to this ingredient")
+    distributor_list: List[Dict[str, Any]] = Field(default_factory=list, description="List of all distributors for this ingredient")
+    total_product_count: int = Field(0, description="Total count of products in externalproducts collection that contain this ingredient")
     category: Optional[str] = Field(None, description="Category: 'Active' or 'Excipient'")
     inci_names: List[str] = Field(default_factory=list, description="List of INCI names")
     functional_categories: List[List[str]] = Field(default_factory=list, description="Functional category tree paths")
@@ -879,7 +881,7 @@ class IngredientInfoFull(BaseModel):
 class IngredientInfoDescriptionOnly(BaseModel):
     """Schema for description-only ingredient information"""
     ingredient_name: str = Field(..., description="Ingredient name")
-    description: Optional[str] = Field(None, description="Enhanced description (only enhanced_description, no fallback)")
+    description: Optional[str] = Field(None, description="Description (uses enhanced_description if available, otherwise falls back to description)")
     found: bool = Field(..., description="Whether ingredient was found in database")
 
 

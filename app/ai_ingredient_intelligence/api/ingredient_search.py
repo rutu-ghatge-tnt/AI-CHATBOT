@@ -15,6 +15,7 @@ from app.ai_ingredient_intelligence.db.collections import (
     functional_categories_col,
     chemical_classes_col
 )
+from app.ai_ingredient_intelligence.db.mongodb import db
 from app.ai_ingredient_intelligence.logic.matcher import build_category_tree
 from app.ai_ingredient_intelligence.models.schemas import (
     IngredientInfoRequest,
@@ -620,7 +621,9 @@ async def get_ingredients_info(
     Get ingredient information by names.
     
     If include_all_info is True: Returns all available info including supplier, functionality, cost, etc.
-    If include_all_info is False: Returns only the enhanced_description field.
+    If include_all_info is False: Returns only the description field.
+    
+    Description field: Uses enhanced_description if available, otherwise falls back to description.
     
     Request body:
     {
@@ -638,25 +641,78 @@ async def get_ingredients_info(
         if not ingredient_names_clean:
             return IngredientInfoResponse(results=[])
         
-        # Find all matching ingredients using $or with regex for each name
-        query = {
-            "$or": [
-                {"ingredient_name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
-                for name in ingredient_names_clean
-            ]
-        }
+        # Helper function to normalize ingredient names for matching
+        def normalize_for_match(name: str) -> str:
+            """Normalize ingredient name by removing common variations"""
+            if not name:
+                return ""
+            # Remove common prefixes/suffixes and normalize
+            normalized = name.lower().strip()
+            # Remove content in parentheses (e.g., "Aqua (Water)" -> "Aqua")
+            normalized = re.sub(r'\s*\([^)]*\)', '', normalized).strip()
+            # Remove extra whitespace
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+            return normalized
+        
+        # Build query to match both ingredient_name and original_inci_name
+        # Also try normalized versions (without parentheses)
+        query_conditions = []
+        for name in ingredient_names_clean:
+            escaped_name = re.escape(name)
+            normalized_name = normalize_for_match(name)
+            escaped_normalized = re.escape(normalized_name)
+            
+            # Exact match on ingredient_name
+            query_conditions.append({"ingredient_name": {"$regex": f"^{escaped_name}$", "$options": "i"}})
+            # Exact match on original_inci_name
+            query_conditions.append({"original_inci_name": {"$regex": f"^{escaped_name}$", "$options": "i"}})
+            
+            # If normalized is different, also try normalized match
+            if normalized_name != name.lower():
+                query_conditions.append({"ingredient_name": {"$regex": f"^{escaped_normalized}$", "$options": "i"}})
+                query_conditions.append({"original_inci_name": {"$regex": f"^{escaped_normalized}$", "$options": "i"}})
+            
+            # Also try partial match (contains) for cases like "Aqua (Water)" matching "Water"
+            # But only if the search term is a single word or short
+            if len(name.split()) <= 2:
+                query_conditions.append({"ingredient_name": {"$regex": escaped_name, "$options": "i"}})
+                query_conditions.append({"original_inci_name": {"$regex": escaped_name, "$options": "i"}})
+        
+        query = {"$or": query_conditions}
         
         # Fetch all matching documents
         cursor = branded_ingredients_col.find(query)
         all_docs = await cursor.to_list(length=None)
         
         # Create a map of ingredient_name (lowercase) -> document for quick lookup
+        # Also create maps for normalized names and original_inci_name
         ingredient_map = {}
+        normalized_map = {}  # normalized name -> document
+        inci_name_map = {}  # original_inci_name (lowercase) -> document
+        
         for doc in all_docs:
-            ing_name_lower = doc.get("ingredient_name", "").strip().lower()
-            # If multiple matches, keep the first one (or you could handle duplicates differently)
+            ing_name = doc.get("ingredient_name", "").strip()
+            ing_name_lower = ing_name.lower()
+            original_inci = doc.get("original_inci_name", "").strip()
+            original_inci_lower = original_inci.lower() if original_inci else ""
+            
+            # Map by exact ingredient_name
             if ing_name_lower not in ingredient_map:
                 ingredient_map[ing_name_lower] = doc
+            
+            # Map by normalized ingredient_name (without parentheses)
+            ing_name_normalized = normalize_for_match(ing_name)
+            if ing_name_normalized and ing_name_normalized not in normalized_map:
+                normalized_map[ing_name_normalized] = doc
+            
+            # Map by original_inci_name (exact and normalized)
+            if original_inci_lower:
+                if original_inci_lower not in inci_name_map:
+                    inci_name_map[original_inci_lower] = doc
+                # Also map normalized version of original_inci_name
+                original_inci_normalized = normalize_for_match(original_inci)
+                if original_inci_normalized and original_inci_normalized not in inci_name_map:
+                    inci_name_map[original_inci_normalized] = doc
         
         results = []
         
@@ -664,11 +720,41 @@ async def get_ingredients_info(
         if not request.include_all_info:
             for ingredient_name in ingredient_names_clean:
                 ing_name_lower = ingredient_name.lower()
+                ing_name_normalized = normalize_for_match(ingredient_name)
                 
+                # Try multiple matching strategies
+                doc = None
+                
+                # 1. Try exact match on ingredient_name
                 if ing_name_lower in ingredient_map:
                     doc = ingredient_map[ing_name_lower]
-                    # Only use enhanced_description, no fallback
-                    description = doc.get("enhanced_description")
+                # 2. Try normalized match
+                elif ing_name_normalized in normalized_map:
+                    doc = normalized_map[ing_name_normalized]
+                # 3. Try match on original_inci_name
+                elif ing_name_lower in inci_name_map:
+                    doc = inci_name_map[ing_name_lower]
+                # 4. Try normalized match on original_inci_name
+                elif ing_name_normalized in inci_name_map:
+                    doc = inci_name_map[ing_name_normalized]
+                # 5. Fallback: check if search term is contained in any found document's name
+                else:
+                    # Search through all found documents for partial match
+                    for found_doc in all_docs:
+                        found_ing_name = found_doc.get("ingredient_name", "").lower()
+                        found_original_inci = found_doc.get("original_inci_name", "").lower()
+                        
+                        # Check if search term is contained in ingredient_name or original_inci_name
+                        if (ing_name_lower in found_ing_name or 
+                            ing_name_normalized in found_ing_name or
+                            ing_name_lower in found_original_inci or
+                            ing_name_normalized in found_original_inci):
+                            doc = found_doc
+                            break
+                
+                if doc:
+                    # Use enhanced_description if available, otherwise fallback to description
+                    description = doc.get("enhanced_description") or doc.get("description")
                     
                     results.append(IngredientInfoDescriptionOnly(
                         ingredient_name=ingredient_name,
@@ -831,27 +917,225 @@ async def get_ingredients_info(
         # Build results in the same order as input
         for ingredient_name in ingredient_names_clean:
             ing_name_lower = ingredient_name.lower()
+            ing_name_normalized = normalize_for_match(ingredient_name)
             
+            # Try multiple matching strategies
+            doc = None
+            
+            # 1. Try exact match on ingredient_name
             if ing_name_lower in ingredient_map:
                 doc = ingredient_map[ing_name_lower]
+            # 2. Try normalized match
+            elif ing_name_normalized in normalized_map:
+                doc = normalized_map[ing_name_normalized]
+            # 3. Try match on original_inci_name
+            elif ing_name_lower in inci_name_map:
+                doc = inci_name_map[ing_name_lower]
+            # 4. Try normalized match on original_inci_name
+            elif ing_name_normalized in inci_name_map:
+                doc = inci_name_map[ing_name_normalized]
+            # 5. Fallback: check if search term is contained in any found document's name
+            else:
+                # Search through all found documents for partial match
+                for found_doc in all_docs:
+                    found_ing_name = found_doc.get("ingredient_name", "").lower()
+                    found_original_inci = found_doc.get("original_inci_name", "").lower()
+                    
+                    # Check if search term is contained in ingredient_name or original_inci_name
+                    if (ing_name_lower in found_ing_name or 
+                        ing_name_normalized in found_ing_name or
+                        ing_name_lower in found_original_inci or
+                        ing_name_normalized in found_original_inci):
+                        doc = found_doc
+                        break
+            
+            if doc:
+                # FIX: Don't reassign doc - use the one already found through matching strategies
                 ing_id = str(doc["_id"])
                 
-                # Get enhanced_description only (no fallback)
-                description = doc.get("enhanced_description")
+                # Get enhanced_description if available, otherwise fallback to description
+                description = doc.get("enhanced_description") or doc.get("description")
                 
-                # Get supplier info
-                supplier_info = None
+                # Get supplier_id for later use
                 supplier_id = doc.get("supplier_id")
-                if supplier_id:
-                    supplier_id_str = str(supplier_id) if isinstance(supplier_id, ObjectId) else supplier_id
-                    supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
+                
+                # Get all suppliers linked to this ingredient (by ingredient_id)
+                supplier_list = []
+                try:
+                    # Find all branded ingredients with the same ingredient_id (should be just one, but check for consistency)
+                    # Also find suppliers that have ingredients with matching names/INCI
+                    ingredient_doc_id = ObjectId(ing_id)
                     
-                    supplier_name = supplier_map.get(supplier_id_obj)
-                    if supplier_name:
-                        supplier_info = SupplierInfo(
-                            supplier_id=supplier_id_str,
-                            supplier_name=supplier_name
-                        )
+                    # Get supplier from current ingredient
+                    if supplier_id:
+                        supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
+                        supplier_name = supplier_map.get(supplier_id_obj)
+                        if supplier_name:
+                            supplier_list.append(SupplierInfo(
+                                supplier_id=str(supplier_id_obj),
+                                supplier_name=supplier_name
+                            ))
+                    
+                    # Also check for other ingredients with same INCI names that might have different suppliers
+                    ingredient_name_for_search = doc.get("ingredient_name", "")
+                    original_inci_for_search = doc.get("original_inci_name", "")
+                    
+                    # Find other branded ingredients with same name or INCI
+                    additional_supplier_ids = set()
+                    if supplier_id:
+                        additional_supplier_ids.add(supplier_id_obj if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id))
+                    
+                    # Search for ingredients with matching names or INCI
+                    matching_ingredients = await branded_ingredients_col.find({
+                        "$or": [
+                            {"ingredient_name": {"$regex": f"^{re.escape(ingredient_name_for_search)}$", "$options": "i"}},
+                            {"original_inci_name": {"$regex": f"^{re.escape(original_inci_for_search)}$", "$options": "i"}}
+                        ],
+                        "_id": {"$ne": ingredient_doc_id}  # Exclude current ingredient
+                    }).to_list(length=None)
+                    
+                    for match_doc in matching_ingredients:
+                        match_supplier_id = match_doc.get("supplier_id")
+                        if match_supplier_id:
+                            try:
+                                match_supplier_id_obj = match_supplier_id if isinstance(match_supplier_id, ObjectId) else ObjectId(match_supplier_id)
+                                if match_supplier_id_obj not in additional_supplier_ids:
+                                    match_supplier_name = supplier_map.get(match_supplier_id_obj)
+                                    if match_supplier_name:
+                                        supplier_list.append(SupplierInfo(
+                                            supplier_id=str(match_supplier_id_obj),
+                                            supplier_name=match_supplier_name
+                                        ))
+                                        additional_supplier_ids.add(match_supplier_id_obj)
+                            except:
+                                pass
+                except Exception as e:
+                    print(f"Warning: Error fetching supplier list: {e}")
+                
+                # Get distributor list for this ingredient
+                distributor_list = []
+                try:
+                    # Get ingredient name from the ingredient document (used for distributor_list)
+                    ingredient_name_for_dist = doc.get("ingredient_name", "")
+                    
+                    # Search distributors by ingredientIds (handle both ObjectId and string formats)
+                    ingredient_doc_id = ObjectId(ing_id)
+                    dist_cursor = distributor_col.find({
+                        "$or": [
+                            {"ingredientIds": ingredient_doc_id},  # ObjectId format
+                            {"ingredientIds": ing_id}  # String format
+                        ]
+                    }).sort("createdAt", -1)
+                    
+                    async for dist_doc in dist_cursor:
+                        # Get supplier name from supplier_map using supplier_id from ingredient document
+                        supplier_name_for_dist = ""
+                        if supplier_id:
+                            try:
+                                supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
+                                supplier_name_for_dist = supplier_map.get(supplier_id_obj, "")
+                            except:
+                                pass
+                        
+                        dist_dict = {
+                            "_id": str(dist_doc.get("_id", "")),
+                            "ingredientName": ingredient_name_for_dist,  # Use ingredient name from ingredient document
+                            "supplierName": supplier_name_for_dist,  # Use supplier name from supplier_map
+                            "pricePerKg": dist_doc.get("pricePerKg"),
+                            "createdAt": dist_doc.get("createdAt")
+                        }
+                        # Remove None values for cleaner response
+                        dist_dict = {k: v for k, v in dist_dict.items() if v is not None}
+                        distributor_list.append(dist_dict)
+                    
+                    # Also search by ingredient name (backward compatibility)
+                    ingredient_name_for_search = doc.get("ingredient_name", "")
+                    if ingredient_name_for_search:
+                        dist_cursor_by_name = distributor_col.find({
+                            "ingredientName": {"$regex": f"^{re.escape(ingredient_name_for_search)}$", "$options": "i"}
+                        }).sort("createdAt", -1)
+                        
+                        async for dist_doc in dist_cursor_by_name:
+                            # Check if not already added
+                            dist_id = str(dist_doc.get("_id", ""))
+                            if not any(d.get("_id") == dist_id for d in distributor_list):
+                                # Get supplier name from supplier_map using supplier_id from ingredient document
+                                supplier_name_for_dist = ""
+                                if supplier_id:
+                                    try:
+                                        supplier_id_obj = supplier_id if isinstance(supplier_id, ObjectId) else ObjectId(supplier_id)
+                                        supplier_name_for_dist = supplier_map.get(supplier_id_obj, "")
+                                    except:
+                                        pass
+                                
+                                dist_dict = {
+                                    "_id": dist_id,
+                                    "ingredientName": ingredient_name_for_dist,  # Use ingredient name from ingredient document
+                                    "supplierName": supplier_name_for_dist,  # Use supplier name from supplier_map
+                                    "pricePerKg": dist_doc.get("pricePerKg"),
+                                    "createdAt": dist_doc.get("createdAt")
+                                }
+                                dist_dict = {k: v for k, v in dist_dict.items() if v is not None}
+                                distributor_list.append(dist_dict)
+                except Exception as e:
+                    print(f"Warning: Error fetching distributor list: {e}")
+                
+                # Get product count from externalproducts collection
+                total_product_count = 0
+                try:
+                    external_products_col = db["externalproducts"]
+                    
+                    # Normalize ingredient name and INCI names for matching
+                    # Products store ingredients as normalized (lowercase, spaces normalized)
+                    def normalize_for_product_match(name: str) -> str:
+                        if not name:
+                            return ""
+                        normalized = re.sub(r"\s+", " ", name.strip()).lower()
+                        return normalized
+                    
+                    # Build search terms: ingredient name and all INCI names
+                    search_terms = []
+                    ingredient_name_normalized = normalize_for_product_match(ingredient_name)
+                    if ingredient_name_normalized:
+                        search_terms.append(ingredient_name_normalized)
+                    
+                    # Also search by original ingredient name from doc
+                    original_ing_name = doc.get("ingredient_name", "")
+                    if original_ing_name:
+                        original_normalized = normalize_for_product_match(original_ing_name)
+                        if original_normalized and original_normalized not in search_terms:
+                            search_terms.append(original_normalized)
+                    
+                    # Search by INCI names
+                    original_inci = doc.get("original_inci_name", "")
+                    if original_inci:
+                        inci_normalized = normalize_for_product_match(original_inci)
+                        if inci_normalized and inci_normalized not in search_terms:
+                            search_terms.append(inci_normalized)
+                    
+                    # Count products that contain any of these search terms in their ingredients array
+                    if search_terms:
+                        # Products store ingredients as array of strings (normalized)
+                        # Use $elemMatch with $in for exact matches, or regex for partial matches
+                        query_conditions = []
+                        for term in search_terms:
+                            # Try exact match first (more efficient)
+                            query_conditions.append({"ingredients": term})
+                            # Also try case-insensitive regex match for variations
+                            query_conditions.append({"ingredients": {"$regex": f"^{re.escape(term)}$", "$options": "i"}})
+                        
+                        if query_conditions:
+                            # Get all matching product IDs (distinct)
+                            matching_products = await external_products_col.find({
+                                "$or": query_conditions,
+                                "ingredients": {"$exists": True, "$ne": None, "$ne": []}
+                            }, {"_id": 1}).to_list(length=None)
+                            
+                            # Get unique product count
+                            unique_product_ids = set(str(p.get("_id", "")) for p in matching_products)
+                            total_product_count = len(unique_product_ids)
+                except Exception as e:
+                    print(f"Warning: Error counting products: {e}")
                 
                 # Get category
                 category = doc.get("category_decided", "")
@@ -916,7 +1200,9 @@ async def get_ingredients_info(
                     ingredient_id=ing_id,
                     ingredient_name=ingredient_name,
                     description=description,
-                    supplier=supplier_info,
+                    supplier_list=supplier_list,
+                    distributor_list=distributor_list,
+                    total_product_count=total_product_count,
                     category=category or None,
                     inci_names=inci_names,
                     functional_categories=functional_categories,
@@ -931,6 +1217,9 @@ async def get_ingredients_info(
                     ingredient_name=ingredient_name,
                     description=None,
                     supplier=None,
+                    supplier_list=[],
+                    distributor_list=[],
+                    total_product_count=0,
                     category=None,
                     inci_names=[],
                     functional_categories=[],
