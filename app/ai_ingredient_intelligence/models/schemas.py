@@ -865,11 +865,11 @@ class SupplierInfo(BaseModel):
 class IngredientInfoFull(BaseModel):
     """Schema for full ingredient information"""
     ingredient_id: str = Field(..., description="Ingredient ID")
-    ingredient_name: str = Field(..., description="Ingredient name")
-    description: Optional[str] = Field(None, description="Enhanced description (only enhanced_description, no fallback)")
+    ingredient_name: str = Field(..., description="Branded ingredient name (shown even if INCI exists)")
+    description: Optional[str] = Field(None, description="Description from INCI if available, otherwise from branded ingredient (enhanced_description)")
     supplier: Optional[SupplierInfo] = Field(None, description="Supplier information")
     category: Optional[str] = Field(None, description="Category: 'Active' or 'Excipient'")
-    inci_names: List[str] = Field(default_factory=list, description="List of INCI names")
+    inci_names: List[str] = Field(default_factory=list, description="List of INCI names (both branded ingredient and INCI are shown in detailed info)")
     functional_categories: List[List[str]] = Field(default_factory=list, description="Functional category tree paths")
     chemical_classes: List[List[str]] = Field(default_factory=list, description="Chemical class tree paths")
     cost_per_kg: Optional[float] = Field(None, description="Cost per kg from distributor")
@@ -878,8 +878,8 @@ class IngredientInfoFull(BaseModel):
 
 class IngredientInfoDescriptionOnly(BaseModel):
     """Schema for description-only ingredient information"""
-    ingredient_name: str = Field(..., description="Ingredient name")
-    description: Optional[str] = Field(None, description="Enhanced description (only enhanced_description, no fallback)")
+    ingredient_name: str = Field(..., description="Branded ingredient name")
+    description: Optional[str] = Field(None, description="Description from INCI if available, otherwise from branded ingredient (enhanced_description)")
     found: bool = Field(..., description="Whether ingredient was found in database")
 
 

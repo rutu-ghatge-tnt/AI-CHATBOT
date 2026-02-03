@@ -662,13 +662,68 @@ async def get_ingredients_info(
         
         # If only description is needed, return simple results
         if not request.include_all_info:
+            # Need to fetch INCI descriptions for description-only mode too
+            all_inci_ids_desc = []
+            doc_inci_map_desc = {}
+            
+            for doc in all_docs:
+                ing_id = str(doc["_id"])
+                if doc.get("inci_ids"):
+                    valid_inci_ids = []
+                    for inci_id in doc["inci_ids"]:
+                        try:
+                            if isinstance(inci_id, str):
+                                valid_inci_ids.append(ObjectId(inci_id))
+                            else:
+                                valid_inci_ids.append(inci_id)
+                        except:
+                            pass
+                    if valid_inci_ids:
+                        doc_inci_map_desc[ing_id] = valid_inci_ids
+                        all_inci_ids_desc.extend(valid_inci_ids)
+            
+            # Batch fetch INCI documents with descriptions
+            inci_map_desc = {}
+            if all_inci_ids_desc:
+                unique_inci_ids_desc = []
+                seen = set()
+                for inci_id in all_inci_ids_desc:
+                    inci_id_str = str(inci_id)
+                    if inci_id_str not in seen:
+                        seen.add(inci_id_str)
+                        unique_inci_ids_desc.append(inci_id)
+                
+                inci_cursor_desc = inci_col.find(
+                    {"_id": {"$in": unique_inci_ids_desc}},
+                    {"inciName": 1, "description": 1}
+                )
+                async for inci_doc in inci_cursor_desc:
+                    inci_map_desc[inci_doc["_id"]] = {
+                        "description": inci_doc.get("description", "")
+                    }
+            
             for ingredient_name in ingredient_names_clean:
                 ing_name_lower = ingredient_name.lower()
                 
                 if ing_name_lower in ingredient_map:
                     doc = ingredient_map[ing_name_lower]
-                    # Only use enhanced_description, no fallback
-                    description = doc.get("enhanced_description")
+                    ing_id = str(doc["_id"])
+                    
+                    # Get description - prioritize INCI description if available
+                    description = None
+                    
+                    # First, try to get description from INCI documents
+                    if ing_id in doc_inci_map_desc:
+                        for inci_id_obj in doc_inci_map_desc[ing_id]:
+                            if inci_id_obj in inci_map_desc:
+                                inci_description = inci_map_desc[inci_id_obj].get("description", "")
+                                if inci_description and inci_description.strip():
+                                    description = inci_description.strip()
+                                    break  # Use first available INCI description
+                    
+                    # If no INCI description found, fall back to branded ingredient description
+                    if not description:
+                        description = doc.get("enhanced_description")
                     
                     results.append(IngredientInfoDescriptionOnly(
                         ingredient_name=ingredient_name,
@@ -768,12 +823,13 @@ async def get_ingredients_info(
             
             inci_cursor = inci_col.find(
                 {"_id": {"$in": unique_inci_ids}},
-                {"inciName": 1, "category": 1}
+                {"inciName": 1, "category": 1, "description": 1}
             )
             async for inci_doc in inci_cursor:
                 inci_map[inci_doc["_id"]] = {
                     "inciName": inci_doc.get("inciName", ""),
-                    "category": inci_doc.get("category", "")
+                    "category": inci_doc.get("category", ""),
+                    "description": inci_doc.get("description", "")
                 }
         
         # Batch fetch supplier documents
@@ -836,8 +892,21 @@ async def get_ingredients_info(
                 doc = ingredient_map[ing_name_lower]
                 ing_id = str(doc["_id"])
                 
-                # Get enhanced_description only (no fallback)
-                description = doc.get("enhanced_description")
+                # Get description - prioritize INCI description if available, otherwise use branded ingredient description
+                description = None
+                
+                # First, try to get description from INCI documents
+                if ing_id in doc_inci_map:
+                    for inci_id_obj in doc_inci_map[ing_id]:
+                        if inci_id_obj in inci_map:
+                            inci_description = inci_map[inci_id_obj].get("description", "")
+                            if inci_description and inci_description.strip():
+                                description = inci_description.strip()
+                                break  # Use first available INCI description
+                
+                # If no INCI description found, fall back to branded ingredient description
+                if not description:
+                    description = doc.get("enhanced_description")
                 
                 # Get supplier info
                 supplier_info = None
