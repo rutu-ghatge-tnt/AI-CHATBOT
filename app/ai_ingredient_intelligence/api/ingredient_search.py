@@ -1146,6 +1146,7 @@ async def get_ingredients_info(
                         
                         dist_dict = {
                             "_id": dist_id,
+                            "distributorName": dist_doc.get("firmName", ""),
                             "ingredientName": ingredient_name_for_dist,
                             "supplierName": supplier_name_for_dist if supplier_name_for_dist else None,
                             "pricePerKg": dist_doc.get("pricePerKg"),
@@ -1426,6 +1427,7 @@ async def get_ingredients_info(
                                             
                                             dist_dict = {
                                                 "_id": dist_id,
+                                                "distributorName": dist_doc.get("firmName", ""),
                                                 "supplierName": dist_supplier_name if dist_supplier_name else None,
                                                 "pricePerKg": dist_doc.get("pricePerKg"),
                                                 "createdAt": dist_doc.get("createdAt")
