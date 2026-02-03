@@ -56,7 +56,14 @@ from app.ai_ingredient_intelligence.models.schemas import (
     # MergedAnalyzeAndReportResponse,  # ⬅️ merged response schema (REMOVED)
 )
 from app.ai_ingredient_intelligence.db.mongodb import db
-from app.ai_ingredient_intelligence.db.collections import distributor_col, decode_history_col, compare_history_col, branded_ingredients_col, inci_col
+from app.ai_ingredient_intelligence.db.collections import (
+    distributor_col, 
+    decode_history_col, 
+    compare_history_col, 
+    branded_ingredients_col, 
+    inci_col,
+    suppliers_col
+)
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
@@ -2009,46 +2016,180 @@ async def get_distributor_by_ingredient(
         # Find all distributors matching the query
         distributors = await distributor_col.find(query).sort("createdAt", -1).to_list(length=None)
         
-        # Convert ObjectId to string and fetch ingredientName from IDs for response
+        # Batch fetch ingredient and supplier data for all distributors
+        all_ingredient_ids_to_fetch = set()
         for distributor in distributors:
-            distributor["_id"] = str(distributor["_id"])
-            
-            # Always fetch ingredientName from ingredientIds (primary source)
             if "ingredientIds" in distributor and distributor.get("ingredientIds"):
-                ingredient_names = []
                 for ing_id in distributor["ingredientIds"]:
                     try:
-                        # Try as ObjectId first, then as string
+                        if isinstance(ing_id, str):
+                            try:
+                                all_ingredient_ids_to_fetch.add(ObjectId(ing_id))
+                            except:
+                                pass
+                        else:
+                            all_ingredient_ids_to_fetch.add(ing_id)
+                    except:
+                        pass
+        
+        # Batch fetch ingredient documents
+        ingredient_id_to_name_map = {}
+        ingredient_id_to_supplier_map = {}
+        ingredient_id_to_inci_map = {}
+        
+        if all_ingredient_ids_to_fetch:
+            ingredient_docs = await branded_ingredients_col.find(
+                {"_id": {"$in": list(all_ingredient_ids_to_fetch)}}
+            ).to_list(length=None)
+            
+            supplier_ids = set()
+            all_inci_ids = set()
+            for ing_doc in ingredient_docs:
+                ing_id = ing_doc["_id"]
+                ingredient_id_to_name_map[ing_id] = ing_doc.get("ingredient_name", "")
+                
+                # Get supplier ID
+                supplier_id = ing_doc.get("supplier_id")
+                if supplier_id:
+                    try:
+                        if isinstance(supplier_id, str):
+                            supplier_id = ObjectId(supplier_id)
+                        supplier_ids.add(supplier_id)
+                        ingredient_id_to_supplier_map[ing_id] = supplier_id
+                    except:
+                        pass
+                
+                # Get INCI IDs
+                inci_ids = ing_doc.get("inci_ids", [])
+                if inci_ids:
+                    for inci_id in inci_ids:
+                        try:
+                            if isinstance(inci_id, str):
+                                inci_id = ObjectId(inci_id)
+                            all_inci_ids.add(inci_id)
+                        except:
+                            pass
+            
+            # Batch fetch supplier names
+            if supplier_ids:
+                supplier_docs = await suppliers_col.find(
+                    {"_id": {"$in": list(supplier_ids)}},
+                    {"supplierName": 1}
+                ).to_list(length=None)
+                supplier_id_to_name = {doc["_id"]: doc.get("supplierName", "") for doc in supplier_docs}
+                
+                for ing_id, supplier_id in ingredient_id_to_supplier_map.items():
+                    supplier_name = supplier_id_to_name.get(supplier_id, "")
+                    if supplier_name:
+                        ingredient_id_to_supplier_map[ing_id] = supplier_name
+                    else:
+                        ingredient_id_to_supplier_map[ing_id] = None
+            
+            # Batch fetch INCI names
+            if all_inci_ids:
+                inci_docs = await inci_col.find(
+                    {"_id": {"$in": list(all_inci_ids)}},
+                    {"inciName": 1}
+                ).to_list(length=None)
+                inci_id_to_name = {doc["_id"]: doc.get("inciName", "") for doc in inci_docs if doc.get("inciName")}
+                
+                for ing_doc in ingredient_docs:
+                    ing_id = ing_doc["_id"]
+                    inci_ids = ing_doc.get("inci_ids", [])
+                    inci_names = []
+                    for inci_id in inci_ids:
+                        try:
+                            if isinstance(inci_id, str):
+                                inci_id = ObjectId(inci_id)
+                            inci_name = inci_id_to_name.get(inci_id)
+                            if inci_name and inci_name not in inci_names:
+                                inci_names.append(inci_name)
+                        except:
+                            pass
+                    original_inci = ing_doc.get("original_inci_name", "")
+                    if original_inci and original_inci not in inci_names:
+                        inci_names.insert(0, original_inci)
+                    if inci_names:
+                        ingredient_id_to_inci_map[ing_id] = inci_names
+        
+        # Process distributors: convert ObjectId to string and populate fields
+        seen_distributor_ids = set()
+        processed_distributors = []
+        
+        for distributor in distributors:
+            distributor_id = str(distributor["_id"])
+            
+            # Skip duplicates
+            if distributor_id in seen_distributor_ids:
+                continue
+            seen_distributor_ids.add(distributor_id)
+            
+            distributor["_id"] = distributor_id
+            
+            # CRITICAL: Use firmName from distributor document for distributor name (NOT from supplier table)
+            distributor_name = distributor.get("firmName", "")
+            if distributor_name:
+                distributor["distributorName"] = distributor_name
+            else:
+                distributor["distributorName"] = None
+            
+            # Fetch ingredientName, supplierName, and INCI names from ingredientIds
+            if "ingredientIds" in distributor and distributor.get("ingredientIds"):
+                ingredient_names = []
+                supplier_names = []
+                inci_names = []
+                
+                for ing_id in distributor["ingredientIds"]:
+                    try:
                         if isinstance(ing_id, str):
                             try:
                                 ing_id_obj = ObjectId(ing_id)
                             except:
-                                print(f"⚠️ Invalid ObjectId format in distributor: {ing_id}")
                                 continue
                         else:
                             ing_id_obj = ing_id
                         
-                        ing_doc = await branded_ingredients_col.find_one({"_id": ing_id_obj})
-                        if ing_doc:
-                            ingredient_names.append(ing_doc.get("ingredient_name", ""))
-                            print(f"✅ Found ingredient name for ID {ing_id}: {ing_doc.get('ingredient_name', 'N/A')}")
-                        else:
-                            print(f"❌ ERROR: Ingredient ID {ing_id} not found in branded_ingredients collection!")
-                    except Exception as e:
-                        print(f"⚠️ Error looking up ingredient ID {ing_id}: {e}")
+                        ingredient_name = ingredient_id_to_name_map.get(ing_id_obj)
+                        if ingredient_name and ingredient_name not in ingredient_names:
+                            ingredient_names.append(ingredient_name)
+                        
+                        supplier_name = ingredient_id_to_supplier_map.get(ing_id_obj)
+                        if supplier_name and supplier_name not in supplier_names:
+                            supplier_names.append(supplier_name)
+                        
+                        ing_inci_names = ingredient_id_to_inci_map.get(ing_id_obj, [])
+                        for inci_name in ing_inci_names:
+                            if inci_name and inci_name not in inci_names:
+                                inci_names.append(inci_name)
+                    except:
                         pass
-                # Use first name found, or join if multiple
+                
+                # Set fields with uniqueness
                 if ingredient_names:
-                    distributor["ingredientName"] = ingredient_names[0] if len(ingredient_names) == 1 else ", ".join(ingredient_names)
+                    unique_ingredient_names = list(dict.fromkeys(ingredient_names))
+                    distributor["ingredientName"] = unique_ingredient_names[0] if len(unique_ingredient_names) == 1 else ", ".join(unique_ingredient_names)
                 else:
-                    # If IDs don't resolve, fallback to stored name or query parameter
                     distributor["ingredientName"] = distributor.get("ingredientName", ingredient_name)
+                
+                if supplier_names:
+                    unique_suppliers = list(dict.fromkeys(supplier_names))
+                    distributor["supplierName"] = unique_suppliers[0] if len(unique_suppliers) == 1 else ", ".join(unique_suppliers)
+                else:
+                    distributor["supplierName"] = None
+                
+                if inci_names:
+                    unique_inci_names = list(dict.fromkeys(inci_names))
+                    distributor["inciNames"] = unique_inci_names
+                else:
+                    distributor["inciNames"] = []
             else:
-                # Backward compatibility: if no ingredientIds, use stored ingredientName or query parameter
-                if "ingredientName" not in distributor:
-                    distributor["ingredientName"] = ingredient_name
+                distributor["ingredientName"] = distributor.get("ingredientName", ingredient_name)
+                distributor["supplierName"] = None
+                distributor["inciNames"] = []
+            
+            processed_distributors.append(distributor)
         
-        return distributors if distributors else []
+        return processed_distributors if processed_distributors else []
             
     except Exception as e:
         print(f"Error fetching distributors: {e}")

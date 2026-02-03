@@ -693,14 +693,30 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     """
     Complete pipeline for generating a formula from user wish.
     
+    Supports two modes:
+    - "basic": Simplified flow for layman users (Formulynx Make a Wish flow)
+    - "advanced": Full 5-stage pipeline for formulators/scientists (default)
+    
     Args:
         wish_data: Dictionary containing user requirements
+                  - mode: "basic" or "advanced" (default: "advanced")
         
     Returns:
         Complete formula with all analysis
     """
     
-    print("🚀 Starting Make a Wish pipeline...")
+    # Check mode and route accordingly
+    mode = wish_data.get("mode", "advanced").lower()
+    
+    if mode == "basic":
+        # Use basic mode generator
+        from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import (
+            generate_formula_basic_mode
+        )
+        return await generate_formula_basic_mode(wish_data)
+    
+    # Continue with advanced mode (existing flow)
+    print("🚀 Starting Make a Wish pipeline (ADVANCED MODE)...")
     
     # Validate and apply rules engine
     rules_engine = get_rules_engine()
@@ -801,12 +817,13 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         "metadata": {
             "generated_at": datetime.now().isoformat(),
             "formula_version": "1.0",
+            "mode": "advanced",
             "ai_model": claude_model or "claude-sonnet-4-5-20250929",
             "cache_stats": get_cache_manager().get_cache_stats()
         }
     }
     
-    print("🎉 Make a Wish pipeline complete!")
+    print("🎉 Make a Wish pipeline complete (ADVANCED MODE)!")
     
     return result
 

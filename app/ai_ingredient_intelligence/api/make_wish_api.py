@@ -130,11 +130,16 @@ async def generate_make_wish_formula(
         "claims": ["Vegan", "Dermatologist-tested"],
         "targetAudience": ["oily-skin", "young-adults"],
         "additionalNotes": "Additional requirements",
+        "mode": "basic" or "advanced" (optional, default: "advanced"),
         "name": "Formula Name" (optional, for auto-saving),
         "tag": "optional-tag" (optional),
         "notes": "User notes" (optional),
         "history_id": "existing_history_id" (optional, to update existing history)
     }
+    
+    MODE OPTIONS:
+    - "advanced" (default): Full 5-stage pipeline for formulators/scientists
+    - "basic": Simplified flow for layman users with active ingredient options, business context, and simplified explanations
     
     RESPONSE:
     Complete formula with:
@@ -202,6 +207,16 @@ async def generate_make_wish_formula(
         wish_data.setdefault("claims", [])
         wish_data.setdefault("targetAudience", [])
         wish_data.setdefault("additionalNotes", "")
+        wish_data.setdefault("mode", "advanced")  # Default to advanced mode
+        
+        # Validate mode
+        mode = wish_data.get("mode", "advanced").lower()
+        if mode not in ["basic", "advanced"]:
+            raise HTTPException(
+                status_code=400,
+                detail="mode must be either 'basic' or 'advanced'"
+            )
+        wish_data["mode"] = mode
         
         if wish_data.get("costMin") is None:
             wish_data["costMin"] = 30
@@ -243,6 +258,7 @@ async def generate_make_wish_formula(
                 print(f"   - {warning.message}")
         
         print(f"📝 Generating Make a Wish formula...")
+        print(f"   Mode: {wish_data.get('mode', 'advanced').upper()}")
         print(f"   Category: {wish_data['category']}")
         print(f"   Product Type: {wish_data['productType']}")
         print(f"   Benefits: {', '.join(wish_data['benefits'])}")
