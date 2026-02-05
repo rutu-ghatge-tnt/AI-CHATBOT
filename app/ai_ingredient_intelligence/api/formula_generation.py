@@ -866,13 +866,15 @@ async def get_wish_history_detail(
     """
     Get full details of a specific wish history item (includes all large fields)
     
-    This endpoint returns the complete data including:
-    - Full wish_data (large Dict)
-    - Full formula_result (large Dict)
-    - All other fields
+    Returns the complete data:
+    - mode: "basic" or "advanced" (inferred from stored payload)
+    - basic_mode_result: full AI payload for basic mode; None for advanced
+    - formula_data: full optimized formula for advanced mode; None for basic
+    - parsed_data, complexity, formula_id, created_at, updated_at, etc.
+    - quote_data: commercialization request if exists
     
-    Use this endpoint when you need to display the full wish data or formula result.
-    The list endpoint (/wish-history) only returns summaries.
+    Use after /generate-revised (which returns only success, formula_id, history_id)
+    and pass history_id to load the full result here.
     
     Authentication:
     - Requires JWT token in Authorization header
@@ -944,25 +946,30 @@ async def get_wish_history_detail(
                     "additional_notes": commercialization_request.get("additional_notes"),
                 }
         
-        # Return full data - handle both old and new data gracefully
+        # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs
+        basic_mode_result = doc.get("basic_mode_result")
+        formula_data = doc.get("formula_data")
         return {
             "id": str(doc["_id"]),
+            "history_id": str(doc["_id"]),
             "user_id": doc.get("user_id"),
             "name": doc.get("name", ""),
             "notes": doc.get("notes", ""),
             "wish_text": doc.get("wish_text", ""),
             "status": doc.get("status", ""),
             "tag": doc.get("tag", ""),
-            "parsed_data": doc.get("parsed_data", None),
+            "parsed_data": doc.get("parsed_data"),
             "complexity": doc.get("complexity", ""),
             "formula_id": doc.get("formula_id", ""),
             "created_at": doc.get("created_at", ""),
-            "formula_data": doc.get("formula_data", None),
-            # Legacy fields - optional for backward compatibility
-            "wish_data": doc.get("wish_data", None),  # Changed from {} to None to handle missing gracefully
-            "formula_result": doc.get("formula_result", None),  # Changed from {} to None to handle missing gracefully
-            # Commercialization request if exists
-            "quote_data": commercialization_request
+            "updated_at": doc.get("updated_at"),
+            "mode": doc.get("mode", "advanced"),
+            "basic_mode_result": basic_mode_result,
+            "formula_data": formula_data,
+            # For future reference: legacy / backward compatibility (uncomment if needed)
+            # "wish_data": doc.get("wish_data"),
+            # "formula_result": doc.get("formula_result"),
+            "quote_data": commercialization_request,
         }
         
     except HTTPException:
