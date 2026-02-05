@@ -46,7 +46,7 @@ from app.ai_ingredient_intelligence.logic.make_wish_config import (
     get_alternatives_for_ingredient, check_compatibility,
     generate_queue_number, EDIT_RULES
 )
-from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon
+from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon, replace_icon_emoji_values
 
 # Import AI prompts
 from app.ai_ingredient_intelligence.logic.make_wish_prompts_revised import (
@@ -217,7 +217,7 @@ async def generate_formula_revised(
     """
     Generate formula using revised flow with complexity selection.
     
-    Mode is taken from request.parsed_data.mode (set by /parse-wish):
+    Mode is request.mode (or parsed_data.mode fallback): 
     - "basic": Simplified flow for layman users (active options, business context).
     - "advanced" (default): Full multi-stage pipeline with complexity.
     
@@ -247,7 +247,7 @@ async def generate_formula_revised(
             detail="complexity must be one of: minimalist, classic, luxe"
         )
     
-    mode = request.parsed_data.mode
+    mode = request.mode or request.parsed_data.mode
     if mode not in ["basic", "advanced"]:
         raise HTTPException(
             status_code=400,
@@ -275,10 +275,12 @@ async def generate_formula_revised(
                 "mode": "basic",
             }
             basic_result = await generate_formula_basic_mode(wish_data)
+            basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names (like advanced)
             formula_id = str(uuid.uuid4())
             if not history_id:
                 try:
                     history_doc = {
+                        "mode": "basic",
                         "user_id": user_id,
                         "name": name,
                         "tag": request.tag,
@@ -534,6 +536,7 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
             # Create new history record
             try:
                 history_doc = {
+                    "mode": "advanced",
                     "user_id": user_id,
                     "name": name,
                     "tag": request.tag,

@@ -946,11 +946,9 @@ async def get_wish_history_detail(
                     "additional_notes": commercialization_request.get("additional_notes"),
                 }
         
-        # Return full data - updated structure: basic_mode_result (basic) or formula_data (advanced)
-        # mode: "basic" when basic_mode_result is set, "advanced" when formula_data is set
+        # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs
         basic_mode_result = doc.get("basic_mode_result")
         formula_data = doc.get("formula_data")
-        mode = "basic" if basic_mode_result is not None else "advanced"
         return {
             "id": str(doc["_id"]),
             "history_id": str(doc["_id"]),
@@ -965,13 +963,13 @@ async def get_wish_history_detail(
             "formula_id": doc.get("formula_id", ""),
             "created_at": doc.get("created_at", ""),
             "updated_at": doc.get("updated_at"),
-            "mode": mode,
+            "mode": doc.get("mode", "advanced"),
             "basic_mode_result": basic_mode_result,
             "formula_data": formula_data,
             # For future reference: legacy / backward compatibility (uncomment if needed)
             # "wish_data": doc.get("wish_data"),
             # "formula_result": doc.get("formula_result"),
-            # "quote_data": commercialization_request,
+            "quote_data": commercialization_request,
         }
         
     except HTTPException:

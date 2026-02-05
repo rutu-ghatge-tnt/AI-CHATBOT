@@ -93,8 +93,9 @@ class MakeWishRequestRevised(BaseModel):
     # Core inputs
     wish_text: str = Field(..., description="Original natural language wish")
     parsed_data: ParsedWishData = Field(..., description="Parsed wish data from /parse-wish endpoint")
+    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Output mode: 'basic' (layman) or 'advanced' (formulator)")
     
-    # New: Complexity selection
+    # Complexity selection
     complexity: str = Field(..., description="Formula complexity: 'minimalist', 'classic', or 'luxe'")
     
     # Optional overrides from clarification questions
