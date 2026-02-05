@@ -427,47 +427,43 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
         )
         
         print("✅ Basic mode formula generated")
-        
-        # Transform to match expected response structure
-        # The AI should return the full structure, but we'll wrap it for compatibility
-        result = {
-            "wish_data": wish_data,
-            "mode": "basic",
-            "basic_mode_result": basic_result,
-            # For backward compatibility, also include in the standard format
-            "ingredient_selection": {
-                "extracted_parameters": basic_result.get("extractedParameters", {}),
-                "active_options": basic_result.get("activeOptions", {})
-            },
-            "optimized_formula": {
-                "formula": basic_result.get("formula", {}),
-                "technical_formula": basic_result.get("formula", {}).get("technicalFormula", {})
-            },
-            "manufacturing": {
-                "instructions": "See technical formula phases",
-                "phases": basic_result.get("formula", {}).get("technicalFormula", {}).get("phases", [])
-            },
-            "cost_analysis": {
-                "raw_material_cost": {
-                    "total_per_100g": basic_result.get("formula", {}).get("technicalFormula", {}).get("totalCostPer100g", 0)
-                },
-                "business_numbers": basic_result.get("formula", {}).get("businessNumbers", {})
-            },
-            "compliance": {
-                "overall_status": "COMPLIANT",  # Basic mode assumes compliance
-                "claim_guidance": basic_result.get("formula", {}).get("claimGuidance", {})
-            },
-            "metadata": {
-                "generated_at": datetime.now().isoformat(),
-                "formula_version": "1.0",
-                "mode": "basic",
-                "ai_model": "claude-opus-4-5-20251101"
-            }
-        }
-        
         print("🎉 Make a Wish pipeline complete (BASIC MODE)!")
-        
-        return result
+        # For future reference: previous normalized structure (now we return basic_result as-is for frontend)
+        # result = {
+        #     # "wish_data": wish_data,
+        #     # "mode": "basic",
+        #     "basic_mode_result": basic_result,
+        #     # For backward compatibility, also include in the standard format
+        #     "ingredient_selection": {
+        #         "extracted_parameters": basic_result.get("extractedParameters", {}),
+        #         "active_options": basic_result.get("activeOptions", {})
+        #     },
+        #     "optimized_formula": {
+        #         "formula": basic_result.get("formula", {}),
+        #         "technical_formula": basic_result.get("formula", {}).get("technicalFormula", {})
+        #     },
+        #     "manufacturing": {
+        #         "instructions": "See technical formula phases",
+        #         "phases": basic_result.get("formula", {}).get("technicalFormula", {}).get("phases", [])
+        #     },
+        #     "cost_analysis": {
+        #         "raw_material_cost": {
+        #             "total_per_100g": basic_result.get("formula", {}).get("technicalFormula", {}).get("totalCostPer100g", 0)
+        #         },
+        #         "business_numbers": basic_result.get("formula", {}).get("businessNumbers", {})
+        #     },
+        #     "compliance": {
+        #         "overall_status": "COMPLIANT",  # Basic mode assumes compliance
+        #         "claim_guidance": basic_result.get("formula", {}).get("claimGuidance", {})
+        #     },
+        #     "metadata": {
+        #         "generated_at": datetime.now().isoformat(),
+        #         "formula_version": "1.0",
+        #         "mode": "basic",
+        #         "ai_model": "claude-opus-4-5-20251101"
+        #     }
+        # }
+        return basic_result
         
     except Exception as e:
         print(f"❌ Error in basic mode generation: {e}")

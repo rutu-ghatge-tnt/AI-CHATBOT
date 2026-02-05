@@ -28,7 +28,7 @@ from app.ai_ingredient_intelligence.auth import verify_jwt_token
 # Import revised schemas
 from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     ParseWishRequest, ParseWishResponse,
-    MakeWishRequestRevised, MakeWishResponseRevised,
+    MakeWishRequestRevised, MakeWishResponseRevised, MakeWishBasicResponseRevised,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
@@ -59,6 +59,7 @@ from app.ai_ingredient_intelligence.logic.make_wish_prompts_revised import (
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     call_ai_with_claude, generate_formula_from_wish
 )
+from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_formula_basic_mode
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -136,6 +137,9 @@ async def parse_natural_language_wish(
                 detail="Invalid parsing result from AI"
             )
         
+        # Set mode from request (basic or advanced, default advanced)
+        parsed_result["mode"] = request.mode
+
         # Auto-detect texture if not provided
         product_type_id = parsed_result.get("product_type", {}).get("id", "serum")
         auto_texture = get_texture_for_product_type(product_type_id)
@@ -205,7 +209,7 @@ async def parse_natural_language_wish(
 # STAGE 2: REVISED GENERATE ENDPOINT
 # ============================================================================
 
-@router.post("/generate-revised", response_model=MakeWishResponseRevised)
+@router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
     current_user: dict = Depends(verify_jwt_token)
@@ -213,11 +217,15 @@ async def generate_formula_revised(
     """
     Generate formula using revised flow with complexity selection.
     
+    Mode is taken from request.parsed_data.mode (set by /parse-wish):
+    - "basic": Simplified flow for layman users (active options, business context).
+    - "advanced" (default): Full multi-stage pipeline with complexity.
+    
     This endpoint creates a formula based on:
     - Parsed natural language wish
     - Selected complexity level (minimalist/classic/luxe)
     - Auto-detected texture
-    - Enhanced insights generation
+    - Enhanced insights generation (advanced mode only)
     """
     start_time = time.time()
     
@@ -239,8 +247,65 @@ async def generate_formula_revised(
             detail="complexity must be one of: minimalist, classic, luxe"
         )
     
+    mode = request.parsed_data.mode
+    if mode not in ["basic", "advanced"]:
+        raise HTTPException(
+            status_code=400,
+            detail="mode must be either 'basic' or 'advanced'"
+        )
+    
     try:
-        print(f"🚀 Generating revised formula...")
+        # --- BASIC MODE: simplified flow for layman users ---
+        if mode == "basic":
+            # Cost range from complexity: minimalist 30-40, classic 40-60, luxe 60-100
+            cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
+            cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
+            wish_data = {
+                "category": request.parsed_data.category,
+                "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
+                "benefits": request.parsed_data.detected_benefits,
+                "exclusions": request.parsed_data.detected_exclusions,
+                "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
+                "texture": request.parsed_data.auto_texture.label,
+                "costMin": cost_min,
+                "costMax": cost_max,
+                "claims": request.claims or [],
+                "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
+                "additionalNotes": request.additional_notes or "",
+                "mode": "basic",
+            }
+            basic_result = await generate_formula_basic_mode(wish_data)
+            formula_id = str(uuid.uuid4())
+            if not history_id:
+                try:
+                    history_doc = {
+                        "user_id": user_id,
+                        "name": name,
+                        "tag": request.tag,
+                        "notes": request.notes,
+                        "wish_text": request.wish_text,
+                        "parsed_data": request.parsed_data.model_dump(),
+                        "complexity": request.complexity,
+                        "formula_id": formula_id,
+                        "formula_data": None,
+                        "basic_mode_result": basic_result,
+                        "status": "completed",
+                        "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                        "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                    }
+                    result = await wish_history_col.insert_one(history_doc)
+                    history_id = str(result.inserted_id)
+                    print(f"[AUTO-SAVE] Created history record (basic mode): {history_id}")
+                except Exception as e:
+                    print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
+            return MakeWishBasicResponseRevised(
+                success=True,
+                formula_id=formula_id,
+                history_id=history_id or formula_id
+            )
+        
+        # --- ADVANCED MODE: full multi-stage pipeline ---
+        print(f"🚀 Generating revised formula (ADVANCED MODE)...")
         print(f"   Complexity: {request.complexity}")
         print(f"   Product Type: {request.parsed_data.product_type.name}")
         
@@ -478,7 +543,7 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
                     "complexity": request.complexity,
                     "formula_id": formula_id,
                     "formula_data": optimized_formula,
-                    # "insights": insights,
+                    "basic_mode_result": None,
                     "status": "completed",
                     "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                     "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
@@ -489,40 +554,13 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
             except Exception as e:
                 print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
         
-        # Build response
-        response_data = {
-            "success": True,
-            "formula_id": formula_id,
-            "history_id": history_id,
-            "formula": {
-                "name": optimized_formula["optimized_formula"]["name"],
-                "complexity": request.complexity,
-                "complexity_info": {
-                    "id": request.complexity,
-                    "name": complexity_config["name"],
-                    "icon": complexity_config.get("icon", "circle"),
-                    "description": complexity_config["description"],
-                    "highlights": complexity_config["highlights"],
-                    "marketing_angle": complexity_config["marketing_angle"]
-                },
-                "product_type": request.parsed_data.product_type.model_dump(),
-                "texture": request.parsed_data.auto_texture.model_dump(),
-                "phases": [],  # TODO: Convert from optimized format
-                "hero_ingredients": [],  # TODO: Convert from optimized format
-                "total_ingredients": len(ingredients_list),
-                "total_hero_actives": len(key_ingredients),
-                "available_claims": request.claims or [],
-                "exclusions_met": request.parsed_data.detected_exclusions
-            },
-            "insights": insights,
-            "manufacturing": manufacturing,
-            "compliance": compliance
-        }
-        
         processing_time = time.time() - start_time
         print(f"✅ Revised formula generated in {processing_time:.2f}s")
-        
-        return MakeWishResponseRevised(**response_data)
+        return MakeWishBasicResponseRevised(
+            success=True,
+            formula_id=formula_id,
+            history_id=history_id or formula_id
+        )
     
     except HTTPException:
         raise
@@ -738,7 +776,11 @@ async def edit_formula(
                 detail="Formula not found or access denied"
             )
         
-        current_formula = history_item.get("formula_data", {})
+        parsed = history_item.get("parsed_data") or {}
+        if parsed.get("mode") == "basic" and history_item.get("basic_mode_result"):
+            current_formula = history_item.get("basic_mode_result") or {}
+        else:
+            current_formula = history_item.get("formula_data") or {}
         current_complexity = history_item.get("complexity", "classic")
         
         # Validate operations
