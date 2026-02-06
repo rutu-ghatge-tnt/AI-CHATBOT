@@ -118,10 +118,14 @@ async def parse_natural_language_wish(
             if isinstance(parsed_result, dict):
                 print(f"   Keys: {list(parsed_result.keys())}")
                 if 'compatibility_issues' in parsed_result:
-                    print(f"   Compatibility Issues: {len(parsed_result['compatibility_issues'])}")
-                    if parsed_result['compatibility_issues']:
-                        first_issue = parsed_result['compatibility_issues'][0]
-                        print(f"   First Issue Keys: {list(first_issue.keys())}")
+                    issues = parsed_result['compatibility_issues']
+                    print(f"   Compatibility Issues: {len(issues) if isinstance(issues, list) else 'N/A'}")
+                    if isinstance(issues, list) and issues:
+                        first_issue = issues[0]
+                        if isinstance(first_issue, dict):
+                            print(f"   First Issue Keys: {list(first_issue.keys())}")
+                        else:
+                            print(f"   First Issue (not dict): {type(first_issue).__name__}")
             
         except Exception as ai_error:
             print(f"❌ AI parsing error: {ai_error}")
@@ -149,14 +153,47 @@ async def parse_natural_language_wish(
             parsed_result["auto_texture"] = auto_texture
         
         # Check for additional compatibility issues
-        detected_ingredients = [ing.get("name", "") for ing in parsed_result.get("detected_ingredients", [])]
-        compatibility_issues = parsed_result.get("compatibility_issues", [])
-        
-        # Add any additional compatibility checks
+        detected_ingredients = [ing.get("name", "") if isinstance(ing, dict) else str(ing) for ing in parsed_result.get("detected_ingredients", [])]
+        def _normalize_compatibility_issue(item: Any) -> Dict[str, Any]:
+            """Map any issue dict (AI or check_compatibility) to CompatibilityIssue shape."""
+            if isinstance(item, str):
+                return {
+                    "severity": "warning",
+                    "title": item,
+                    "problem": item,
+                    "solution": None,
+                    "ingredients_involved": None,
+                }
+            if not isinstance(item, dict):
+                return {"severity": "warning", "title": None, "problem": None, "solution": None, "ingredients_involved": None}
+            # Map issue/ingredients (config) and problem/title/description (AI) to schema fields
+            text = (
+                item.get("problem")
+                or item.get("issue")
+                or item.get("title")
+                or item.get("description")
+                or ""
+            )
+            ingredients = item.get("ingredients_involved") or item.get("ingredients")
+            return {
+                "severity": item.get("severity") or "warning",
+                "title": item.get("title") or (text[:80] + "..." if len(text) > 80 else text) or None,
+                "problem": item.get("problem") or item.get("issue") or text or None,
+                "solution": item.get("solution"),
+                "ingredients_involved": ingredients,
+            }
+
+        raw_issues = parsed_result.get("compatibility_issues", [])
+        compatibility_issues = []
+        for item in raw_issues if isinstance(raw_issues, list) else []:
+            compatibility_issues.append(_normalize_compatibility_issue(item))
+
+        # Add any additional compatibility checks (normalize so response has problem/ingredients_involved)
         additional_issues = check_compatibility(detected_ingredients)
         for issue in additional_issues:
-            if issue not in compatibility_issues:
-                compatibility_issues.append(issue)
+            normalized = _normalize_compatibility_issue(issue)
+            if normalized not in compatibility_issues:
+                compatibility_issues.append(normalized)
         
         parsed_result["compatibility_issues"] = compatibility_issues
         
@@ -186,6 +223,7 @@ async def parse_natural_language_wish(
         print(f"   Product Type: {parsed_result.get('product_type', {}).get('name', 'unknown')}")
         print(f"   Ingredients Detected: {len(parsed_result.get('detected_ingredients', []))}")
         print(f"   Compatibility Issues: {len(compatibility_issues)}")
+        print(f"   Compatibility Issues: {compatibility_issues}")
         
         return ParseWishResponse(
             success=True,
