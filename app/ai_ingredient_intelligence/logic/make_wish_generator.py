@@ -37,6 +37,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_rules_engine import (
     ValidationSeverity
 )
 
+# Import unit helper
+from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
+
 # Claude API setup
 try:
     import anthropic
@@ -143,7 +146,7 @@ def generate_ingredient_selection_prompt(wish_data: dict) -> str:
 
 ### COST TARGET
 
-- Target formula cost: ₹{cost_min} - ₹{cost_max} per 100g
+- Target formula cost: ₹{cost_min} - ₹{cost_max} per unit
 - This is the RAW MATERIAL cost, not retail price
 - Optimize ingredient selection to meet this target
 
@@ -327,7 +330,7 @@ def generate_optimization_prompt(wish_data: dict, selected_ingredients: list) ->
 
 ### COST TARGET
 
-- Formula cost: ₹{cost_min} - ₹{cost_max} per 100g
+- Formula cost: ₹{cost_min} - ₹{cost_max} per unit
 - Optimize percentages to achieve this cost
 
 ### SELECTED INGREDIENTS TO OPTIMIZE
@@ -436,21 +439,32 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
     cost_breakdown = optimized_formula.get('cost_breakdown', {})
     total_cost = cost_breakdown.get('total_per_100g', 0)
     
-    # Format ingredients with costs
-    ingredients_text = "\n".join([
-        f"  • {ing.get('name', 'Unknown')}: {ing.get('percent', 0)}% @ ₹{ing.get('cost_per_kg', 0)}/kg = ₹{ing.get('cost_contribution', 0)} per 100g"
-        for ing in ingredients
-    ])
-    
     cost_min = wish_data.get('costMin', 30)
     cost_max = wish_data.get('costMax', 60)
     product_type = wish_data.get('productType', 'serum')
     benefits = wish_data.get('benefits', [])
     hero_ingredients = wish_data.get('heroIngredients', [])
     
+    # Determine unit based on product type
+    unit = get_unit_for_product_type(product_type)
+    
+    # Format ingredients with costs
+    ingredients_text = "\n".join([
+        f"  • {ing.get('name', 'Unknown')}: {ing.get('percent', 0)}% @ ₹{ing.get('cost_per_kg', 0)}/kg = ₹{ing.get('cost_contribution', 0)} per {unit}"
+        for ing in ingredients
+    ])
+    
     # Format benefits and hero ingredients for context
     benefits_text = ", ".join(benefits) if benefits else "General benefits"
     hero_text = ", ".join(hero_ingredients) if hero_ingredients else "None specified"
+    
+    # Determine common sizes based on unit
+    if unit == "ml":
+        common_sizes = "30ml, 50ml, 100ml"
+        size_examples = "30ml, 50ml, 100ml"
+    else:
+        common_sizes = "30g, 50g, 100g"
+        size_examples = "30g, 50g, 100g"
     
     return f"""
 ## ANALYZE FORMULA COSTS
@@ -459,8 +473,9 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 
 - Formula Name: {formula_name}
 - Product Type: {product_type}
-- Current Formula Cost: ₹{total_cost} per 100g
-- Target Cost Range: ₹{cost_min} - ₹{cost_max} per 100g
+- **Unit: {unit}** (use {unit} for all cost calculations and displays)
+- Current Formula Cost: ₹{total_cost} per {unit}
+- Target Cost Range: ₹{cost_min} - ₹{cost_max} per {unit}
 - Target Benefits: {benefits_text}
 - Hero Ingredients: {hero_text}
 
@@ -470,29 +485,32 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 
 ### COST BREAKDOWN
 
-- Actives: ₹{cost_breakdown.get('actives_cost', 0)}
-- Base Ingredients: ₹{cost_breakdown.get('base_cost', 0)}
-- Functional Ingredients: ₹{cost_breakdown.get('functional_cost', 0)}
-- Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}
+- Actives: ₹{cost_breakdown.get('actives_cost', 0)} per {unit}
+- Base Ingredients: ₹{cost_breakdown.get('base_cost', 0)} per {unit}
+- Functional Ingredients: ₹{cost_breakdown.get('functional_cost', 0)} per {unit}
+- Preservation: ₹{cost_breakdown.get('preservation_cost', 0)} per {unit}
 
 ### YOUR TASK
 
-1. Calculate detailed cost breakdown
-2. Estimate packaging costs for common sizes (30ml, 50ml, 100ml)
-3. Calculate total product cost with packaging
-4. Provide pricing recommendations (D2C, retail, premium)
-5. Suggest cost optimization opportunities
+1. Calculate detailed cost breakdown using **{unit}** as the unit
+2. Estimate packaging costs for common sizes ({common_sizes})
+3. Calculate total product cost with packaging (use {unit} consistently)
+4. Provide pricing recommendations (D2C, retail, premium) for sizes: {size_examples}
+5. Suggest cost optimization opportunities (savings should be in ₹ per {unit})
 6. **CRITICAL: Compare with competitor products and calculate advantages:**
    - Find 4-6 similar products in the Indian market
    - For each competitor, calculate price_per_unit (MRP / size)
-   - **IMPORTANT**: Calculate price per ml/g (NOT per 100ml unless product size is exactly 100ml)
-   - Compare your recommended MRP with competitor MRPs
+   - **IMPORTANT**: Calculate price per {unit} (NOT per 100{unit} unless product size is exactly 100{unit})
+   - Compare your recommended MRP (from pricing_recommendations) with competitor MRPs
    - For each competitor, provide a specific "advantage" description:
-     * If your price is lower: "Lower price per ml/g"
+     * If your price is lower: "Lower price per {unit}"
      * If your price is higher but value is better: "Better value with [specific benefit]"
      * If you have superior ingredients: "Higher [ingredient] concentration" or "Premium [ingredient]"
      * If you have unique formulation: "Cleaner formula" or "No [exclusion]"
      * Always provide a meaningful advantage (never leave empty or as "—")
+   - **Use {unit} consistently in all cost displays and comparisons**
+
+**REMEMBER: All costs, prices, and comparisons must use {unit} as the unit, not "unit" or "100g".**
 
 Return the complete cost analysis as JSON following the specified format with competitor_comparison including advantages for each product.
 
@@ -789,7 +807,9 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
             user_prompt=cost_prompt,
             prompt_type="cost_analysis"
         )
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/100g")
+        product_type = wish_data.get('productType', 'serum')
+        unit = get_unit_for_product_type(product_type)
+        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/{unit}")
         return result
     
     async def run_stage_5():

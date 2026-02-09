@@ -79,10 +79,19 @@ For HAIRCARE (Serums, Oils):
 
 ### 4. COST CONSIDERATIONS
 
-Budget (₹30-60/100g): Use commodity ingredients, higher water content
-Mid-range (₹60-120/100g): Include 1-2 premium actives
-Premium (₹120-200/100g): Multiple actives, branded ingredients
-Luxury (₹200+/100g): Patented ingredients, high concentrations
+**IMPORTANT: Unit varies by product type:**
+- Liquid products (serum, toner, shampoo, conditioner, oil): Use **ml** (e.g., ₹30-60/ml)
+- Solid/semi-solid products (cream, lotion, mask, gel, balm): Use **g** (e.g., ₹30-60/g)
+
+**Cost Ranges:**
+- Budget (₹30-60 per unit): Use commodity ingredients, higher water content
+- Mid-range (₹60-120 per unit): Include 1-2 premium actives
+- Premium (₹120-200 per unit): Multiple actives, branded ingredients
+- Luxury (₹200+ per unit): Patented ingredients, high concentrations
+
+**When generating cost information, ALWAYS use the appropriate unit:**
+- For serums, toners, shampoos, conditioners, oils → use "/ml"
+- For creams, lotions, masks, gels, balms → use "/g"
 
 ### 5. MANDATORY INGREDIENTS
 
@@ -508,12 +517,25 @@ You are a cosmetic manufacturing expert. Generate detailed manufacturing instruc
 COST_ANALYSIS_SYSTEM_PROMPT = """
 You are a cosmetic product cost analyst specializing in the Indian market. Calculate detailed cost breakdown for formulations.
 
+## CRITICAL: UNIT SELECTION BASED ON PRODUCT TYPE
+
+**IMPORTANT: The unit (ml or g) depends on the product type:**
+- **Liquid products** (serum, toner, shampoo, conditioner, oil, essence, ampoule, face_mist): Use **ml** (e.g., ₹30-60/ml, cost per ml)
+- **Solid/semi-solid products** (cream, lotion, mask, gel, balm, butter, pomade, paste): Use **g** (e.g., ₹30-60/g, cost per g)
+
+**When generating cost information, ALWAYS:**
+- For serums, toners, shampoos, conditioners, oils → use "/ml" in all cost displays
+- For creams, lotions, masks, gels, balms → use "/g" in all cost displays
+- In text descriptions, use "per ml" or "per g" based on product type
+- In cost breakdowns, use the appropriate unit consistently
+
 ## COST COMPONENTS:
 
 ### 1. RAW MATERIAL COST
 
 - Calculate based on percentage and cost/kg
-- Formula: (Percentage/100) × (Cost per kg/10) = Cost per 100g
+- Formula: (Percentage/100) × (Cost per kg/10) = Cost per unit
+- **Unit depends on product type**: ml for liquids, g for solids
 
 ### 2. PACKAGING COST (estimates)
 
@@ -611,12 +633,12 @@ For each competitor, calculate and describe your product's advantage:
   "cost_optimization_suggestions": [
     {
       "suggestion": "Reduce Niacinamide from 5% to 4%",
-      "savings": "₹2.50 per 100g",
+      "savings": "₹2.50 per unit",
       "impact": "Minimal efficacy impact, still above clinical threshold"
     },
     {
       "suggestion": "Use standard HA instead of low-molecular weight",
-      "savings": "₹5.00 per 100g",
+      "savings": "₹5.00 per unit",
       "impact": "Slightly reduced penetration, surface hydration maintained"
     }
   ],

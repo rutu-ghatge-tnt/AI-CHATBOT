@@ -600,7 +600,7 @@ async def generate_formula_endpoint(
         
         processing_time = time.time() - start_time
         print(f"[DEBUG] ✅ Formula generated in {processing_time:.2f}s")
-        print(f"[DEBUG]    Cost: ₹{formula.get('cost', 0)}/100g")
+        print(f"[DEBUG]    Cost: ₹{formula.get('cost', 0)}/unit")
         print(f"[DEBUG]    Phases: {len(formula.get('phases', []))}")
         print(f"[DEBUG]    Ingredients: {sum(len(p.get('ingredients', [])) for p in formula.get('phases', []))}")
         
