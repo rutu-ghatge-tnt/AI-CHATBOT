@@ -36,3 +36,8 @@ quotes_col = db["quotes"]
 
 # Ingredient alternatives cache collection
 ingredient_alternatives_cache_col = db["ingredient_alternatives_cache"]
+
+# Trend insights cache collection
+trend_cache_col = db["trend_cache"]
+trend_alerts_col = db["trend_alerts"]
+trend_history_col = db["trend_history"]

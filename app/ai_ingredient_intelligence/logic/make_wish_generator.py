@@ -444,6 +444,13 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
     
     cost_min = wish_data.get('costMin', 30)
     cost_max = wish_data.get('costMax', 60)
+    product_type = wish_data.get('productType', 'serum')
+    benefits = wish_data.get('benefits', [])
+    hero_ingredients = wish_data.get('heroIngredients', [])
+    
+    # Format benefits and hero ingredients for context
+    benefits_text = ", ".join(benefits) if benefits else "General benefits"
+    hero_text = ", ".join(hero_ingredients) if hero_ingredients else "None specified"
     
     return f"""
 ## ANALYZE FORMULA COSTS
@@ -451,8 +458,11 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 ### FORMULA INFORMATION
 
 - Formula Name: {formula_name}
+- Product Type: {product_type}
 - Current Formula Cost: ₹{total_cost} per 100g
 - Target Cost Range: ₹{cost_min} - ₹{cost_max} per 100g
+- Target Benefits: {benefits_text}
+- Hero Ingredients: {hero_text}
 
 ### INGREDIENT COSTS
 
@@ -472,9 +482,19 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 3. Calculate total product cost with packaging
 4. Provide pricing recommendations (D2C, retail, premium)
 5. Suggest cost optimization opportunities
-6. Compare with competitor products if applicable
+6. **CRITICAL: Compare with competitor products and calculate advantages:**
+   - Find 4-6 similar products in the Indian market
+   - For each competitor, calculate price_per_unit (MRP / size)
+   - **IMPORTANT**: Calculate price per ml/g (NOT per 100ml unless product size is exactly 100ml)
+   - Compare your recommended MRP with competitor MRPs
+   - For each competitor, provide a specific "advantage" description:
+     * If your price is lower: "Lower price per ml/g"
+     * If your price is higher but value is better: "Better value with [specific benefit]"
+     * If you have superior ingredients: "Higher [ingredient] concentration" or "Premium [ingredient]"
+     * If you have unique formulation: "Cleaner formula" or "No [exclusion]"
+     * Always provide a meaningful advantage (never leave empty or as "—")
 
-Return the complete cost analysis as JSON following the specified format.
+Return the complete cost analysis as JSON following the specified format with competitor_comparison including advantages for each product.
 
 """
 
