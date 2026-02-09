@@ -66,7 +66,12 @@ async def analyze_trend(
             request.compare_with
         )
         
+        # Check if result is None or has error
+        if not result:
+            raise HTTPException(status_code=500, detail="No data returned from trend analysis")
+        
         if "error" in result:
+            # Return 400 for client errors, but allow partial data if available
             raise HTTPException(status_code=400, detail=result["error"])
         
         return result
@@ -209,22 +214,48 @@ async def synthesize_trends(
             )
         
         # Send to Claude for synthesis
+        # Safely check for errors - handle None case
+        safe_trend_data = {}
+        if trend_data and isinstance(trend_data, dict) and "error" not in trend_data:
+            safe_trend_data = trend_data
+        
+        safe_competitive_data = None
+        if competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data:
+            safe_competitive_data = competitive_data
+        
+        safe_regional_data = None
+        if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
+            safe_regional_data = regional_data
+        
         synthesis_result = await synthesize_trend_insights(
             request.ingredient,
-            trend_data if "error" not in trend_data else {},
+            safe_trend_data,
             consumer_intent_data,
-            competitive_data if "error" not in competitive_data else None,
-            regional_data if "error" not in regional_data else None
+            safe_competitive_data,
+            safe_regional_data
         )
+        
+        # Safely check for errors when building response
+        safe_trend_analysis = None
+        if trend_data and isinstance(trend_data, dict) and "error" not in trend_data:
+            safe_trend_analysis = trend_data
+        
+        safe_competitive_landscape = None
+        if competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data:
+            safe_competitive_landscape = competitive_data
+        
+        safe_regional_demand = None
+        if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
+            safe_regional_demand = regional_data
         
         return {
             "ingredient": request.ingredient,
-            "trend_analysis": trend_data if "error" not in trend_data else None,
+            "trend_analysis": safe_trend_analysis,
             "consumer_intent": consumer_intent_data,
-            "competitive_landscape": competitive_data if "error" not in competitive_data else None,
-            "regional_demand": regional_data if "error" not in regional_data else None,
-            "synthesis": synthesis_result.get("synthesis"),
-            "error": synthesis_result.get("error")
+            "competitive_landscape": safe_competitive_landscape,
+            "regional_demand": safe_regional_demand,
+            "synthesis": synthesis_result.get("synthesis") if synthesis_result else None,
+            "error": synthesis_result.get("error") if synthesis_result else None
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

@@ -212,23 +212,66 @@ class TrendAnalyzer:
         if not trends_data:
             try:
                 trends_data = self.client.get_trends_timeseries(main_query, time_range)
+                # Check for API errors in response
+                if trends_data and "error" in trends_data:
+                    error_msg = trends_data.get("error", "Unknown API error")
+                    return {"error": f"SerpAPI error: {error_msg}"}
                 await self.cache.set("trends_timeseries", trends_data, **cache_key_params)
             except Exception as e:
                 return {"error": f"Failed to fetch trends data: {str(e)}"}
+        
+        # Check if trends_data is valid
+        if not trends_data:
+            return {"error": "No trends data received from API"}
+        
+        # Check for API errors in cached data
+        if "error" in trends_data:
+            error_msg = trends_data.get("error", "Unknown API error")
+            return {"error": f"SerpAPI error: {error_msg}"}
         
         # Get related queries
         related_data = await self.cache.get("trends_related", **cache_key_params)
         if not related_data:
             try:
                 related_data = self.client.get_trends_related_queries(main_query, time_range)
-                await self.cache.set("trends_related", related_data, **cache_key_params)
+                # Don't cache if there's an error
+                if related_data and "error" not in related_data:
+                    await self.cache.set("trends_related", related_data, **cache_key_params)
             except Exception as e:
                 related_data = {}
         
         # Process interest over time
-        timeline = trends_data.get("interest_over_time", {}).get("timeline_data", [])
+        interest_over_time = trends_data.get("interest_over_time")
+        if not interest_over_time:
+            # Try alternative queries if main query fails
+            for alt_query in queries[1:]:  # Try remaining queries
+                try:
+                    alt_cache_params = {
+                        "ingredient": ingredient,
+                        "time_range": time_range,
+                        "query": alt_query
+                    }
+                    alt_trends_data = await self.cache.get("trends_timeseries", **alt_cache_params)
+                    if not alt_trends_data:
+                        alt_trends_data = self.client.get_trends_timeseries(alt_query, time_range)
+                        if alt_trends_data and "error" not in alt_trends_data:
+                            await self.cache.set("trends_timeseries", alt_trends_data, **alt_cache_params)
+                    
+                    if alt_trends_data and "error" not in alt_trends_data:
+                        interest_over_time = alt_trends_data.get("interest_over_time")
+                        if interest_over_time:
+                            trends_data = alt_trends_data
+                            main_query = alt_query  # Update main query for related queries
+                            break
+                except Exception:
+                    continue
+            
+            if not interest_over_time:
+                return {"error": "No timeline data available. The ingredient may have insufficient search volume in Google Trends, or the API may be temporarily unavailable. Try a more common ingredient name or check back later."}
+        
+        timeline = interest_over_time.get("timeline_data", [])
         if not timeline:
-            return {"error": "No timeline data available"}
+            return {"error": "No timeline data available. The ingredient may have insufficient search volume in Google Trends, or the API may be temporarily unavailable. Try a more common ingredient name or check back later."}
         
         values = []
         dates = []

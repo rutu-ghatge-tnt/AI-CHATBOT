@@ -100,10 +100,21 @@ async def synthesize_trend_insights(
             "synthesis": None
         }
     
+    # Check if we have any data to analyze
+    if not trend_data and not consumer_intent_data and not competitive_data and not regional_data:
+        return {
+            "error": "No trend data available for synthesis",
+            "synthesis": None
+        }
+    
     # Build user prompt with all data
     user_prompt = f"""
 Analyze the following trend data for {ingredient} in the Indian personal care market:
 
+"""
+    
+    if trend_data:
+        user_prompt += f"""
 === TREND ANALYSIS ===
 {json.dumps(trend_data, indent=2)}
 
