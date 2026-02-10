@@ -384,6 +384,16 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
                 "flags": validation_report.get("flags", [])
             }
         
+        # Add competitor comparison data (for "Your Market Position" table)
+        competitor_comparison = cost_analysis.get("competitor_comparison", {})
+        if competitor_comparison:
+            response["competitorComparison"] = {
+                "similarProducts": competitor_comparison.get("similar_products", []),
+                "yourProduct": competitor_comparison.get("your_product", {}),
+                "competitivePosition": competitor_comparison.get("competitive_position", ""),
+                "advantages": competitor_comparison.get("advantages", [])
+            }
+        
         return response
     
     except Exception as e:

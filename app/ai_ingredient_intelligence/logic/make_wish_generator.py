@@ -507,7 +507,8 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
      * If your price is higher but value is better: "Better value with [specific benefit]"
      * If you have superior ingredients: "Higher [ingredient] concentration" or "Premium [ingredient]"
      * If you have unique formulation: "Cleaner formula" or "No [exclusion]"
-     * Always provide a meaningful advantage (never leave empty or as "—")
+     * **CRITICAL: NEVER use dashes ("—" or "-") or leave empty. Always provide a meaningful, specific advantage text.**
+     * **If no clear advantage exists, compare price, ingredients, or formulation quality and state the comparison clearly.**
    - **Use {unit} consistently in all cost displays and comparisons**
 
 **REMEMBER: All costs, prices, and comparisons must use {unit} as the unit, not "unit" or "100g".**
