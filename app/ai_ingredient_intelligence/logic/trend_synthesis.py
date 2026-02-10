@@ -107,10 +107,22 @@ async def synthesize_trend_insights(
     has_competitive = competitive_data is not None
     has_regional = regional_data is not None
     
+    default_synthesis = {
+        "opportunity_score": None,
+        "scores_breakdown": {},
+        "tier": None,
+        "confidence": "low",
+        "key_insights": [],
+        "product_recommendations": [],
+        "marketing_angles": [],
+        "risks": [],
+        "next_steps": []
+    }
+    
     if not (has_trend or has_consumer or has_competitive or has_regional):
         return {
             "error": "No trend data available for synthesis",
-            "synthesis": None
+            "synthesis": default_synthesis  # Return default structure instead of None
         }
     
     # Build user prompt with all data
@@ -232,15 +244,38 @@ Return your analysis as JSON matching the structure specified in the system prom
                     "raw_response": content[:1000]  # Include first 1000 chars for debugging
                 }
         
+        # Ensure synthesis has all required fields with defaults
+        default_synthesis = {
+            "opportunity_score": None,
+            "scores_breakdown": {},
+            "tier": None,
+            "confidence": "low",
+            "key_insights": [],
+            "product_recommendations": [],
+            "marketing_angles": [],
+            "risks": [],
+            "next_steps": []
+        }
+        
         if not synthesis:
             return {
                 "error": "Failed to extract synthesis data from Claude response",
-                "synthesis": None
+                "synthesis": default_synthesis  # Return default structure instead of None
             }
+        
+        # Merge synthesis with defaults to ensure all fields exist
+        if isinstance(synthesis, dict):
+            final_synthesis = default_synthesis.copy()
+            final_synthesis.update(synthesis)
+            # Ensure key_insights is always a list
+            if "key_insights" not in final_synthesis or not isinstance(final_synthesis.get("key_insights"), list):
+                final_synthesis["key_insights"] = []
+        else:
+            final_synthesis = default_synthesis
         
         return {
             "ingredient": ingredient,
-            "synthesis": synthesis,
+            "synthesis": final_synthesis,
             "data_sources_used": {
                 "trend": bool(trend_data),
                 "consumer_intent": consumer_intent_data is not None,
@@ -252,10 +287,21 @@ Return your analysis as JSON matching the structure specified in the system prom
     except Exception as e:
         # Check if it's an API-related error
         error_type = type(e).__name__
+        default_synthesis = {
+            "opportunity_score": None,
+            "scores_breakdown": {},
+            "tier": None,
+            "confidence": "low",
+            "key_insights": [],
+            "product_recommendations": [],
+            "marketing_angles": [],
+            "risks": [],
+            "next_steps": []
+        }
         if "API" in error_type or "api" in str(e).lower():
             return {
                 "error": f"Claude API error: {str(e)}",
-                "synthesis": None
+                "synthesis": default_synthesis  # Return default structure instead of None
             }
         import traceback
         error_trace = traceback.format_exc()

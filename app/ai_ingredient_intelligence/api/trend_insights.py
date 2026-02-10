@@ -254,14 +254,36 @@ async def synthesize_trends(
                 print(f"⚠️ Synthesis error: {synth_error}")
                 import traceback
                 traceback.print_exc()
+                default_synthesis = {
+                    "opportunity_score": None,
+                    "scores_breakdown": {},
+                    "tier": None,
+                    "confidence": "low",
+                    "key_insights": [],
+                    "product_recommendations": [],
+                    "marketing_angles": [],
+                    "risks": [],
+                    "next_steps": []
+                }
                 synthesis_result = {
                     "error": f"Synthesis failed: {str(synth_error)}",
-                    "synthesis": None
+                    "synthesis": default_synthesis  # Return default structure instead of None
                 }
         else:
+            default_synthesis = {
+                "opportunity_score": None,
+                "scores_breakdown": {},
+                "tier": None,
+                "confidence": "low",
+                "key_insights": [],
+                "product_recommendations": [],
+                "marketing_angles": [],
+                "risks": [],
+                "next_steps": []
+            }
             synthesis_result = {
                 "error": "No valid data available for synthesis",
-                "synthesis": None
+                "synthesis": default_synthesis  # Return default structure instead of None
             }
         
         # Safely check for errors when building response
@@ -278,19 +300,33 @@ async def synthesize_trends(
             safe_regional_demand = regional_data
         
         # Build response with proper error handling
+        # Always provide a valid synthesis object structure, even if it failed
+        default_synthesis = {
+            "opportunity_score": None,
+            "scores_breakdown": {},
+            "tier": None,
+            "confidence": "low",
+            "key_insights": [],
+            "product_recommendations": [],
+            "marketing_angles": [],
+            "risks": [],
+            "next_steps": []
+        }
+        
+        synthesis_data = default_synthesis.copy()
+        if synthesis_result and synthesis_result.get("synthesis"):
+            # Merge the actual synthesis data with defaults to ensure all fields exist
+            synthesis_data.update(synthesis_result.get("synthesis", {}))
+        
         response_data = {
             "ingredient": request.ingredient,
             "trend_analysis": safe_trend_analysis,
             "consumer_intent": safe_consumer_intent_data if safe_consumer_intent_data else consumer_intent_data,
             "competitive_landscape": safe_competitive_landscape,
             "regional_demand": safe_regional_demand,
-            "synthesis": None,
-            "error": None
+            "synthesis": synthesis_data,  # Always return valid structure, never null
+            "error": synthesis_result.get("error") if synthesis_result else None
         }
-        
-        if synthesis_result:
-            response_data["synthesis"] = synthesis_result.get("synthesis")
-            response_data["error"] = synthesis_result.get("error")
         
         return response_data
         
