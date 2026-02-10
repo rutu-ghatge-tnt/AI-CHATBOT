@@ -986,7 +986,8 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
         "size_value": 30,
         "size_unit": "ml",
         "price_per_unit": 11.63,
-        "price_per_unit_display": "₹11.63/ml"
+        "price_per_unit_display": "₹11.63/ml",
+        "advantage": "Higher active concentration with premium ingredients at competitive price point"
       },
       {
         "brand": "The Ordinary",
@@ -996,7 +997,8 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
         "size_value": 30,
         "size_unit": "ml",
         "price_per_unit": 19.67,
-        "price_per_unit_display": "₹19.67/ml"
+        "price_per_unit_display": "₹19.67/ml",
+        "advantage": "Lower price per ml while maintaining clinical efficacy"
       }
     ],
     "your_product": {
@@ -1017,7 +1019,8 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
         "competitor_brand": "The Ordinary",
         "advantage": "Lower price per ml while maintaining clinical efficacy"
       }
-    ]
+    ],
+    "NOTE": "Each product in similar_products should have a corresponding entry in advantages array, matched by brand name. The advantage field can also be added directly to each product object for easier frontend access."
   },
   "validation_report": {
     "water_cost_check": "PASS - Water contributes ₹0.0003 per g (within expected range)",

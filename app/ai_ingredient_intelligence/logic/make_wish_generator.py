@@ -502,13 +502,16 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
    - For each competitor, calculate price_per_unit (MRP / size)
    - **IMPORTANT**: Calculate price per {unit} (NOT per 100{unit} unless product size is exactly 100{unit})
    - Compare your recommended MRP (from pricing_recommendations) with competitor MRPs
+   - **MANDATORY: For EVERY product in similar_products, you MUST provide a corresponding entry in the advantages array**
+   - The advantages array must have EXACTLY the same number of entries as similar_products
+   - Match advantages to products by competitor_brand (must match the "brand" field in similar_products)
    - For each competitor, provide a specific "advantage" description:
      * If your price is lower: "Lower price per {unit}"
      * If your price is higher but value is better: "Better value with [specific benefit]"
      * If you have superior ingredients: "Higher [ingredient] concentration" or "Premium [ingredient]"
      * If you have unique formulation: "Cleaner formula" or "No [exclusion]"
      * **CRITICAL: NEVER use dashes ("—" or "-") or leave empty. Always provide a meaningful, specific advantage text.**
-     * **If no clear advantage exists, compare price, ingredients, or formulation quality and state the comparison clearly.**
+     * **If no clear advantage exists, compare price, ingredients, or formulation quality and state the comparison clearly (e.g., "Competitive pricing with enhanced formulation")**
    - **Use {unit} consistently in all cost displays and comparisons**
 
 **REMEMBER: All costs, prices, and comparisons must use {unit} as the unit, not "unit" or "100g".**

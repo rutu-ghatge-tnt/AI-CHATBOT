@@ -387,11 +387,50 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
         # Add competitor comparison data (for "Your Market Position" table)
         competitor_comparison = cost_analysis.get("competitor_comparison", {})
         if competitor_comparison:
+            # Merge advantages into similar_products for easier frontend access
+            similar_products = competitor_comparison.get("similar_products", [])
+            advantages = competitor_comparison.get("advantages", [])
+            
+            # Create a lookup map: brand -> advantage
+            advantage_map = {}
+            for adv in advantages:
+                brand = adv.get("competitor_brand", "").lower().strip()
+                advantage_text = adv.get("advantage", "").strip()
+                # Remove dashes if AI mistakenly used them
+                if advantage_text in ["—", "-", "–", "—", ""]:
+                    advantage_text = ""
+                if brand and advantage_text:
+                    advantage_map[brand] = advantage_text
+            
+            # Attach advantage to each product
+            for product in similar_products:
+                product_brand = product.get("brand", "").lower().strip()
+                product_name = product.get("product", "").lower().strip()
+                
+                # Try to find advantage by brand first
+                if product_brand in advantage_map:
+                    product["advantage"] = advantage_map[product_brand]
+                else:
+                    # Try to find by product name as fallback
+                    found = False
+                    for adv in advantages:
+                        adv_brand = adv.get("competitor_brand", "").lower().strip()
+                        if adv_brand in product_name or product_name in adv_brand:
+                            advantage_text = adv.get("advantage", "").strip()
+                            if advantage_text and advantage_text not in ["—", "-", "–", "—"]:
+                                product["advantage"] = advantage_text
+                                found = True
+                                break
+                    
+                    # If still no advantage found, set a default message
+                    if not found:
+                        product["advantage"] = "Competitive positioning with quality formulation"
+            
             response["competitorComparison"] = {
-                "similarProducts": competitor_comparison.get("similar_products", []),
+                "similarProducts": similar_products,  # Now includes advantage field
                 "yourProduct": competitor_comparison.get("your_product", {}),
                 "competitivePosition": competitor_comparison.get("competitive_position", ""),
-                "advantages": competitor_comparison.get("advantages", [])
+                "advantages": advantages  # Keep original for backward compatibility
             }
         
         return response
