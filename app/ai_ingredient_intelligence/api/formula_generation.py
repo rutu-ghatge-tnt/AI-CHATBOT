@@ -111,8 +111,17 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
         # Get formula name
         formula_name = ingredient_selection.get("formula_name") or optimized.get("optimized_formula", {}).get("name") or f"{original_wish_data.get('productType', 'Formula').title()}"
         
-        # Get cost
-        total_cost = cost_analysis.get("raw_material_cost", {}).get("total_per_100g", 0) or optimized.get("optimized_formula", {}).get("estimated_cost_per_100g", 0)
+        # Get cost - use new format (per_g) if available, fallback to old format
+        cost_estimate = cost_analysis.get("cost_estimate", {})
+        if cost_estimate:
+            # Use realistic estimate from new format (per_g)
+            raw_material_per_g = cost_estimate.get("raw_material_per_g", {})
+            total_cost_per_g = raw_material_per_g.get("realistic") or raw_material_per_g.get("best_estimate") or raw_material_per_g.get("optimistic", 0)
+            # Convert to per_100g for backward compatibility (multiply by 100)
+            total_cost = total_cost_per_g * 100 if total_cost_per_g else 0
+        else:
+            # Fallback to old format
+            total_cost = cost_analysis.get("raw_material_cost", {}).get("total_per_100g") or cost_analysis.get("raw_material_cost", {}).get("total_per_g", 0) * 100 or optimized.get("optimized_formula", {}).get("estimated_cost_per_100g") or optimized.get("optimized_formula", {}).get("estimated_cost_per_g", 0) * 100 or 0
         
         # Get pH
         target_ph = ingredient_selection.get("target_ph") or optimized.get("optimized_formula", {}).get("target_ph") or {"min": 5.0, "max": 6.0}
@@ -317,10 +326,11 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
         from app.ai_ingredient_intelligence.logic.formula_generator import get_texture_description
         texture_desc = get_texture_description(texture)
         
-        return {
+        # Build response with both old and new cost formats
+        response = {
             "name": formula_name,
             "version": "v1",
-            "cost": total_cost,
+            "cost": total_cost,  # Old format - single number (backward compatible)
             "costTarget": {
                 "min": original_wish_data.get("costMin", 30),
                 "max": original_wish_data.get("costMax", 60)
@@ -333,6 +343,48 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
             "warnings": warnings,
             "compliance": compliance_data
         }
+        
+        # Add new cost estimation data if available (use per_g as primary, include per_100g for compatibility)
+        if cost_estimate:
+            raw_material_per_g = cost_estimate.get("raw_material_per_g", {})
+            raw_material_per_100g = cost_estimate.get("raw_material_per_100g", {})
+            response["costEstimate"] = {
+                "rawMaterialPerG": {
+                    "optimistic": raw_material_per_g.get("optimistic"),
+                    "realistic": raw_material_per_g.get("realistic"),
+                    "conservative": raw_material_per_g.get("conservative"),
+                    "displayRange": raw_material_per_g.get("display_range"),
+                    "bestEstimate": raw_material_per_g.get("best_estimate"),
+                    "confidence": raw_material_per_g.get("confidence")
+                },
+                "rawMaterialPer100g": {
+                    "optimistic": raw_material_per_100g.get("optimistic"),
+                    "realistic": raw_material_per_100g.get("realistic"),
+                    "conservative": raw_material_per_100g.get("conservative"),
+                    "displayRange": raw_material_per_100g.get("display_range"),
+                    "bestEstimate": raw_material_per_100g.get("best_estimate"),
+                    "confidence": raw_material_per_100g.get("confidence")
+                },
+                "confidenceBreakdown": cost_estimate.get("confidence_breakdown", {}),
+                "topCostDrivers": cost_estimate.get("top_cost_drivers", []),
+                "disclaimers": cost_estimate.get("disclaimers", [])
+            }
+        
+        # Add validation report if available
+        validation_report = cost_analysis.get("validation_report", {})
+        if validation_report:
+            response["costValidation"] = {
+                "waterCostCheck": validation_report.get("water_cost_check"),
+                "totalVsBenchmark": validation_report.get("total_vs_benchmark"),
+                "activeCostRatio": validation_report.get("active_cost_ratio"),
+                "mrpPlausibility": validation_report.get("mrp_plausibility"),
+                "ingredientRatioCheck": validation_report.get("ingredient_ratio_check"),
+                "competitorAlignment": validation_report.get("competitor_alignment"),
+                "overallConfidence": validation_report.get("overall_confidence"),
+                "flags": validation_report.get("flags", [])
+            }
+        
+        return response
     
     except Exception as e:
         print(f"⚠️ Error transforming Make a Wish response: {e}")
