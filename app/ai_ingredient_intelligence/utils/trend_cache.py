@@ -4,6 +4,18 @@ Trend Cache Manager
 
 Caching layer for SerpAPI trend data to reduce API costs and improve performance.
 Uses MongoDB for persistent caching.
+
+CACHING STRATEGY:
+- All ingredient names are normalized (lowercase, stripped) before cache key generation
+- This ensures "Niacinamide", "niacinamide", and " NIACINAMIDE " all use the same cache entry
+- Cache TTL varies by data type (trends: 24h, regional: 7d, shopping: 6h, etc.)
+- Cache entries include access tracking for analytics
+- Expired entries are automatically filtered out
+
+USAGE:
+- When Make a Wish uses hero ingredients, trend data is automatically cached
+- Subsequent requests for the same ingredient (even with different capitalization) will use cached data
+- This prevents redundant SerpAPI calls and reduces costs
 """
 
 from typing import Optional, Any, Dict

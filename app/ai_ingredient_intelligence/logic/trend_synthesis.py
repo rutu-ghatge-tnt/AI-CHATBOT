@@ -100,10 +100,21 @@ async def synthesize_trend_insights(
             "synthesis": None
         }
     
+    # Check if we have any data to analyze
+    if not trend_data and not consumer_intent_data and not competitive_data and not regional_data:
+        return {
+            "error": "No trend data available for synthesis",
+            "synthesis": None
+        }
+    
     # Build user prompt with all data
     user_prompt = f"""
 Analyze the following trend data for {ingredient} in the Indian personal care market:
 
+"""
+    
+    if trend_data:
+        user_prompt += f"""
 === TREND ANALYSIS ===
 {json.dumps(trend_data, indent=2)}
 
@@ -144,6 +155,12 @@ Return your analysis as JSON matching the structure specified in the system prom
 """
     
     try:
+        if not claude_model:
+            return {
+                "error": "Claude model not configured",
+                "synthesis": None
+            }
+        
         response = claude_client.messages.create(
             model=claude_model,
             max_tokens=4096,
@@ -162,6 +179,12 @@ Return your analysis as JSON matching the structure specified in the system prom
         
         content = response.content[0].text.strip()
         
+        if not content:
+            return {
+                "error": "Empty content in Claude response",
+                "synthesis": None
+            }
+        
         # Extract JSON from response
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
@@ -169,27 +192,51 @@ Return your analysis as JSON matching the structure specified in the system prom
             content = content.split("```")[1].split("```")[0].strip()
         
         # Try to parse JSON
+        synthesis = None
         try:
             synthesis = json.loads(content)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as json_err:
             # If JSON parsing fails, try to extract just the JSON object
             import re
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
-                synthesis = json.loads(json_match.group(0))
+                try:
+                    synthesis = json.loads(json_match.group(0))
+                except json.JSONDecodeError:
+                    # Try to fix common JSON issues
+                    json_str = json_match.group(0)
+                    # Remove trailing commas before closing braces/brackets
+                    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+                    try:
+                        synthesis = json.loads(json_str)
+                    except json.JSONDecodeError:
+                        # Fallback: return structured text response
+                        synthesis = {
+                            "opportunity_score": None,
+                            "key_insights": [content[:500]],  # Limit length
+                            "recommendation": "Analysis completed but could not parse structured response",
+                            "raw_response": content[:1000]  # Include first 1000 chars for debugging
+                        }
             else:
                 # Fallback: return structured text response
                 synthesis = {
                     "opportunity_score": None,
-                    "key_insights": [content],
-                    "recommendation": "Analysis completed but could not parse structured response"
+                    "key_insights": [content[:500]],  # Limit length
+                    "recommendation": "Analysis completed but could not parse structured response",
+                    "raw_response": content[:1000]  # Include first 1000 chars for debugging
                 }
+        
+        if not synthesis:
+            return {
+                "error": "Failed to extract synthesis data from Claude response",
+                "synthesis": None
+            }
         
         return {
             "ingredient": ingredient,
             "synthesis": synthesis,
             "data_sources_used": {
-                "trend": True,
+                "trend": bool(trend_data),
                 "consumer_intent": consumer_intent_data is not None,
                 "competitive": competitive_data is not None,
                 "regional": regional_data is not None
@@ -197,6 +244,16 @@ Return your analysis as JSON matching the structure specified in the system prom
         }
         
     except Exception as e:
+        # Check if it's an API-related error
+        error_type = type(e).__name__
+        if "API" in error_type or "api" in str(e).lower():
+            return {
+                "error": f"Claude API error: {str(e)}",
+                "synthesis": None
+            }
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Synthesis error: {error_trace}")
         return {
             "error": f"Claude synthesis failed: {str(e)}",
             "synthesis": None
