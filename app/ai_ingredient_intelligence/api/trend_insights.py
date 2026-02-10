@@ -59,26 +59,56 @@ async def analyze_trend(
     
     Returns trend classification, growth rates, and related queries
     """
-    try:
-        result = await get_analyzer().analyze_ingredient_trend(
-            request.ingredient,
-            request.time_range,
-            request.compare_with
-        )
-        
-        # Check if result is None or has error
-        if not result:
-            raise HTTPException(status_code=500, detail="No data returned from trend analysis")
-        
-        if "error" in result:
-            # Return 400 for client errors, but allow partial data if available
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    max_retries = 3
+    retry_delay = 1  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            result = await get_analyzer().analyze_ingredient_trend(
+                request.ingredient,
+                request.time_range,
+                request.compare_with
+            )
+            
+            # Check if result is None or has error
+            if not result:
+                if attempt < max_retries - 1:
+                    print(f"⚠️ Attempt {attempt + 1} failed: No data returned, retrying...")
+                    import asyncio
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise HTTPException(status_code=500, detail="No data returned from trend analysis after retries")
+            
+            if "error" in result:
+                error_msg = result["error"]
+                # Retry on certain errors
+                if "temporarily unavailable" in error_msg.lower() or "rate limit" in error_msg.lower():
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ Attempt {attempt + 1} failed: {error_msg}, retrying...")
+                        import asyncio
+                        await asyncio.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                        continue
+                # Return 400 for client errors that shouldn't be retried
+                raise HTTPException(status_code=400, detail=error_msg)
+            
+            # Success - return result
+            return result
+            
+        except HTTPException:
+            # Re-raise HTTP exceptions (they're already properly formatted)
+            raise
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"⚠️ Attempt {attempt + 1} failed with exception: {str(e)}, retrying...")
+                import asyncio
+                await asyncio.sleep(retry_delay * (attempt + 1))
+                continue
+            # Last attempt failed
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Internal server error after {max_retries} attempts: {str(e)}")
 
 
 @router.post("/consumer-intent", response_model=ConsumerIntentResponse)

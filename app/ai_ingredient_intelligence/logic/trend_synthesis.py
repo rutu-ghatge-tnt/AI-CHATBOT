@@ -255,7 +255,7 @@ Return your analysis as JSON matching the structure specified in the system prom
             "marketing_angles": [],
             "risks": [],
             "next_steps": []
-        }
+                }
         
         if not synthesis:
             return {
