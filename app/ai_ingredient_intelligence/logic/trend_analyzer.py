@@ -197,26 +197,34 @@ class TrendAnalyzer:
         
         Returns trend classification, growth rates, and related queries
         """
+        # Normalize ingredient name for consistent caching (lowercase, strip whitespace)
+        ingredient_normalized = ingredient.lower().strip()
+        
         # Build search queries for skincare context
         queries = [f"{ingredient} serum", f"{ingredient} for skin", f"{ingredient} benefits"]
         main_query = queries[0]
         
-        # Get trend data with caching
+        # Get trend data with caching (use normalized ingredient name for cache key)
         cache_key_params = {
-            "ingredient": ingredient,
+            "ingredient": ingredient_normalized,
             "time_range": time_range,
-            "query": main_query
+            "query": main_query.lower()  # Normalize query too
         }
         trends_data = await self.cache.get("trends_timeseries", **cache_key_params)
         
-        if not trends_data:
+        if trends_data:
+            print(f"✅ Cache HIT for ingredient: {ingredient_normalized} (query: {main_query})")
+        else:
+            print(f"❌ Cache MISS for ingredient: {ingredient_normalized} (query: {main_query}) - calling SerpAPI...")
             try:
                 trends_data = self.client.get_trends_timeseries(main_query, time_range)
                 # Check for API errors in response
                 if trends_data and "error" in trends_data:
                     error_msg = trends_data.get("error", "Unknown API error")
                     return {"error": f"SerpAPI error: {error_msg}"}
+                # Cache successful API response
                 await self.cache.set("trends_timeseries", trends_data, **cache_key_params)
+                print(f"💾 Cached trend data for ingredient: {ingredient_normalized}")
             except Exception as e:
                 return {"error": f"Failed to fetch trends data: {str(e)}"}
         
@@ -229,7 +237,7 @@ class TrendAnalyzer:
             error_msg = trends_data.get("error", "Unknown API error")
             return {"error": f"SerpAPI error: {error_msg}"}
         
-        # Get related queries
+        # Get related queries (with caching)
         related_data = await self.cache.get("trends_related", **cache_key_params)
         if not related_data:
             try:
@@ -237,6 +245,7 @@ class TrendAnalyzer:
                 # Don't cache if there's an error
                 if related_data and "error" not in related_data:
                     await self.cache.set("trends_related", related_data, **cache_key_params)
+                    print(f"💾 Cached related queries for ingredient: {ingredient_normalized}")
             except Exception as e:
                 related_data = {}
         
@@ -247,15 +256,16 @@ class TrendAnalyzer:
             for alt_query in queries[1:]:  # Try remaining queries
                 try:
                     alt_cache_params = {
-                        "ingredient": ingredient,
+                        "ingredient": ingredient_normalized,
                         "time_range": time_range,
-                        "query": alt_query
+                        "query": alt_query.lower()  # Normalize query
                     }
                     alt_trends_data = await self.cache.get("trends_timeseries", **alt_cache_params)
                     if not alt_trends_data:
                         alt_trends_data = self.client.get_trends_timeseries(alt_query, time_range)
                         if alt_trends_data and "error" not in alt_trends_data:
                             await self.cache.set("trends_timeseries", alt_trends_data, **alt_cache_params)
+                            print(f"💾 Cached alternative query data for ingredient: {ingredient_normalized}")
                     
                     if alt_trends_data and "error" not in alt_trends_data:
                         interest_over_time = alt_trends_data.get("interest_over_time")
@@ -355,7 +365,7 @@ class TrendAnalyzer:
         lowest_date = dates[lowest_idx] if lowest_idx >= 0 and lowest_idx < len(dates) else ""
         
         return {
-            "ingredient": ingredient,
+            "ingredient": ingredient,  # Return original ingredient name (not normalized)
             "analysis_period": f"{dates[0] if dates else 'N/A'} - {dates[-1] if dates else 'N/A'}",
             "data_points": len(values),
             "trend_classification": {
@@ -388,6 +398,9 @@ class TrendAnalyzer:
         concerns: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """Analyze consumer intent from People Also Ask questions"""
+        # Normalize ingredient name for consistent caching
+        ingredient_normalized = ingredient.lower().strip()
+        
         queries = [
             f"{ingredient} serum",
             f"{ingredient} for skin",
@@ -400,13 +413,16 @@ class TrendAnalyzer:
         
         all_paa = []
         for query in queries:
-            cache_key_params = {"query": query}
+            # Normalize query for cache key
+            cache_key_params = {"query": query.lower().strip()}
             paa_data = await self.cache.get("paa_questions", **cache_key_params)
             
             if not paa_data:
                 try:
                     paa_data = self.client.get_people_also_ask(query)
-                    await self.cache.set("paa_questions", paa_data, **cache_key_params)
+                    if paa_data and "error" not in paa_data:
+                        await self.cache.set("paa_questions", paa_data, **cache_key_params)
+                        print(f"💾 Cached PAA data for query: {query}")
                 except Exception as e:
                     continue
             
@@ -461,21 +477,28 @@ class TrendAnalyzer:
         price_max: Optional[int] = None
     ) -> Dict[str, Any]:
         """Analyze competitive landscape from Google Shopping"""
+        # Normalize category for consistent caching
+        category_normalized = category.lower().strip()
         cache_key_params = {
-            "category": category,
+            "category": category_normalized,
             "price_min": price_min,
             "price_max": price_max
         }
         shopping_data = await self.cache.get("shopping_results", **cache_key_params)
         
-        if not shopping_data:
+        if shopping_data:
+            print(f"✅ Cache HIT for competitive landscape: {category_normalized}")
+        else:
+            print(f"❌ Cache MISS for competitive landscape: {category_normalized} - calling SerpAPI...")
             try:
                 shopping_data = self.client.get_shopping_results(
                     category,
                     price_min=price_min,
                     price_max=price_max
                 )
-                await self.cache.set("shopping_results", shopping_data, **cache_key_params)
+                if shopping_data and "error" not in shopping_data:
+                    await self.cache.set("shopping_results", shopping_data, **cache_key_params)
+                    print(f"💾 Cached shopping data for category: {category_normalized}")
             except Exception as e:
                 return {"error": f"Failed to fetch shopping data: {str(e)}"}
         
@@ -557,14 +580,22 @@ class TrendAnalyzer:
         time_range: str = "today 12-m"
     ) -> Dict[str, Any]:
         """Analyze regional demand across Indian states"""
+        # Normalize ingredient name for consistent caching
+        ingredient_normalized = ingredient.lower().strip()
         query = f"{ingredient} serum"
-        cache_key_params = {"ingredient": ingredient, "time_range": time_range, "query": query}
+        cache_key_params = {
+            "ingredient": ingredient_normalized,
+            "time_range": time_range,
+            "query": query.lower()  # Normalize query
+        }
         
         regional_data = await self.cache.get("trends_regional", **cache_key_params)
         if not regional_data:
             try:
                 regional_data = self.client.get_trends_regional(query, time_range)
-                await self.cache.set("trends_regional", regional_data, **cache_key_params)
+                if regional_data and "error" not in regional_data:
+                    await self.cache.set("trends_regional", regional_data, **cache_key_params)
+                    print(f"💾 Cached regional data for ingredient: {ingredient_normalized}")
             except Exception as e:
                 return {"error": f"Failed to fetch regional data: {str(e)}"}
         

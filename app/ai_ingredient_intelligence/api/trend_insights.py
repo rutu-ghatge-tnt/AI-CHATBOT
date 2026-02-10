@@ -227,13 +227,30 @@ async def synthesize_trends(
         if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
             safe_regional_data = regional_data
         
-        synthesis_result = await synthesize_trend_insights(
-            request.ingredient,
-            safe_trend_data,
-            consumer_intent_data,
-            safe_competitive_data,
-            safe_regional_data
-        )
+        # Only proceed with synthesis if we have at least some data
+        synthesis_result = None
+        if safe_trend_data or consumer_intent_data or safe_competitive_data or safe_regional_data:
+            try:
+                synthesis_result = await synthesize_trend_insights(
+                    request.ingredient,
+                    safe_trend_data,
+                    consumer_intent_data,
+                    safe_competitive_data,
+                    safe_regional_data
+                )
+            except Exception as synth_error:
+                print(f"⚠️ Synthesis error: {synth_error}")
+                import traceback
+                traceback.print_exc()
+                synthesis_result = {
+                    "error": f"Synthesis failed: {str(synth_error)}",
+                    "synthesis": None
+                }
+        else:
+            synthesis_result = {
+                "error": "No valid data available for synthesis",
+                "synthesis": None
+            }
         
         # Safely check for errors when building response
         safe_trend_analysis = None
@@ -248,17 +265,33 @@ async def synthesize_trends(
         if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
             safe_regional_demand = regional_data
         
-        return {
+        # Build response with proper error handling
+        response_data = {
             "ingredient": request.ingredient,
             "trend_analysis": safe_trend_analysis,
             "consumer_intent": consumer_intent_data,
             "competitive_landscape": safe_competitive_landscape,
             "regional_demand": safe_regional_demand,
-            "synthesis": synthesis_result.get("synthesis") if synthesis_result else None,
-            "error": synthesis_result.get("error") if synthesis_result else None
+            "synthesis": None,
+            "error": None
         }
+        
+        if synthesis_result:
+            response_data["synthesis"] = synthesis_result.get("synthesis")
+            response_data["error"] = synthesis_result.get("error")
+        
+        return response_data
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Synthesis API error: {error_trace}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Internal server error: {str(e)}"
+        )
 
 
 @router.post("/monitor/run")
