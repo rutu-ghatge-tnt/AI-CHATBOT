@@ -192,8 +192,13 @@ async def synthesize_trends(
     try:
         # Gather all data sources
         analyzer_instance = get_analyzer()
+        
+        # Clean ingredient name - remove parentheses and extra text for better API queries
+        # e.g., "Ascorbyl Glucoside (Vitamin C)" -> "Ascorbyl Glucoside"
+        clean_ingredient = request.ingredient.split("(")[0].strip()
+        
         trend_data = await analyzer_instance.analyze_ingredient_trend(
-            request.ingredient,
+            clean_ingredient,
             request.time_range
         )
         
@@ -202,14 +207,14 @@ async def synthesize_trends(
         regional_data = None
         
         if request.include_consumer_intent:
-            consumer_intent_data = await analyzer_instance.analyze_consumer_intent(request.ingredient)
+            consumer_intent_data = await analyzer_instance.analyze_consumer_intent(clean_ingredient)
         
         if request.include_competitive:
-            competitive_data = await analyzer_instance.analyze_competitive_landscape(f"{request.ingredient} serum")
+            competitive_data = await analyzer_instance.analyze_competitive_landscape(f"{clean_ingredient} serum")
         
         if request.include_regional:
             regional_data = await analyzer_instance.analyze_regional_demand(
-                request.ingredient,
+                clean_ingredient,
                 request.time_range
             )
         
@@ -218,18 +223,29 @@ async def synthesize_trends(
         safe_trend_data = None
         if trend_data and isinstance(trend_data, dict) and "error" not in trend_data:
             safe_trend_data = trend_data
+        elif trend_data:
+            print(f"⚠️ Trend data has error: {trend_data.get('error', 'Unknown error')}")
         
         safe_consumer_intent_data = None
         if consumer_intent_data and isinstance(consumer_intent_data, dict) and "error" not in consumer_intent_data:
             safe_consumer_intent_data = consumer_intent_data
+        elif consumer_intent_data:
+            print(f"⚠️ Consumer intent data has error: {consumer_intent_data.get('error', 'Unknown error')}")
         
         safe_competitive_data = None
         if competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data:
             safe_competitive_data = competitive_data
+        elif competitive_data:
+            print(f"⚠️ Competitive data has error: {competitive_data.get('error', 'Unknown error')}")
         
         safe_regional_data = None
         if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
             safe_regional_data = regional_data
+        elif regional_data:
+            print(f"⚠️ Regional data has error: {regional_data.get('error', 'Unknown error')}")
+        
+        # Log what data we have
+        print(f"📊 Synthesis data status: trend={bool(safe_trend_data)}, consumer={bool(safe_consumer_intent_data)}, competitive={bool(safe_competitive_data)}, regional={bool(safe_regional_data)}")
         
         # Only proceed with synthesis if we have at least some data
         # Check if any data source has valid (non-empty) data
