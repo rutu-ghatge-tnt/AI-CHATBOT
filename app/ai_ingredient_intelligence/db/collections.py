@@ -36,3 +36,25 @@ quotes_col = db["quotes"]
 
 # Ingredient alternatives cache collection
 ingredient_alternatives_cache_col = db["ingredient_alternatives_cache"]
+
+# ============================================================================
+# QMS (Query Management System) COLLECTIONS
+# ============================================================================
+
+# Users collection (for QMS - users who paid consultation fee)
+qms_users_col = db["qms_users"]
+
+# Partners collection (formulation partners)
+qms_partners_col = db["qms_partners"]
+
+# Queries collection (core QMS table)
+qms_queries_col = db["qms_queries"]
+
+# Query notes collection (activity feed)
+qms_query_notes_col = db["qms_query_notes"]
+
+# Payments collection
+qms_payments_col = db["qms_payments"]
+
+# Audit log collection
+qms_audit_log_col = db["qms_audit_log"]
