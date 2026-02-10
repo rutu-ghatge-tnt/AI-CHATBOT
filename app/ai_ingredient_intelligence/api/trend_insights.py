@@ -215,9 +215,13 @@ async def synthesize_trends(
         
         # Send to Claude for synthesis
         # Safely check for errors - handle None case
-        safe_trend_data = {}
+        safe_trend_data = None
         if trend_data and isinstance(trend_data, dict) and "error" not in trend_data:
             safe_trend_data = trend_data
+        
+        safe_consumer_intent_data = None
+        if consumer_intent_data and isinstance(consumer_intent_data, dict) and "error" not in consumer_intent_data:
+            safe_consumer_intent_data = consumer_intent_data
         
         safe_competitive_data = None
         if competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data:
@@ -228,13 +232,21 @@ async def synthesize_trends(
             safe_regional_data = regional_data
         
         # Only proceed with synthesis if we have at least some data
+        # Check if any data source has valid (non-empty) data
+        has_valid_data = (
+            (safe_trend_data is not None and isinstance(safe_trend_data, dict) and len(safe_trend_data) > 0) or
+            (safe_consumer_intent_data is not None and isinstance(safe_consumer_intent_data, dict) and len(safe_consumer_intent_data) > 0) or
+            safe_competitive_data is not None or
+            safe_regional_data is not None
+        )
+        
         synthesis_result = None
-        if safe_trend_data or consumer_intent_data or safe_competitive_data or safe_regional_data:
+        if has_valid_data:
             try:
                 synthesis_result = await synthesize_trend_insights(
                     request.ingredient,
                     safe_trend_data,
-                    consumer_intent_data,
+                    safe_consumer_intent_data,
                     safe_competitive_data,
                     safe_regional_data
                 )
@@ -269,7 +281,7 @@ async def synthesize_trends(
         response_data = {
             "ingredient": request.ingredient,
             "trend_analysis": safe_trend_analysis,
-            "consumer_intent": consumer_intent_data,
+            "consumer_intent": safe_consumer_intent_data if safe_consumer_intent_data else consumer_intent_data,
             "competitive_landscape": safe_competitive_landscape,
             "regional_demand": safe_regional_demand,
             "synthesis": None,

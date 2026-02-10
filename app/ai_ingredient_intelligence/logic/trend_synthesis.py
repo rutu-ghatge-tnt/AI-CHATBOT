@@ -101,7 +101,13 @@ async def synthesize_trend_insights(
         }
     
     # Check if we have any data to analyze
-    if not trend_data and not consumer_intent_data and not competitive_data and not regional_data:
+    # Handle both None and empty dict cases
+    has_trend = trend_data and (isinstance(trend_data, dict) and len(trend_data) > 0)
+    has_consumer = consumer_intent_data and (isinstance(consumer_intent_data, dict) and len(consumer_intent_data) > 0)
+    has_competitive = competitive_data is not None
+    has_regional = regional_data is not None
+    
+    if not (has_trend or has_consumer or has_competitive or has_regional):
         return {
             "error": "No trend data available for synthesis",
             "synthesis": None
