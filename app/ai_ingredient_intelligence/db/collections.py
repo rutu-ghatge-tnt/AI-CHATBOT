@@ -25,8 +25,7 @@ url_cache_col = db["url_cache"]
 # NEW COLLECTIONS FOR REVISED MAKE A WISH FLOW (January 2025)
 # ============================================================================
 
-# Commercialization requests collection
-commercialization_requests_col = db["commercialization_requests"]
+# Note: commercialization_requests removed - using qms_queries directly instead
 
 # Formula versions collection for edit history
 formula_versions_col = db["formula_versions"]

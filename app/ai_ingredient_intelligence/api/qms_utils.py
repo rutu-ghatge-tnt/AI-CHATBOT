@@ -145,6 +145,7 @@ async def create_query_from_commercialization(
             "category": category,
             "target_mrp": wish_brief.get("target_mrp"),
             "batch_size": wish_brief.get("batch_size") or user_info.get("preferred_batch"),
+            "queue_number": wish_brief.get("queue_number"),  # Store queue number for easy access
             "status": QueryStatus.NEW.value,
             "priority": QueryPriority.NORMAL.value,
             "current_milestone": 0,  # Payment Received (or Request Submitted if no payment)
@@ -213,76 +214,6 @@ async def create_query_from_payment(
     )
 
 
-async def create_query_from_commercialization_request(
-    commercialization_request: Dict[str, Any],
-    wish_history: Dict[str, Any]
-) -> Optional[str]:
-    """
-    Create a QMS query from an existing commercialization request.
-    
-    This is useful when you want to migrate existing commercialization requests
-    to the QMS system, or when payment happens separately.
-    
-    Args:
-        commercialization_request: Commercialization request document
-        wish_history: Wish history document
-    
-    Returns:
-        Query ID if created, None if query already exists
-    """
-    try:
-        user_id = commercialization_request.get("user_id")
-        formula_id = commercialization_request.get("formula_id")
-        
-        # Check if query already exists for this formula
-        existing_query = await qms_queries_col.find_one({
-            "user_id": user_id,
-            "wish_brief.formula_id": formula_id
-        })
-        
-        if existing_query:
-            print(f"⚠️ Query already exists for formula {formula_id}: {existing_query.get('display_id')}")
-            return str(existing_query["_id"])
-        
-        # Extract user info from commercialization request
-        user_info = {
-            "name": commercialization_request.get("name", ""),
-            "phone": commercialization_request.get("phone", ""),
-            "city": commercialization_request.get("city"),
-            "background": None,  # Not in commercialization request
-            "preferred_batch": commercialization_request.get("quantity_interest"),
-        }
-        
-        # Extract wish brief from wish_history
-        wish_brief = {
-            "formula_id": formula_id,
-            "history_id": commercialization_request.get("history_id"),
-            "formula_name": wish_history.get("formula_name") or "Custom Formula",
-            "product_type": wish_history.get("product_type") or "Product",
-            "category": wish_history.get("category") or "skincare",
-            "wish_data": wish_history.get("wish_data", {}),
-            "optimized_formula": wish_history.get("formula", {}),
-            "commercialization_request": {
-                "request_id": commercialization_request.get("request_id"),
-                "queue_number": commercialization_request.get("queue_number"),
-                "experience_level": commercialization_request.get("experience_level"),
-                "timeline": commercialization_request.get("timeline"),
-                "additional_notes": commercialization_request.get("additional_notes"),
-            }
-        }
-        
-        # Create query without payment_id
-        return await create_query_from_commercialization(
-            user_id=user_id,
-            wish_history_id=commercialization_request.get("history_id"),
-            formula_id=formula_id,
-            user_info=user_info,
-            wish_brief=wish_brief,
-            payment_id=None  # No payment record yet
-        )
-    
-    except Exception as e:
-        print(f"❌ Error creating query from commercialization request: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+# REMOVED: create_query_from_commercialization_request function
+# No longer needed since commercialization_requests collection was removed
+# All commercialization requests are now created directly as QMS queries

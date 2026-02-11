@@ -45,7 +45,7 @@ from app.ai_ingredient_intelligence.logic.formula_generator import (
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     generate_formula_from_wish as generate_make_wish_formula
 )
-from app.ai_ingredient_intelligence.db.collections import wish_history_col, commercialization_requests_col
+from app.ai_ingredient_intelligence.db.collections import wish_history_col
 
 router = APIRouter(prefix="/formula", tags=["Formula Generation"])
 
@@ -929,21 +929,24 @@ async def get_wish_history_detail(
         commercialization_request = None
         
         if formula_id:
-            commercialization_request = await commercialization_requests_col.find_one({
+            # Check QMS queries instead of commercialization_requests
+            from app.ai_ingredient_intelligence.db.collections import qms_queries_col
+            qms_query = await qms_queries_col.find_one({
                 "user_id": user_id,
-                "formula_id": formula_id,
-                "history_id": history_id,
-                "status": {"$in": ["submitted", "in_progress", "review", "completed"]}
+                "wish_brief.formula_id": formula_id,
+                "wish_brief.history_id": history_id,
+                "status": {"$nin": ["cancelled"]}  # Any active query
             })
             
             # If found, format the response
-            if commercialization_request:
+            if qms_query:
                 commercialization_request = {
-                    "_id": str(commercialization_request.get("_id")),
-                    "queue_number": commercialization_request.get("queue_number"),
-                    "status": commercialization_request.get("status"),
-                    "created_at": commercialization_request.get("created_at"),
-                    "additional_notes": commercialization_request.get("additional_notes"),
+                    "_id": str(qms_query.get("_id")),
+                    "queue_number": qms_query.get("queue_number") or qms_query.get("wish_brief", {}).get("queue_number"),
+                    "status": qms_query.get("status"),
+                    "created_at": qms_query.get("created_at").isoformat() if isinstance(qms_query.get("created_at"), datetime) else qms_query.get("created_at"),
+                    "additional_notes": qms_query.get("wish_brief", {}).get("additional_notes"),
+                    "display_id": qms_query.get("display_id")
                 }
         
         # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs

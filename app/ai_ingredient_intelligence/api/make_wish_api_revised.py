@@ -63,9 +63,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_f
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
-    wish_history_col, commercialization_requests_col, 
+    wish_history_col, 
     formula_versions_col, quotes_col, ingredient_alternatives_cache_col,
-    qms_queries_col  # For QMS query creation
+    qms_queries_col  # Single source of truth for commercialization requests
 )
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish - Revised"])
@@ -1096,23 +1096,23 @@ async def submit_commercialization_request(
                 detail="Formula not found or access denied"
             )
         
-        # Check if commercialization request already exists for this formula
-        existing_request = await commercialization_requests_col.find_one({
+        # Check if QMS query already exists for this formula
+        existing_query = await qms_queries_col.find_one({
             "user_id": user_id,
-            "formula_id": request.formula_id,
-            "history_id": request.history_id,
-            "status": {"$in": ["submitted", "in_progress", "review", "approved"]}
+            "wish_brief.formula_id": request.formula_id,
+            "wish_brief.history_id": request.history_id,
+            "status": {"$nin": ["completed", "cancelled"]}  # Active queries only
         })
         
-        if existing_request:
+        if existing_query:
+            display_id = existing_query.get("display_id", "N/A")
             raise HTTPException(
                 status_code=409,
-                detail=f"Commercialization request already exists for this formula. Request ID: {existing_request.get('request_id', 'N/A')}, Queue Number: {existing_request.get('queue_number', 'N/A')}"
+                detail=f"Commercialization request already exists for this formula. Query ID: {display_id}"
             )
         
-        # Generate queue number and request ID
+        # Generate queue number (for display purposes)
         queue_number = generate_queue_number()
-        request_id = str(uuid.uuid4())
         created_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
         
         # Determine queue position (simplified)
@@ -1203,36 +1203,8 @@ async def submit_commercialization_request(
         #     "purpose": "To ensure dedicated time and resources for your project"
         # }
         
-        # Save commercialization request to database
-        commercialization_doc = {
-            "request_id": request_id,
-            "queue_number": queue_number,
-            "user_id": user_id,
-            "formula_id": request.formula_id,
-            "history_id": request.history_id,
-            "name": request.name,
-            "phone": request.phone,
-            "city": request.city,
-            "experience_level": request.experience_level,
-            "timeline": request.timeline,
-            "quantity_interest": request.quantity_interest,
-            "additional_notes": request.additional_notes,
-            "status": "submitted",
-            "created_at": created_at.isoformat(),
-            "next_steps": next_steps,
-            # "commitment_info": commitment_info,
-            "updated_at": created_at.isoformat()
-        }
-        
-        try:
-            result = await commercialization_requests_col.insert_one(commercialization_doc)
-            print(f"💾 Saved commercialization request: {request_id}")
-        except Exception as db_error:
-            print(f"⚠️ Warning: Failed to save commercialization request: {db_error}")
-            # Continue without failing the response
-        
         # ========================================================================
-        # CREATE QMS QUERY (Auto-create query, payment optional)
+        # CREATE QMS QUERY (Single source of truth - replaces commercialization_requests)
         # ========================================================================
         query_id = None
         query_display_id = None
@@ -1243,18 +1215,16 @@ async def submit_commercialization_request(
             wish_brief = {
                 "formula_id": request.formula_id,
                 "history_id": request.history_id,
-                "formula_name": history_item.get("formula_name") or "Custom Formula",
-                "product_type": history_item.get("product_type") or "Product",
-                "category": history_item.get("category") or "skincare",
+                "formula_name": history_item.get("name") or history_item.get("formula_name") or "Custom Formula",
+                "product_type": history_item.get("parsed_data", {}).get("product_type", {}).get("name") or "Product",
+                "category": history_item.get("parsed_data", {}).get("category") or history_item.get("wish_data", {}).get("category") or "skincare",
                 "wish_data": history_item.get("wish_data", {}),
-                "optimized_formula": history_item.get("formula", {}),
-                "commercialization_request": {
-                    "request_id": request_id,
-                    "queue_number": queue_number,
-                    "experience_level": request.experience_level,
-                    "timeline": request.timeline,
-                    "additional_notes": request.additional_notes,
-                }
+                "optimized_formula": history_item.get("formula_data", {}) or history_item.get("basic_mode_result", {}),
+                "queue_number": queue_number,  # Store queue number in wish_brief
+                "experience_level": request.experience_level,
+                "timeline": request.timeline,
+                "additional_notes": request.additional_notes,
+                "next_steps": next_steps
             }
             
             # Create query (payment_id is optional - can be None for now)
@@ -1273,31 +1243,33 @@ async def submit_commercialization_request(
                 payment_id=request.payment_id  # Optional - None if not provided
             )
             
-            # Get query display_id for logging
+            # Get query display_id for logging and response
             if query_id:
                 query_obj = await qms_queries_col.find_one({"_id": ObjectId(query_id)})
                 if query_obj:
                     query_display_id = query_obj.get("display_id")
-                    print(f"✅ Created QMS query: {query_display_id}")
+                    print(f"✅ Created QMS query: {query_display_id} (Queue: {queue_number})")
             
         except Exception as qms_error:
-            # Don't fail the request if QMS query creation fails
-            print(f"⚠️ Warning: Failed to create QMS query: {qms_error}")
+            print(f"❌ Failed to create QMS query: {qms_error}")
             import traceback
             traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create commercialization request: {str(qms_error)}"
+            )
         
         print(f"✅ Commercialization request submitted")
         print(f"   Queue Number: {queue_number}")
+        print(f"   Query ID: {query_display_id}")
         print(f"   Experience Level: {request.experience_level}")
         print(f"   Timeline: {request.timeline}")
-        if query_display_id:
-            print(f"   QMS Query: {query_display_id}")
         
         return GetThisMadeResponse(
             success=True,
             queue_number=queue_number,
             queue_position=queue_position,
-            request_id=request_id,
+            request_id=query_display_id,  # Use display_id as request_id
             created_at=created_at,
             next_steps=next_steps,
             query_id=query_id,
