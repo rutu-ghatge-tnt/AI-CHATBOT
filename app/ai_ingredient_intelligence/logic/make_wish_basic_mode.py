@@ -162,7 +162,7 @@ Based on selections (or recommendations), generate:
 ### Step 4: Generate Business Context
 - Packaging options with costs
 - Profit calculations at different MRPs
-- Market comparison with competitors (MUST include "advantage" field for each competitor showing pricing advantage)
+- Market comparison with competitors (MUST include "advantage" field for each competitor showing comprehensive advantage: price + ingredients + benefits + overall value)
 - Cost factors that affect real pricing
 
 ### Step 5: Generate Supporting Content
@@ -311,7 +311,7 @@ Return JSON matching this structure:
           "price": 549, 
           "size": "30g", 
           "pricePerGram": 18.30,
-          "advantage": "Your advantage description (e.g., ₹X.XX/100g cheaper or Better cost efficiency)",
+          "advantage": "Your advantage description (e.g., ₹X.XX/g cheaper or ₹X.XX/ml cheaper or Better cost efficiency)",
           "yourAdvantage": "Your advantage description"
         }}
       ]
@@ -386,8 +386,12 @@ Return JSON matching this structure:
 1. **categoryTrends**: MUST include at least 3 trends. Never return empty array. Include trends relevant to the product category and benefits.
 2. **relatedTrends**: MUST include at least 2-3 related trends. Never return empty array. Base on category, benefits, and market insights.
 3. **marketComparison advantage**: For each competitor in marketComparison, MUST calculate and include "advantage" field showing:
-   - If your formula is cheaper: "₹X.XX/100g cheaper"
-   - If your formula is more expensive: "₹X.XX/100g more expensive" or "Premium positioning"
+   - Advantage should be comprehensive, not just price:
+     * Price: "₹X.XX/g cheaper" or "₹X.XX/ml cheaper" (if significantly cheaper)
+     * Ingredients: "Premium actives (Niacinamide, Licorice)" or "More active ingredients"
+     * Benefits: "Multi-benefit: Brightening + Healing" or "Targets 3 concerns"
+     * Value: "Better value proposition" or "Premium formulation"
+     * Combine multiple advantages: "₹X.XX/g cheaper + Premium actives" or "Multi-benefit + Better value"
    - If similar: "Similar pricing"
    - Always provide a meaningful advantage description, never leave blank
 4. **Error handling**: If any calculation fails, provide fallback text like "Cost analysis pending" or "Better cost efficiency" - never leave blank
@@ -545,13 +549,29 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
             
             formula_data["relatedTrends"] = related_trends[:5]  # Limit to 5
         
-        # 3. Fix "Your advantage" in marketComparison - calculate based on price per unit
+        # 3. Fix "Your advantage" in marketComparison - comprehensive analysis (price + ingredients + benefits)
         business_numbers = formula_data.get("businessNumbers", {})
         market_comparison = business_numbers.get("marketComparison", [])
         if market_comparison:
-            # Get user's formula cost per 100g
+            # Extract user's formula strengths
             technical_formula = formula_data.get("technicalFormula", {})
             user_cost_per_100g = technical_formula.get("totalCostPer100g", 0)
+            
+            # Get hero ingredients and benefits from formula
+            active_options = basic_result.get("activeOptions", {})
+            recommended_formula = active_options.get("recommendedFormula", {})
+            hero_actives = recommended_formula.get("heroActives", [])
+            hero_ingredient_names = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+            
+            # Get key features/benefits
+            key_features = formula_data.get("keyFeatures", [])
+            feature_benefits = [f.get("title", "") for f in key_features if f.get("title")]
+            
+            # Get extracted parameters for primary concerns/benefits
+            extracted_params = basic_result.get("extractedParameters", {})
+            primary_concern = extracted_params.get("primaryConcern", "")
+            secondary_concerns = extracted_params.get("secondaryConcerns", [])
+            all_concerns = [primary_concern] + (secondary_concerns if secondary_concerns else [])
             
             # Calculate advantage for each competitor
             for competitor in market_comparison:
@@ -559,40 +579,99 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
                     continue
                 
                 competitor_price = competitor.get("price", 0) or competitor.get("mrp", 0)
-                competitor_size_str = str(competitor.get("size", "0")).replace("g", "").replace("ml", "").strip()
+                competitor_size_raw = str(competitor.get("size", "0")).strip()
+                competitor_note = competitor.get("note", "").lower()
+                
+                # Determine unit (g or ml) from size string
+                is_ml = "ml" in competitor_size_raw.lower()
+                unit = "/ml" if is_ml else "/g"
+                
+                # Extract numeric size
+                competitor_size_str = competitor_size_raw.replace("g", "").replace("ml", "").replace("G", "").replace("ML", "").strip()
                 try:
                     competitor_size = float(competitor_size_str) if competitor_size_str else 0
                 except:
                     competitor_size = 0
                 
-                competitor_price_per_gram = competitor.get("pricePerGram", 0)
+                competitor_price_per_unit = competitor.get("pricePerGram", 0)
                 
-                # Calculate price per 100g if we have size and price
-                if competitor_size > 0 and competitor_price > 0 and competitor_price_per_gram == 0:
-                    competitor_price_per_gram = (competitor_price / competitor_size) * 100
-                    competitor["pricePerGram"] = competitor_price_per_gram
+                # Calculate price per unit (g or ml) if we have size and price
+                if competitor_size > 0 and competitor_price > 0:
+                    competitor_price_per_unit = competitor_price / competitor_size
+                    competitor["pricePerGram"] = competitor_price_per_unit  # Keep field name for compatibility
                 
-                # Calculate advantage
-                advantage = None
-                if user_cost_per_100g > 0 and competitor_price_per_gram > 0:
-                    cost_difference = competitor_price_per_gram - user_cost_per_100g
-                    if cost_difference > 5:  # Significant difference
-                        advantage = f"₹{cost_difference:.2f}/100g cheaper"
-                    elif cost_difference < -5:
-                        advantage = f"₹{abs(cost_difference):.2f}/100g more expensive"
+                # Build comprehensive advantage statement
+                advantage_parts = []
+                
+                # 1. Price advantage (if significant)
+                if user_cost_per_100g > 0 and competitor_price_per_unit > 0:
+                    user_cost_per_unit = user_cost_per_100g / 100
+                    cost_difference = competitor_price_per_unit - user_cost_per_unit
+                    
+                    if cost_difference > 0.05:  # User is cheaper
+                        advantage_parts.append(f"₹{cost_difference:.2f}{unit} cheaper")
+                    elif cost_difference < -0.05:  # User is more expensive
+                        # Only mention if significantly more expensive, otherwise focus on value
+                        if abs(cost_difference) > user_cost_per_unit * 0.3:  # 30% more expensive
+                            advantage_parts.append(f"₹{abs(cost_difference):.2f}{unit} more expensive")
+                
+                # 2. Ingredient advantage
+                if hero_ingredient_names:
+                    # Check if competitor note mentions basic/simple ingredients
+                    if any(word in competitor_note for word in ["basic", "simple", "only", "just"]):
+                        advantage_parts.append(f"Premium actives ({', '.join(hero_ingredient_names[:3])})")
+                    elif len(hero_ingredient_names) >= 3:
+                        advantage_parts.append(f"More active ingredients ({len(hero_actives)} vs typical 1-2)")
+                
+                # 3. Benefit/Feature advantage
+                if feature_benefits:
+                    # Highlight unique benefits
+                    unique_benefits = []
+                    for benefit in feature_benefits[:2]:  # Top 2 benefits
+                        if benefit and len(benefit) < 40:  # Keep it concise
+                            unique_benefits.append(benefit)
+                    if unique_benefits:
+                        advantage_parts.append(f"Multi-benefit: {', '.join(unique_benefits)}")
+                
+                # 4. Concern targeting advantage
+                if all_concerns and len(all_concerns) > 1:
+                    # If formula targets multiple concerns vs competitor's basic positioning
+                    if "basic" in competitor_note or "only" in competitor_note:
+                        advantage_parts.append(f"Targets {len(all_concerns)} concerns")
+                
+                # 5. Value positioning
+                if not advantage_parts:  # Fallback if no specific advantages found
+                    if user_cost_per_100g > 0:
+                        # Compare value proposition
+                        if competitor_price_per_unit > 0:
+                            user_cost_per_unit = user_cost_per_100g / 100
+                            value_ratio = competitor_price_per_unit / user_cost_per_unit if user_cost_per_unit > 0 else 1
+                            if value_ratio > 2:
+                                advantage_parts.append("Better value proposition")
+                            elif value_ratio < 0.5:
+                                advantage_parts.append("Premium ingredients")
+                            else:
+                                advantage_parts.append("Competitive value")
+                        else:
+                            advantage_parts.append("Better cost efficiency")
                     else:
-                        advantage = "Similar pricing"
-                elif user_cost_per_100g > 0:
-                    # Estimate advantage based on typical margins
-                    estimated_competitor_cost = competitor_price / 4  # Assume 4x markup
-                    if estimated_competitor_cost > user_cost_per_100g * 1.2:
-                        advantage = "Better cost efficiency"
-                    elif estimated_competitor_cost < user_cost_per_100g * 0.8:
-                        advantage = "Premium positioning"
+                        advantage_parts.append("Premium formulation")
+                
+                # Combine advantages into final statement
+                if len(advantage_parts) == 1:
+                    advantage = advantage_parts[0]
+                elif len(advantage_parts) == 2:
+                    advantage = f"{advantage_parts[0]} + {advantage_parts[1]}"
+                elif len(advantage_parts) >= 3:
+                    # Prioritize: price first, then ingredients, then benefits
+                    price_adv = [a for a in advantage_parts if "₹" in a or "cheaper" in a.lower() or "expensive" in a.lower()]
+                    other_adv = [a for a in advantage_parts if a not in price_adv]
+                    if price_adv:
+                        advantage = f"{price_adv[0]} + {other_adv[0] if other_adv else 'better value'}"
                     else:
-                        advantage = "Competitive pricing"
+                        advantage = f"{advantage_parts[0]} + {advantage_parts[1]}"
                 else:
-                    advantage = "Cost analysis pending"
+                    advantage = "Better overall value"
                 
                 competitor["advantage"] = advantage
                 competitor["yourAdvantage"] = advantage  # Also add for frontend compatibility
