@@ -13,7 +13,9 @@ from app.ai_ingredient_intelligence.db.collections import bookmarks_col
 from app.ai_ingredient_intelligence.models.bookmarks_schemas import (
     BookmarkType,
     CreateBookmarksData,
+    DeleteBookmarksData,
     BookmarkItemInput,
+    DeleteBookmarkItemInput,
 )
 
 
@@ -29,16 +31,17 @@ def _item_id_and_doc(
         "type": bookmark_type.value,
         "created_at": now,
     }
+    tags = list(item.tags) if item.tags else []
     if bookmark_type == BookmarkType.URL:
         url = (item.url or "").strip()
         title = (item.title or "").strip()
-        doc = {**base, "reference": {"title": title, "url": url}}
+        doc = {**base, "reference": {"title": title, "url": url, "tags": tags}}
         return url, doc
     else:
         # INGREDIENT, PRODUCT, RECIPE
         id_val = (item.id or "").strip()
         name_val = (item.name or "").strip() if item.name else ""
-        doc = {**base, "reference": {"id": id_val, "name": name_val}}
+        doc = {**base, "reference": {"id": id_val, "name": name_val, "tags": tags}}
         return id_val, doc
 
 
@@ -185,3 +188,60 @@ async def create_bookmarks(
         alreadyBookmarked=already_bookmarked,
         failed=failed,
     )
+
+
+async def delete_bookmarks(
+    user_id: str,
+    bookmark_type: BookmarkType,
+    items: List[DeleteBookmarkItemInput],
+) -> DeleteBookmarksData:
+    """
+    Delete bookmarks in bulk by type and list of ids (INGREDIENT/PRODUCT/RECIPE) or urls (URL).
+    Returns deleted, notFound (were not bookmarked), failed.
+    """
+    ref_field = _ref_field(bookmark_type)
+    keys_set: Set[str] = set()
+    for item in items:
+        k = (item.url or "").strip() if bookmark_type == BookmarkType.URL else (item.id or "").strip()
+        if k:
+            keys_set.add(k)
+    keys = list(keys_set)
+    if not keys:
+        return DeleteBookmarksData(type=bookmark_type, deleted=[], notFound=[], failed=[])
+
+    existing = await find_existing_item_ids(user_id, keys, bookmark_type)
+    to_delete = list(existing)
+    not_found = [k for k in keys if k not in existing]
+
+    deleted: List[str] = []
+    failed: List[str] = []
+    try:
+        if to_delete:
+            result = await bookmarks_col.delete_many(
+                {
+                    "user_id": user_id,
+                    "type": bookmark_type.value,
+                    ref_field: {"$in": to_delete},
+                }
+            )
+            if result.acknowledged:
+                deleted = to_delete
+            else:
+                failed = to_delete
+        return DeleteBookmarksData(
+            type=bookmark_type,
+            deleted=deleted,
+            notFound=not_found,
+            failed=failed,
+        )
+    except Exception as e:
+        import traceback
+        print(f"[BOOKMARKS] delete_many error: {e}")
+        traceback.print_exc()
+        failed = to_delete
+        return DeleteBookmarksData(
+            type=bookmark_type,
+            deleted=[],
+            notFound=not_found,
+            failed=failed,
+        )

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
 from app.ai_ingredient_intelligence.logic.bookmark_manager import (
     create_bookmarks as create_bookmarks_logic,
+    delete_bookmarks as delete_bookmarks_logic,
     get_bookmarks_for_user,
 )
 from app.ai_ingredient_intelligence.models.bookmarks_schemas import (
@@ -24,6 +25,8 @@ from app.ai_ingredient_intelligence.models.bookmarks_schemas import (
     BookmarkType,
     CreateBookmarksRequest,
     CreateBookmarksResponse,
+    DeleteBookmarksRequest,
+    DeleteBookmarksResponse,
     ListBookmarksResponse,
 )
 
@@ -82,10 +85,11 @@ async def list_bookmarks(
         for doc in data["items"]:
             ref = doc.get("reference") or {}
             t = doc.get("type") or ""
+            tags = ref.get("tags") if isinstance(ref.get("tags"), list) else []
             if (t or "").upper() == "URL":
-                reference = BookmarkReference(title=ref.get("title"), url=ref.get("url"))
+                reference = BookmarkReference(title=ref.get("title"), url=ref.get("url"), tags=tags)
             else:
-                reference = BookmarkReference(id=ref.get("id"), name=ref.get("name"))
+                reference = BookmarkReference(id=ref.get("id"), name=ref.get("name"), tags=tags)
             items.append(
                 BookmarkListItem(type=t, reference=reference, created_at=doc.get("created_at"))
             )
@@ -163,4 +167,53 @@ async def create_bookmarks(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create bookmarks: {str(e)}",
+        )
+
+
+@router.delete("", response_model=DeleteBookmarksResponse)
+async def delete_bookmarks(
+    request: DeleteBookmarksRequest,
+    current_user: dict = Depends(verify_jwt_token),
+):
+    """
+    Delete bookmarks in bulk (one type per request).
+
+    Request body:
+    - type: INGREDIENT, PRODUCT, RECIPE, or URL.
+    - items: For INGREDIENT/PRODUCT/RECIPE each item must have "id". For URL each item must have "url".
+
+    Example (INGREDIENT):
+    { "type": "INGREDIENT", "items": [ { "id": "ing_001" }, { "id": "ing_002" } ] }
+
+    Example (URL):
+    { "type": "URL", "items": [ { "url": "https://example.com/page" } ] }
+
+    Response:
+    - deleted: IDs/URLs that were removed.
+    - notFound: IDs/URLs that were not bookmarked (no error).
+    - failed: IDs/URLs that could not be deleted (e.g. DB error).
+
+    Authentication: JWT required; user_id from token only.
+    """
+    try:
+        user_id = _get_user_id(current_user)
+        data = await delete_bookmarks_logic(
+            user_id=user_id,
+            bookmark_type=request.type,
+            items=request.items,
+        )
+        return DeleteBookmarksResponse(
+            success=True,
+            message="Bookmarks delete processed successfully",
+            data=data,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting bookmarks: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete bookmarks: {str(e)}",
         )
