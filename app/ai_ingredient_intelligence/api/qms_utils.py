@@ -26,7 +26,8 @@ async def create_query_from_commercialization(
     wish_history_id: str,
     formula_id: str,
     user_info: Dict[str, Any],
-    payment_id: Optional[str] = None
+    payment_id: Optional[str] = None,
+    queue_number: Optional[str] = None
 ) -> str:
     """
     Create a QMS query from a commercialization request (payment optional).
@@ -110,6 +111,7 @@ async def create_query_from_commercialization(
             "formula_id": formula_id,
             "history_id": wish_history_id,
             "status": QueryStatus.NEW.value,
+            "queue_number": int(queue_number) if queue_number else None,  # Store as integer for easy sorting
             "created_at": now,
             "updated_at": now
         }
@@ -119,7 +121,8 @@ async def create_query_from_commercialization(
         
         print(f"✅ Created QMS query: {display_id} (ID: {query_id})")
         print(f"   User: {user_info.get('name', 'Unknown')}")
-        print(f"   Formula: {formula_name}")
+        if queue_number:
+            print(f"   Queue Number: {queue_number}")
         print(f"   Status: {QueryStatus.NEW.value}")
         if payment_id:
             print(f"   Payment ID: {payment_id}")
