@@ -832,15 +832,28 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         # Convert to string, fix, convert back
         cost_str = json.dumps(cost_data)
         
-        # Replace /100g and /100ml with actual unit
-        cost_str = re.sub(r'/100g', f'/{unit}', cost_str)
-        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str)
-        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str)
-        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str)
-        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str)
-        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str)
+        # Replace /100g and /100ml with actual unit (case-insensitive)
+        cost_str = re.sub(r'/100g', f'/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        # Also catch variations like "₹13.98/100g" or "₹13.98 per 100g"
+        cost_str = re.sub(r'₹([0-9.]+)/100g', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+)/100ml', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+) per 100g', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+) per 100ml', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
+        # Clean competitor_comparison section specifically
+        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100g"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100ml"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
         
-        return json.loads(cost_str)
+        try:
+            return json.loads(cost_str)
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return original (shouldn't happen but safety check)
+            print("⚠️ Warning: Failed to parse cleaned cost analysis JSON, returning original")
+            return cost_data
     
     async def run_stage_4():
         print("💰 Stage 4: Cost Analysis...")

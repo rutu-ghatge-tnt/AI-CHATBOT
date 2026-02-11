@@ -557,6 +557,13 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
             technical_formula = formula_data.get("technicalFormula", {})
             user_cost_per_100g = technical_formula.get("totalCostPer100g", 0)
             
+            # Get product type and unit for proper calculation
+            from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
+            product_type = wish_data.get('productType', 'serum')
+            unit = get_unit_for_product_type(product_type)
+            # Convert cost per 100g to cost per unit (g or ml)
+            user_cost_per_unit = user_cost_per_100g / 100 if user_cost_per_100g > 0 else 0
+            
             # Get hero ingredients and benefits from formula
             active_options = basic_result.get("activeOptions", {})
             recommended_formula = active_options.get("recommendedFormula", {})
@@ -604,8 +611,7 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
                 advantage_parts = []
                 
                 # 1. Price advantage (if significant)
-                if user_cost_per_100g > 0 and competitor_price_per_unit > 0:
-                    user_cost_per_unit = user_cost_per_100g / 100
+                if user_cost_per_unit > 0 and competitor_price_per_unit > 0:
                     cost_difference = competitor_price_per_unit - user_cost_per_unit
                     
                     if cost_difference > 0.05:  # User is cheaper
@@ -641,10 +647,9 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
                 
                 # 5. Value positioning
                 if not advantage_parts:  # Fallback if no specific advantages found
-                    if user_cost_per_100g > 0:
+                    if user_cost_per_unit > 0:
                         # Compare value proposition
                         if competitor_price_per_unit > 0:
-                            user_cost_per_unit = user_cost_per_100g / 100
                             value_ratio = competitor_price_per_unit / user_cost_per_unit if user_cost_per_unit > 0 else 1
                             if value_ratio > 2:
                                 advantage_parts.append("Better value proposition")
