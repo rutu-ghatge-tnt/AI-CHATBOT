@@ -846,6 +846,10 @@ Your estimates will be used for business planning, so ACCURACY and HONESTY about
 
 IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND the new format:
 
+**CRITICAL: The example below shows structure only. You MUST use the ACTUAL unit (g or ml) based on product type, NOT "100g" or "100ml".**
+**For serums/toners/liquids → use "ml" everywhere. For creams/lotions/solids → use "g" everywhere.**
+**NEVER use "/100g" or "/100ml" in display_range or cost_per_100g_range - use the actual unit from product type!**
+
 {
   "raw_material_cost": {
     "total_per_g": 0.885,
@@ -866,7 +870,7 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
       "optimistic": 0.62,
       "realistic": 0.885,
       "conservative": 1.28,
-      "display_range": "₹0.62 - ₹1.28 per g",
+      "display_range": "₹0.62 - ₹1.28 per g",  // NOTE: Use actual unit (g or ml) based on product type!
       "best_estimate": 0.885,
       "confidence": "medium"
     },
@@ -874,7 +878,7 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
       "optimistic": 62.0,
       "realistic": 88.5,
       "conservative": 128.0,
-      "display_range": "₹62 - ₹128 per 100g",
+      "display_range": "₹62 - ₹128 per g",  // CRITICAL: Use actual unit (g or ml), NOT "per 100g"!
       "best_estimate": 88.5,
       "confidence": "medium"
     },
@@ -903,7 +907,7 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
         "percentage_in_formula": 3.0,
         "cost_per_kg_range": "₹25,000 - ₹45,000",
         "cost_per_g_range": "₹0.75 - ₹1.35",
-        "cost_per_100g_range": "₹75 - ₹135",
+        "cost_per_100g_range": "₹75 - ₹135 per g",  // CRITICAL: Use actual unit (g or ml), NOT "per 100g"!
         "share_of_total": "45-55%",
         "confidence": "low",
         "note": "Patented Seppic ingredient. Contact IMCD India or Seppic India for exact quote."
@@ -913,7 +917,7 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
         "percentage_in_formula": 2.0,
         "cost_per_kg_range": "₹3,000 - ₹5,000",
         "cost_per_g_range": "₹0.06 - ₹0.10",
-        "cost_per_100g_range": "₹6 - ₹10",
+        "cost_per_100g_range": "₹6 - ₹10 per g",  // CRITICAL: Use actual unit (g or ml), NOT "per 100g"!
         "share_of_total": "5-8%",
         "confidence": "medium",
         "note": "Chinese generic widely available on IndiaMART"
