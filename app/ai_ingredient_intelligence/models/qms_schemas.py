@@ -4,10 +4,11 @@ Query Management System (QMS) - Pydantic Schemas
 Schemas for queries, users, partners, payments, and notes
 """
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
+import re
 
 
 # ============================================================================
@@ -73,12 +74,24 @@ class PaymentStatus(str, Enum):
 class UserBase(BaseModel):
     """Base user schema"""
     name: str = Field(..., description="Full name of the user")
-    email: EmailStr = Field(..., description="Email address")
+    email: Optional[str] = Field(None, description="Email address (optional)")
     phone: str = Field(..., description="Phone with country code (+91...)")
     city: Optional[str] = Field(None, description="User city")
     background: Optional[str] = Field(None, description="User background / entrepreneurial context")
     preferred_batch: Optional[str] = Field(None, description="Preferred batch size range")
     source: str = Field("make_a_wish", description="Acquisition source")
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Validate email format if provided"""
+        if v is None or v == "":
+            return None
+        # Simple email regex validation (doesn't require email-validator package)
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError(f"Invalid email format: {v}")
+        return v
 
 
 class UserCreate(UserBase):
@@ -103,7 +116,7 @@ class UserResponse(UserBase):
 class PartnerBase(BaseModel):
     """Base partner schema"""
     name: str = Field(..., description="Full name or firm name")
-    email: EmailStr = Field(..., description="Login email")
+    email: str = Field(..., description="Login email")
     phone: str = Field(..., description="Contact phone")
     type: PartnerType = Field(..., description="Partner type")
     city: Optional[str] = Field(None, description="City of operation")
@@ -113,6 +126,18 @@ class PartnerBase(BaseModel):
     notes: Optional[str] = Field(None, description="Internal admin notes")
     rating: float = Field(0.0, ge=0.0, le=5.0, description="Rating (0.0-5.0)")
     status: PartnerStatus = Field(PartnerStatus.ACTIVE, description="Partner status")
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Validate email format"""
+        if not v:
+            raise ValueError("Email is required")
+        # Simple email regex validation (doesn't require email-validator package)
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError(f"Invalid email format: {v}")
+        return v
 
 
 class PartnerCreate(PartnerBase):
