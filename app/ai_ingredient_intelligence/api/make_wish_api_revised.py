@@ -61,6 +61,10 @@ from app.ai_ingredient_intelligence.logic.make_wish_generator import (
 )
 from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_formula_basic_mode
 
+# Import trend analyzer for market intelligence
+from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
+from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
     wish_history_col, 
@@ -69,6 +73,128 @@ from app.ai_ingredient_intelligence.db.collections import (
 )
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish - Revised"])
+
+
+# ============================================================================
+# HELPER FUNCTION: FETCH TREND DATA FOR HERO INGREDIENTS
+# ============================================================================
+
+async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[str, Any]:
+    """
+    Fetch trend analysis and synthesis data for hero ingredients.
+    Runs internally as part of make-wish generation.
+    
+    Args:
+        hero_ingredients: List of hero ingredient names
+        
+    Returns:
+        Dictionary with trend data for each ingredient:
+        {
+            "ingredient_name": {
+                "analyze": {...},
+                "synthesis": {...}
+            }
+        }
+    """
+    trend_data = {}
+    analyzer = TrendAnalyzer()
+    
+    if not hero_ingredients:
+        return trend_data
+    
+    print(f"📊 Fetching trend data for {len(hero_ingredients)} hero ingredients...")
+    
+    for ingredient in hero_ingredients:
+        if not ingredient or not ingredient.strip():
+            continue
+            
+        try:
+            # Clean ingredient name (remove parentheses and extra text)
+            clean_ingredient = ingredient.split("(")[0].strip()
+            
+            print(f"   Analyzing trends for: {clean_ingredient}")
+            
+            # Fetch trend analysis
+            analyze_data = None
+            try:
+                analyze_data = await analyzer.analyze_ingredient_trend(
+                    clean_ingredient,
+                    time_range="today 12-m"
+                )
+                if analyze_data and "error" in analyze_data:
+                    print(f"   ⚠️ Analyze error for {clean_ingredient}: {analyze_data.get('error')}")
+                    analyze_data = None
+            except Exception as e:
+                print(f"   ⚠️ Error analyzing {clean_ingredient}: {str(e)}")
+            
+            # Fetch synthesis (includes analyze + consumer intent + competitive + regional)
+            synthesis_data = None
+            try:
+                # Get additional data for synthesis
+                consumer_intent_data = None
+                competitive_data = None
+                regional_data = None
+                
+                try:
+                    consumer_intent_data = await analyzer.analyze_consumer_intent(clean_ingredient)
+                    if consumer_intent_data and "error" in consumer_intent_data:
+                        consumer_intent_data = None
+                except:
+                    pass
+                
+                try:
+                    competitive_data = await analyzer.analyze_competitive_landscape(f"{clean_ingredient} serum")
+                    if competitive_data and "error" in competitive_data:
+                        competitive_data = None
+                except:
+                    pass
+                
+                try:
+                    regional_data = await analyzer.analyze_regional_demand(clean_ingredient, "today 12-m")
+                    if regional_data and "error" in regional_data:
+                        regional_data = None
+                except:
+                    pass
+                
+                # Synthesize all data
+                safe_analyze = analyze_data if (analyze_data and isinstance(analyze_data, dict) and "error" not in analyze_data) else None
+                safe_consumer = consumer_intent_data if (consumer_intent_data and isinstance(consumer_intent_data, dict) and "error" not in consumer_intent_data) else None
+                safe_competitive = competitive_data if (competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data) else None
+                safe_regional = regional_data if (regional_data and isinstance(regional_data, dict) and "error" not in regional_data) else None
+                
+                # Only synthesize if we have at least some data
+                has_data = safe_analyze or safe_consumer or safe_competitive or safe_regional
+                if has_data:
+                    synthesis_result = await synthesize_trend_insights(
+                        clean_ingredient,
+                        safe_analyze,
+                        safe_consumer,
+                        safe_competitive,
+                        safe_regional
+                    )
+                    if synthesis_result and synthesis_result.get("synthesis"):
+                        synthesis_data = synthesis_result.get("synthesis")
+                    elif synthesis_result and synthesis_result.get("error"):
+                        print(f"   ⚠️ Synthesis error for {clean_ingredient}: {synthesis_result.get('error')}")
+            except Exception as e:
+                print(f"   ⚠️ Error synthesizing {clean_ingredient}: {str(e)}")
+            
+            # Store trend data for this ingredient
+            trend_data[ingredient] = {
+                "analyze": analyze_data,
+                "synthesis": synthesis_data
+            }
+            
+        except Exception as e:
+            print(f"   ❌ Failed to fetch trend data for {ingredient}: {str(e)}")
+            trend_data[ingredient] = {
+                "analyze": None,
+                "synthesis": None,
+                "error": str(e)
+            }
+    
+    print(f"✅ Completed trend analysis for {len(trend_data)} ingredients")
+    return trend_data
 
 
 # ============================================================================
@@ -315,6 +441,33 @@ async def generate_formula_revised(
             }
             basic_result = await generate_formula_basic_mode(wish_data)
             basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names (like advanced)
+            
+            # Extract hero ingredients for trend analysis
+            hero_ingredients = []
+            try:
+                # Try to get from activeOptions -> recommendedFormula -> heroActives
+                active_options = basic_result.get("activeOptions", {})
+                recommended_formula = active_options.get("recommendedFormula", {})
+                hero_actives = recommended_formula.get("heroActives", [])
+                hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+                
+                # Fallback to detected ingredients from wish_data
+                if not hero_ingredients:
+                    hero_ingredients = wish_data.get("heroIngredients", [])
+            except Exception as e:
+                print(f"⚠️ Error extracting hero ingredients: {e}")
+                hero_ingredients = wish_data.get("heroIngredients", [])
+            
+            # Fetch trend data for hero ingredients
+            trend_data = {}
+            if hero_ingredients:
+                try:
+                    trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
+                except Exception as e:
+                    print(f"⚠️ Error fetching trend data: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
             formula_id = str(uuid.uuid4())
             if not history_id:
                 try:
@@ -330,6 +483,7 @@ async def generate_formula_revised(
                         "formula_id": formula_id,
                         "formula_data": None,
                         "basic_mode_result": basic_result,
+                        "trend_data": trend_data,  # Store trend analysis data
                         "status": "completed",
                         "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                         "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
@@ -564,6 +718,22 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
             prompt_type="insights_generation"
         )
         
+        # Extract hero ingredients for trend analysis
+        hero_ingredients = [ing.get("name", "") or ing.get("inci", "") for ing in key_ingredients if ing.get("is_hero", False)]
+        if not hero_ingredients:
+            # Fallback to detected ingredients
+            hero_ingredients = [ing.name for ing in request.parsed_data.detected_ingredients]
+        
+        # Fetch trend data for hero ingredients
+        trend_data = {}
+        if hero_ingredients:
+            try:
+                trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
+            except Exception as e:
+                print(f"⚠️ Error fetching trend data: {e}")
+                import traceback
+                traceback.print_exc()
+        
         # Generate unique IDs
         formula_id = str(uuid.uuid4())
         if not history_id:
@@ -586,6 +756,7 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
                     "formula_id": formula_id,
                     "formula_data": optimized_formula,
                     "basic_mode_result": None,
+                    "trend_data": trend_data,  # Store trend analysis data
                     "status": "completed",
                     "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                     "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
