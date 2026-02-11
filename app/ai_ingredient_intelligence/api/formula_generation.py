@@ -1053,6 +1053,7 @@ async def get_wish_history_detail(
         # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs
         basic_mode_result = doc.get("basic_mode_result")
         formula_data = doc.get("formula_data")
+        trend_data = doc.get("trend_data", {})  # Get trend analysis data
         return {
             "id": str(doc["_id"]),
             "history_id": str(doc["_id"]),
@@ -1070,6 +1071,7 @@ async def get_wish_history_detail(
             "mode": doc.get("mode", "advanced"),
             "basic_mode_result": basic_mode_result,
             "formula_data": formula_data,
+            "trend_data": trend_data,  # Include trend analysis data in response
             # For future reference: legacy / backward compatibility (uncomment if needed)
             # "wish_data": doc.get("wish_data"),
             # "formula_result": doc.get("formula_result"),
