@@ -25,8 +25,7 @@ url_cache_col = db["url_cache"]
 # NEW COLLECTIONS FOR REVISED MAKE A WISH FLOW (January 2025)
 # ============================================================================
 
-# Commercialization requests collection
-commercialization_requests_col = db["commercialization_requests"]
+# Note: commercialization_requests removed - using qms_queries directly instead
 
 # Formula versions collection for edit history
 formula_versions_col = db["formula_versions"]
@@ -37,7 +36,24 @@ quotes_col = db["quotes"]
 # Ingredient alternatives cache collection
 ingredient_alternatives_cache_col = db["ingredient_alternatives_cache"]
 
-# Trend insights cache collection
-trend_cache_col = db["trend_cache"]
-trend_alerts_col = db["trend_alerts"]
-trend_history_col = db["trend_history"]
+# ============================================================================
+# QMS (Query Management System) COLLECTIONS
+# ============================================================================
+
+# Users collection (for QMS - users who paid consultation fee)
+qms_users_col = db["qms_users"]
+
+# Partners collection (formulation partners)
+qms_partners_col = db["qms_partners"]
+
+# Queries collection (core QMS table)
+qms_queries_col = db["qms_queries"]
+
+# Query notes collection (activity feed)
+qms_query_notes_col = db["qms_query_notes"]
+
+# Payments collection
+qms_payments_col = db["qms_payments"]
+
+# Audit log collection
+qms_audit_log_col = db["qms_audit_log"]

@@ -413,6 +413,7 @@ class GetThisMadeRequest(BaseModel):
     timeline: str = Field(..., description="Timeline")
     quantity_interest: Optional[str] = Field(None, description="Quantity interest")
     additional_notes: Optional[str] = Field(None, description="Additional notes")
+    payment_id: Optional[str] = Field(None, description="Payment ID (optional - for future payment integration)")
 
 
 class NextStep(BaseModel):
@@ -442,4 +443,6 @@ class GetThisMadeResponse(BaseModel):
     request_id: str = Field(..., description="Request tracking ID")
     created_at: datetime = Field(..., description="Creation timestamp")
     next_steps: List[NextStep] = Field(..., description="Next steps")
+    query_id: Optional[str] = Field(None, description="QMS Query ID (if created)")
+    query_display_id: Optional[str] = Field(None, description="QMS Query Display ID (e.g., QRY-2025-001)")
     # commitment_info: CommitmentInfo = Field(..., description="Commitment information")
