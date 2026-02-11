@@ -514,7 +514,12 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
      * **If no clear advantage exists, compare price, ingredients, or formulation quality and state the comparison clearly (e.g., "Competitive pricing with enhanced formulation")**
    - **Use {unit} consistently in all cost displays and comparisons**
 
-**REMEMBER: All costs, prices, and comparisons must use {unit} as the unit, not "unit" or "100g".**
+**CRITICAL REMINDER: 
+- All costs, prices, and comparisons must use {unit} as the unit (e.g., "₹30-60/{unit}" or "per {unit}")
+- NEVER use "/100g" or "/100ml" - always use the actual unit from product type
+- For serums/toners → use "ml". For creams/lotions → use "g"
+- In display_range fields, use "per {unit}" NOT "per 100{unit}"
+- In cost_per_100g_range fields, use "₹X - ₹Y per {unit}" NOT "per 100{unit}"**
 
 Return the complete cost analysis as JSON following the specified format with competitor_comparison including advantages for each product.
 
@@ -819,6 +824,24 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         print(f"✅ Generated {len(result.get('manufacturing_steps', []))} manufacturing steps")
         return result
     
+    def clean_cost_analysis_units(cost_data: dict, unit: str) -> dict:
+        """Post-process cost analysis to fix any /100g or /100ml that AI might have added"""
+        import json
+        import re
+        
+        # Convert to string, fix, convert back
+        cost_str = json.dumps(cost_data)
+        
+        # Replace /100g and /100ml with actual unit
+        cost_str = re.sub(r'/100g', f'/{unit}', cost_str)
+        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str)
+        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str)
+        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str)
+        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str)
+        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str)
+        
+        return json.loads(cost_str)
+    
     async def run_stage_4():
         print("💰 Stage 4: Cost Analysis...")
         cost_prompt = generate_cost_prompt(optimized_formula, wish_data)
@@ -829,6 +852,10 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         )
         product_type = wish_data.get('productType', 'serum')
         unit = get_unit_for_product_type(product_type)
+        
+        # Clean up any /100g or /100ml that might have slipped through
+        result = clean_cost_analysis_units(result, unit)
+        
         print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/{unit}")
         return result
     
