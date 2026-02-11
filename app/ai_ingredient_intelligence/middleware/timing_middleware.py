@@ -183,8 +183,14 @@ class TimingMiddleware(BaseHTTPMiddleware):
                     "execution_time", "status_code", "user_id", "error"
                 ])
             
-            # Append new row
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            # Append new row - handle empty DataFrame case to avoid FutureWarning
+            if len(df) == 0:
+                # If DataFrame is empty, create new one directly with the row
+                df = pd.DataFrame([new_row], columns=df.columns)
+            else:
+                # If DataFrame has data, concatenate (dtypes are already established)
+                new_df = pd.DataFrame([new_row], columns=df.columns)
+                df = pd.concat([df, new_df], ignore_index=True)
             
             # Write back to Excel
             df.to_excel(TIMING_EXCEL_FILE, index=False, engine='openpyxl')
