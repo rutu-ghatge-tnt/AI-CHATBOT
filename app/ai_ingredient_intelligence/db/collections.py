@@ -60,3 +60,10 @@ qms_payments_col = db["qms_payments"]
 
 # Audit log collection
 qms_audit_log_col = db["qms_audit_log"]
+
+# ============================================================================
+# MARKET TRENDS STORAGE COLLECTION
+# ============================================================================
+
+# Market trends storage - stores pre-fetched market trend data for ingredients/topics
+market_trends_storage_col = db["market_trends_storage"]

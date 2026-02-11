@@ -120,49 +120,20 @@ async def create_query_from_commercialization(
             }
             await qms_users_col.insert_one(user_doc)
         
-        # Get payment date (from payment if exists, otherwise today)
-        # MongoDB requires datetime, not date - convert to datetime at start of day in IST
-        ist_tz = timezone(timedelta(hours=5, minutes=30))
-        payment_date = datetime.now(ist_tz).replace(hour=0, minute=0, second=0, microsecond=0)
-        if payment_id:
-            payment = await qms_payments_col.find_one({"_id": ObjectId(payment_id)})
-            if payment and payment.get("created_at"):
-                if isinstance(payment["created_at"], datetime):
-                    # Convert to IST and set to start of day
-                    if payment["created_at"].tzinfo is None:
-                        payment_dt = payment["created_at"].replace(tzinfo=ist_tz)
-                    else:
-                        payment_dt = payment["created_at"].astimezone(ist_tz)
-                    payment_date = payment_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-                elif isinstance(payment["created_at"], str):
-                    payment_dt = datetime.fromisoformat(payment["created_at"].replace("Z", "+00:00"))
-                    payment_dt = payment_dt.astimezone(ist_tz)
-                    payment_date = payment_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        
         # Generate display ID (import locally to avoid circular dependency)
         from app.ai_ingredient_intelligence.api.qms_routes import generate_display_id
         display_id = await generate_display_id("QRY")
         
-        # Create query
+        # Create query - only essential fields for current requirements
         now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
         query_doc = {
             "display_id": display_id,
             "user_id": user_id,
-            "partner_id": None,
             "formula_name": formula_name,
             "product_type": product_type,
             "category": category,
-            "target_mrp": wish_brief.get("target_mrp"),
-            "batch_size": wish_brief.get("batch_size") or user_info.get("preferred_batch"),
-            "queue_number": wish_brief.get("queue_number"),  # Store queue number for easy access
             "status": QueryStatus.NEW.value,
-            "priority": QueryPriority.NORMAL.value,
-            "current_milestone": 0,  # Payment Received (or Request Submitted if no payment)
-            "wish_brief": wish_brief,
-            "payment_id": payment_id,  # Can be None
-            "payment_date": payment_date,
-            "assigned_date": None,
-            "completed_date": None,
+            "wish_brief": wish_brief,  # Contains all Make A Wish data (queue_number, target_mrp, batch_size, etc.)
             "created_at": now,
             "updated_at": now
         }
