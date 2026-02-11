@@ -12,7 +12,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from serpapi.google_search import GoogleSearch
 
-from app.ai_ingredient_intelligence.utils.trend_cache import TrendCache
+# Caching disabled - always fetch fresh data
+# from app.ai_ingredient_intelligence.utils.trend_cache import TrendCache
 
 # SerpAPI key (different from Serper)
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
@@ -184,7 +185,8 @@ class TrendAnalyzer:
     
     def __init__(self):
         self.client = SerpAPIClient()
-        self.cache = TrendCache()
+        # Caching disabled - always fetch fresh data
+        # self.cache = TrendCache()
     
     async def analyze_ingredient_trend(
         self,

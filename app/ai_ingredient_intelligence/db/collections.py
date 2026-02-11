@@ -20,6 +20,9 @@ inspiration_boards_col = db["inspiration_boards"]
 inspiration_products_col = db["inspiration_products"]
 product_tags_col = db["product_tags"]
 url_cache_col = db["url_cache"]
+trend_cache_col = db["trend_cache"]
+trend_alerts_col = db["trend_alerts"]
+trend_history_col = db["trend_history"]
 
 # ============================================================================
 # NEW COLLECTIONS FOR REVISED MAKE A WISH FLOW (January 2025)
