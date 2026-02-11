@@ -26,7 +26,6 @@ async def create_query_from_commercialization(
     wish_history_id: str,
     formula_id: str,
     user_info: Dict[str, Any],
-    wish_brief: Dict[str, Any],
     payment_id: Optional[str] = None
 ) -> str:
     """
@@ -35,14 +34,13 @@ async def create_query_from_commercialization(
     This function:
     1. Creates or updates user record
     2. Creates query record (with optional payment link)
-    3. Sets initial status to 'new' and milestone to 0
+    3. Sets initial status to 'new'
     
     Args:
         user_id: User ID from JWT token
-        wish_history_id: Make A Wish history ID
+        wish_history_id: Make A Wish history ID (to fetch all data from)
         formula_id: Formula ID
         user_info: User information (name, email, phone, city, background, etc.)
-        wish_brief: Complete Make A Wish output (formula data)
         payment_id: Optional payment record ID (for future payment integration)
     
     Returns:
@@ -57,26 +55,6 @@ async def create_query_from_commercialization(
         
         if not wish_history:
             raise ValueError(f"Wish history not found: {wish_history_id}")
-        
-        # Extract formula name and details from wish_brief or wish_history
-        formula_name = (
-            wish_brief.get("formula_name") 
-            or wish_brief.get("optimized_formula", {}).get("name") 
-            or wish_history.get("formula_name")
-            or "Custom Formula"
-        )
-        product_type = (
-            wish_brief.get("product_type") 
-            or wish_brief.get("wish_data", {}).get("productType") 
-            or wish_history.get("product_type")
-            or "Product"
-        )
-        category = (
-            wish_brief.get("category") 
-            or wish_brief.get("wish_data", {}).get("category") 
-            or wish_history.get("category")
-            or "skincare"
-        )
         
         # Get or create user
         user_obj_id = ObjectId(user_id)
@@ -124,16 +102,14 @@ async def create_query_from_commercialization(
         from app.ai_ingredient_intelligence.api.qms_routes import generate_display_id
         display_id = await generate_display_id("QRY")
         
-        # Create query - only essential fields for current requirements
+        # Create query - only essential fields (formula_id and history_id, fetch everything else from wish_history)
         now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
         query_doc = {
             "display_id": display_id,
             "user_id": user_id,
-            "formula_name": formula_name,
-            "product_type": product_type,
-            "category": category,
+            "formula_id": formula_id,
+            "history_id": wish_history_id,
             "status": QueryStatus.NEW.value,
-            "wish_brief": wish_brief,  # Contains all Make A Wish data (queue_number, target_mrp, batch_size, etc.)
             "created_at": now,
             "updated_at": now
         }
@@ -164,8 +140,7 @@ async def create_query_from_payment(
     payment_id: str,
     wish_history_id: str,
     formula_id: str,
-    user_info: Dict[str, Any],
-    wish_brief: Dict[str, Any]
+    user_info: Dict[str, Any]
 ) -> str:
     """
     Create a QMS query from a successful payment.
@@ -179,7 +154,6 @@ async def create_query_from_payment(
         wish_history_id: Make A Wish history ID
         formula_id: Formula ID
         user_info: User information (name, email, phone, city, background, etc.)
-        wish_brief: Complete Make A Wish output (formula data)
     
     Returns:
         Query ID (MongoDB ObjectId as string)
@@ -189,7 +163,6 @@ async def create_query_from_payment(
         wish_history_id=wish_history_id,
         formula_id=formula_id,
         user_info=user_info,
-        wish_brief=wish_brief,
         payment_id=payment_id
     )
 

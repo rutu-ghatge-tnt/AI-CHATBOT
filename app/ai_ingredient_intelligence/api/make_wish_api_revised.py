@@ -1406,8 +1406,8 @@ async def submit_commercialization_request(
         # Check if QMS query already exists for this formula
         existing_query = await qms_queries_col.find_one({
             "user_id": user_id,
-            "wish_brief.formula_id": request.formula_id,
-            "wish_brief.history_id": request.history_id,
+            "formula_id": request.formula_id,
+            "history_id": request.history_id,
             "status": {"$nin": ["completed", "cancelled"]}  # Active queries only
         })
         
@@ -1518,23 +1518,8 @@ async def submit_commercialization_request(
         try:
             from app.ai_ingredient_intelligence.api.qms_utils import create_query_from_commercialization
             
-            # Build wish_brief from history_item
-            wish_brief = {
-                "formula_id": request.formula_id,
-                "history_id": request.history_id,
-                "formula_name": history_item.get("name") or history_item.get("formula_name") or "Custom Formula",
-                "product_type": history_item.get("parsed_data", {}).get("product_type", {}).get("name") or "Product",
-                "category": history_item.get("parsed_data", {}).get("category") or history_item.get("wish_data", {}).get("category") or "skincare",
-                "wish_data": history_item.get("wish_data", {}),
-                "optimized_formula": history_item.get("formula_data", {}) or history_item.get("basic_mode_result", {}),
-                "queue_number": queue_number,  # Store queue number in wish_brief
-                "experience_level": request.experience_level,
-                "timeline": request.timeline,
-                "additional_notes": request.additional_notes,
-                "next_steps": next_steps
-            }
-            
             # Create query (payment_id is optional - can be None for now)
+            # No need to pass wish_brief - we only store formula_id and history_id
             query_id = await create_query_from_commercialization(
                 user_id=user_id,
                 wish_history_id=request.history_id,
@@ -1546,7 +1531,6 @@ async def submit_commercialization_request(
                     "preferred_batch": request.quantity_interest,
                     "background": None,  # Not in request
                 },
-                wish_brief=wish_brief,
                 payment_id=request.payment_id  # Optional - None if not provided
             )
             
