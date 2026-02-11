@@ -33,6 +33,9 @@ ALLOWED_PDF_TYPES = ["application/pdf"]
 
 #serper
 SERPER_API_KEY = os.getenv("SERPER_API")
+
+# SerpAPI Configuration (for Google Trends, Search, Shopping)
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 AWS_S3_BUCKET_PLATFORM_LOGOS = os.getenv("AWS_S3_BUCKET_PLATFORM_LOGOS", "skinbb-main")
 AWS_S3_PLATFORM_LOGOS_PREFIX = os.getenv("AWS_S3_PLATFORM_LOGOS_PREFIX", "platform_logos")
 AWS_S3_REGION = os.getenv("AWS_S3_REGION", os.getenv("AWS_REGION", "ap-south-1"))
