@@ -408,10 +408,10 @@ async def get_query_detail(
 
 
 # ============================================================================
-# ADMIN QUERY OPERATIONS
+# QUERY OPERATIONS (Role-based access control)
 # ============================================================================
 
-@router.post("/admin/queries/{query_id}/assign")
+@router.post("/queries/{query_id}/assign")
 async def assign_partner(
     query_id: str,
     request: QueryAssignRequest,
@@ -480,7 +480,7 @@ async def assign_partner(
         raise HTTPException(status_code=500, detail=f"Failed to assign partner: {str(e)}")
 
 
-@router.patch("/admin/queries/{query_id}/status")
+@router.patch("/queries/{query_id}/status")
 async def update_query_status(
     query_id: str,
     request: QueryStatusUpdateRequest,
@@ -555,7 +555,7 @@ async def update_query_status(
         raise HTTPException(status_code=500, detail=f"Failed to update status: {str(e)}")
 
 
-@router.patch("/admin/queries/{query_id}/priority")
+@router.patch("/queries/{query_id}/priority")
 async def update_query_priority(
     query_id: str,
     request: QueryPriorityUpdateRequest,
@@ -677,7 +677,7 @@ async def create_note(
         raise HTTPException(status_code=500, detail=f"Failed to create note: {str(e)}")
 
 
-@router.delete("/admin/queries/{query_id}/notes/{note_id}")
+@router.delete("/queries/{query_id}/notes/{note_id}")
 async def delete_note(
     query_id: str,
     note_id: str,
@@ -727,7 +727,7 @@ async def delete_note(
 # DASHBOARD STATS
 # ============================================================================
 
-@router.get("/admin/stats", response_model=QueryStatsResponse)
+@router.get("/stats", response_model=QueryStatsResponse)
 async def get_dashboard_stats(
     current_user: dict = Depends(verify_jwt_token)
 ):
