@@ -344,6 +344,14 @@ except ImportError as e:
     print(f"Warning: Could not import auth router: {e}")
     print("   Authentication API will not be available.")
 
+# ✅ Add Bookmarks API (bulk bookmark with JWT, SQL)
+try:
+    from app.ai_ingredient_intelligence.api.bookmarks import router as bookmarks_router
+    app.include_router(bookmarks_router, prefix="/api")
+except ImportError as e:
+    print(f"Warning: Could not import bookmarks router: {e}")
+    print("   Bookmarks API will not be available.")
+
 # ✅ Add Timing Statistics API
 try:
     from app.ai_ingredient_intelligence.api.timing_stats import router as timing_stats_router
@@ -399,6 +407,33 @@ async def create_indexes():
         await inspiration_products_col.create_index([("user_id", 1), ("created_at", -1)])
         print("Inspiration boards collection indexes created successfully")
         
+        # Create indexes for bookmarks collection (MongoDB; docs use reference.id or reference.url)
+        try:
+            from app.ai_ingredient_intelligence.db.collections import bookmarks_col
+            # Drop legacy unique index that used item_id (docs now use reference.id / reference.url)
+            try:
+                await bookmarks_col.drop_index("uq_bookmark_user_item_type")
+            except Exception:
+                pass
+            await bookmarks_col.create_index("user_id")
+            await bookmarks_col.create_index("type")
+            await bookmarks_col.create_index(
+                [("user_id", 1), ("type", 1), ("reference.id", 1)],
+                unique=True,
+                name="uq_bookmark_user_type_ref_id",
+                partialFilterExpression={"type": {"$in": ["INGREDIENT", "PRODUCT", "RECIPE"]}},
+            )
+            await bookmarks_col.create_index(
+                [("user_id", 1), ("type", 1), ("reference.url", 1)],
+                unique=True,
+                name="uq_bookmark_user_type_ref_url",
+                partialFilterExpression={"type": "URL"},
+            )
+            await bookmarks_col.create_index("created_at")
+            print("Bookmarks collection indexes created successfully")
+        except Exception as e:
+            print(f"Warning: Could not create bookmarks indexes: {e}")
+
         # Initialize endpoint timing Excel file if it doesn't exist
         from app.ai_ingredient_intelligence.middleware.timing_middleware import TIMING_EXCEL_FILE
         if not TIMING_EXCEL_FILE.exists():
