@@ -13,11 +13,7 @@ from bson.errors import InvalidId
 from app.ai_ingredient_intelligence.models.qms_schemas import (
     QueryListResponse,
     QueryDetailResponse,
-    QueryAssignRequest,
     QueryStatusUpdateRequest,
-    QueryPriorityUpdateRequest,
-    QueryReassignRequest,
-    QueryFilters,
     QueryListPaginatedResponse,
     QueryStatsResponse,
     NoteCreate,
@@ -26,9 +22,10 @@ from app.ai_ingredient_intelligence.models.qms_schemas import (
     PartnerResponse,
     PartnerListResponse,
     QueryStatus,
-    QueryPriority,
     PartnerStatus,
     NoteRole,
+    PaymentStatus,
+    RefundRequest,
 )
 from app.ai_ingredient_intelligence.db.collections import (
     qms_users_col,
@@ -117,8 +114,6 @@ def validate_object_id(id_str: str) -> ObjectId:
 @router.get("/queries", response_model=QueryListPaginatedResponse)
 async def list_queries(
     status: Optional[QueryStatus] = Query(None),
-    priority: Optional[QueryPriority] = Query(None),
-    partner_id: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     date_from: Optional[date] = Query(None),
@@ -130,7 +125,7 @@ async def list_queries(
     """
     List all queries with filters and pagination.
     
-    Admin can see all queries. Partners can only see assigned queries.
+    Simplified for current requirements: get it made, list, status.
     """
     try:
         user_role = current_user.get("role", "user")
@@ -140,23 +135,13 @@ async def list_queries(
         filter_dict = {}
         
         # Role-based filtering
-        if user_role == "partner":
-            # Partners can only see their assigned queries
-            partner = await qms_partners_col.find_one({"email": current_user.get("email")})
-            if not partner:
-                raise HTTPException(status_code=403, detail="Partner not found")
-            filter_dict["partner_id"] = str(partner["_id"])
-        elif user_role == "user":
+        if user_role == "user":
             # Users can only see their own queries
             filter_dict["user_id"] = user_id_from_token
         
         # Apply filters
         if status:
             filter_dict["status"] = status.value
-        if priority:
-            filter_dict["priority"] = priority.value
-        if partner_id:
-            filter_dict["partner_id"] = partner_id
         if user_id and user_role == "admin":
             filter_dict["user_id"] = user_id
         if date_from:
@@ -176,7 +161,6 @@ async def list_queries(
         if search:
             filter_dict["$or"] = [
                 {"formula_name": {"$regex": search, "$options": "i"}},
-                {"user_name": {"$regex": search, "$options": "i"}},
             ]
         
         # Get total count
@@ -187,7 +171,7 @@ async def list_queries(
         queries_cursor = qms_queries_col.find(filter_dict).sort("created_at", -1).skip(skip).limit(limit)
         queries = await queries_cursor.to_list(length=limit)
         
-        # Enrich with user and partner names
+        # Enrich with user names
         query_responses = []
         for query in queries:
             # Get user name
@@ -199,26 +183,6 @@ async def list_queries(
                     user_name = user.get("name")
                     user_city = user.get("city")
             
-            # Get partner name
-            partner_name = None
-            if query.get("partner_id"):
-                partner = await qms_partners_col.find_one({"_id": ObjectId(query["partner_id"])})
-                if partner:
-                    partner_name = partner.get("name")
-            
-            # Get note count
-            note_count = await qms_query_notes_col.count_documents({
-                "query_id": str(query["_id"]),
-                "deleted_at": None
-            })
-            
-            # Get last activity (from notes)
-            last_note = await qms_query_notes_col.find_one(
-                {"query_id": str(query["_id"]), "deleted_at": None},
-                sort=[("created_at", -1)]
-            )
-            last_activity = last_note.get("created_at") if last_note else query.get("updated_at")
-            
             query_responses.append(QueryListResponse(
                 id=str(query["_id"]),
                 display_id=query.get("display_id", ""),
@@ -228,13 +192,6 @@ async def list_queries(
                 product_type=query.get("product_type", ""),
                 category=query.get("category", ""),
                 status=QueryStatus(query.get("status", "new")),
-                priority=QueryPriority(query.get("priority", "normal")),
-                partner_id=str(query["partner_id"]) if query.get("partner_id") else None,
-                partner_name=partner_name,
-                current_milestone=query.get("current_milestone", 0),
-                payment_date=query.get("payment_date"),
-                note_count=note_count,
-                last_activity=last_activity,
                 created_at=query.get("created_at", datetime.now())
             ))
         
@@ -376,20 +333,11 @@ async def get_query_detail(
             id=str(query["_id"]),
             display_id=query.get("display_id", ""),
             user_id=str(query.get("user_id", "")),
-            partner_id=str(query["partner_id"]) if query.get("partner_id") else None,
             formula_name=query.get("formula_name", ""),
             product_type=query.get("product_type", ""),
             category=query.get("category", ""),
-            target_mrp=query.get("target_mrp"),
-            batch_size=query.get("batch_size"),
             status=QueryStatus(query.get("status", "new")),
-            priority=QueryPriority(query.get("priority", "normal")),
-            current_milestone=query.get("current_milestone", 0),
             wish_brief=query.get("wish_brief", {}),
-            payment_id=str(query["payment_id"]) if query.get("payment_id") else None,
-            payment_date=query.get("payment_date"),
-            assigned_date=query.get("assigned_date"),
-            completed_date=query.get("completed_date"),
             created_at=query.get("created_at", datetime.now()),
             updated_at=query.get("updated_at", datetime.now()),
             user=user,
@@ -411,73 +359,10 @@ async def get_query_detail(
 # QUERY OPERATIONS (Role-based access control)
 # ============================================================================
 
-@router.post("/queries/{query_id}/assign")
-async def assign_partner(
-    query_id: str,
-    request: QueryAssignRequest,
-    current_user: dict = Depends(verify_jwt_token)
-):
-    """
-    Assign a partner to a query. Admin only.
-    """
-    try:
-        user_role = current_user.get("role", "user")
-        if user_role != "admin":
-            raise HTTPException(status_code=403, detail="Admin access required")
-        
-        query_obj_id = validate_object_id(query_id)
-        partner_obj_id = validate_object_id(request.partner_id)
-        
-        # Check query exists
-        query = await qms_queries_col.find_one({"_id": query_obj_id})
-        if not query:
-            raise HTTPException(status_code=404, detail="Query not found")
-        
-        # Check partner exists and is active
-        partner = await qms_partners_col.find_one({"_id": partner_obj_id})
-        if not partner:
-            raise HTTPException(status_code=404, detail="Partner not found")
-        
-        if partner.get("status") != "active":
-            raise HTTPException(status_code=400, detail="Cannot assign: partner is not active")
-        
-        # Update query
-        update_data = {
-            "partner_id": request.partner_id,
-            "status": QueryStatus.ASSIGNED.value,
-            "assigned_date": date.today(),
-            "current_milestone": 2,  # Partner Assigned milestone
-            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30)))
-        }
-        
-        await qms_queries_col.update_one(
-            {"_id": query_obj_id},
-            {"$set": update_data}
-        )
-        
-        # Log audit
-        await log_audit(
-            actor_id=str(current_user.get("user_id") or current_user.get("_id")),
-            actor_role="admin",
-            action="query.assigned",
-            resource_type="query",
-            resource_id=query_id,
-            details={"partner_id": request.partner_id, "old_status": query.get("status")}
-        )
-        
-        return {
-            "success": True,
-            "message": "Partner assigned successfully",
-            "query_id": query_id,
-            "partner_id": request.partner_id,
-            "status": QueryStatus.ASSIGNED.value
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error assigning partner: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to assign partner: {str(e)}")
+# TODO: Partner assignment - to be implemented later
+# @router.post("/queries/{query_id}/assign")
+# async def assign_partner(...):
+#     """Assign a partner to a query. Admin only. - Not needed for current requirements"""
 
 
 @router.patch("/queries/{query_id}/status")
@@ -502,28 +387,11 @@ async def update_query_status(
         
         old_status = query.get("status")
         
-        # Update status
+        # Update status (simplified - no milestones or dates for now)
         update_data = {
             "status": request.status.value,
             "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30)))
         }
-        
-        # Update milestone based on status
-        status_milestone_map = {
-            QueryStatus.UNDER_REVIEW.value: 1,
-            QueryStatus.ASSIGNED.value: 2,
-            QueryStatus.CONSULTATION_DONE.value: 3,
-            QueryStatus.BRIEF_SHARED.value: 4,
-            QueryStatus.IN_PROGRESS.value: 5,
-            QueryStatus.SAMPLE_READY.value: 6,
-            QueryStatus.COMPLETED.value: 7,
-        }
-        
-        if request.status.value in status_milestone_map:
-            update_data["current_milestone"] = status_milestone_map[request.status.value]
-        
-        if request.status == QueryStatus.COMPLETED:
-            update_data["completed_date"] = date.today()
         
         await qms_queries_col.update_one(
             {"_id": query_obj_id},
@@ -555,14 +423,25 @@ async def update_query_status(
         raise HTTPException(status_code=500, detail=f"Failed to update status: {str(e)}")
 
 
-@router.patch("/queries/{query_id}/priority")
-async def update_query_priority(
+# TODO: Priority update - to be implemented later
+# @router.patch("/queries/{query_id}/priority")
+# async def update_query_priority(...):
+#     """Update query priority. Admin only. - Not needed for current requirements"""
+
+
+# ============================================================================
+# REFUND ENDPOINT
+# ============================================================================
+
+@router.post("/queries/{query_id}/refund")
+async def process_refund(
     query_id: str,
-    request: QueryPriorityUpdateRequest,
+    request: RefundRequest,
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
-    Update query priority. Admin only.
+    Process refund for consultation fee after call completion.
+    Admin only. Updates payment status to REFUNDED.
     """
     try:
         user_role = current_user.get("role", "user")
@@ -575,26 +454,90 @@ async def update_query_priority(
         if not query:
             raise HTTPException(status_code=404, detail="Query not found")
         
-        await qms_queries_col.update_one(
-            {"_id": query_obj_id},
-            {"$set": {
-                "priority": request.priority.value,
-                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30)))
-            }}
+        payment_id = query.get("payment_id")
+        if not payment_id:
+            raise HTTPException(status_code=400, detail="No payment found for this query")
+        
+        payment_obj_id = validate_object_id(payment_id)
+        payment = await qms_payments_col.find_one({"_id": payment_obj_id})
+        
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        
+        # Check if already refunded
+        if payment.get("status") == PaymentStatus.REFUNDED.value:
+            raise HTTPException(status_code=400, detail="Payment already refunded")
+        
+        # Check if payment was captured
+        if payment.get("status") != PaymentStatus.CAPTURED.value:
+            raise HTTPException(status_code=400, detail=f"Cannot refund payment with status: {payment.get('status')}")
+        
+        razorpay_payment_id = payment.get("razorpay_payment_id")
+        refund_reason = request.refund_reason or "Consultation call completed"
+        
+        # Process refund through Razorpay (if payment_id exists)
+        refund_id = None
+        if razorpay_payment_id:
+            try:
+                # TODO: Integrate with Razorpay SDK when available
+                # import razorpay
+                # razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+                # refund = razorpay_client.payment.refund(razorpay_payment_id, {"amount": payment.get("amount")})
+                # refund_id = refund["id"]
+                
+                # For now, generate a mock refund ID (replace with actual Razorpay integration)
+                refund_id = f"rfnd_{razorpay_payment_id[:10]}_{int(datetime.now().timestamp())}"
+                print(f"⚠️ Mock refund ID generated: {refund_id}. Replace with actual Razorpay integration.")
+            except Exception as e:
+                print(f"❌ Error processing Razorpay refund: {e}")
+                # Continue with database update even if Razorpay fails (for manual processing)
+        
+        # Update payment record
+        update_data = {
+            "status": PaymentStatus.REFUNDED.value,
+            "refund_id": refund_id,
+            "refund_reason": refund_reason,
+            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        }
+        
+        await qms_payments_col.update_one(
+            {"_id": payment_obj_id},
+            {"$set": update_data}
+        )
+        
+        # Log audit
+        await log_audit(
+            actor_id=str(current_user.get("user_id") or current_user.get("_id")),
+            actor_role="admin",
+            action="payment.refunded",
+            resource_type="payment",
+            resource_id=payment_id,
+            details={
+                "query_id": query_id,
+                "refund_id": refund_id,
+                "refund_reason": refund_reason,
+                "amount": payment.get("amount")
+            }
         )
         
         return {
             "success": True,
-            "message": "Priority updated successfully",
+            "message": "Refund processed successfully",
             "query_id": query_id,
-            "priority": request.priority.value
+            "payment_id": payment_id,
+            "refund_id": refund_id,
+            "refund_reason": refund_reason,
+            "amount": payment.get("amount"),
+            "amount_in_rupees": payment.get("amount", 0) / 100
         }
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error updating priority: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update priority: {str(e)}")
+        print(f"❌ Error processing refund: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to process refund: {str(e)}")
 
 
 # ============================================================================
@@ -750,17 +693,6 @@ async def get_dashboard_stats(
         async for doc in qms_queries_col.aggregate(status_pipeline):
             status_counts[doc["_id"]] = doc["count"]
         
-        # Count by priority
-        priority_pipeline = [
-            {"$group": {"_id": "$priority", "count": {"$sum": 1}}}
-        ]
-        priority_counts = {}
-        async for doc in qms_queries_col.aggregate(priority_pipeline):
-            priority_counts[doc["_id"]] = doc["count"]
-        
-        # Unassigned count
-        unassigned_count = await qms_queries_col.count_documents({"partner_id": None})
-        
         # Revenue (sum of all captured payments)
         revenue_pipeline = [
             {"$match": {"status": "captured"}},
@@ -772,8 +704,6 @@ async def get_dashboard_stats(
         return QueryStatsResponse(
             total_queries=total_queries,
             by_status=status_counts,
-            by_priority=priority_counts,
-            unassigned_count=unassigned_count,
             revenue=revenue
         )
     

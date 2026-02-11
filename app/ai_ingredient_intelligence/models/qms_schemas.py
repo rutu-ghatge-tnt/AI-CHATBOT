@@ -210,22 +210,13 @@ class PaymentResponse(PaymentBase):
 # ============================================================================
 
 class QueryBase(BaseModel):
-    """Base query schema"""
-    user_id: str = Field(..., description="The paying customer")
-    partner_id: Optional[str] = Field(None, description="Assigned partner")
+    """Base query schema - simplified for current requirements (get it made, list, status)"""
+    user_id: str = Field(..., description="The customer who requested the formula")
     formula_name: str = Field(..., description="Product formula name from Make A Wish")
     product_type: str = Field(..., description="Serum, Face Wash, Cream, etc.")
     category: str = Field(..., description="Skincare, Hair Care, etc.")
-    target_mrp: Optional[str] = Field(None, description="User's desired retail price")
-    batch_size: Optional[str] = Field(None, description="Desired production quantity")
     status: QueryStatus = Field(QueryStatus.NEW, description="Query status")
-    priority: QueryPriority = Field(QueryPriority.NORMAL, description="Query priority")
-    current_milestone: int = Field(0, ge=0, le=7, description="Milestone index (0-7)")
-    wish_brief: Dict[str, Any] = Field(..., description="Structured Make A Wish output")
-    payment_id: Optional[str] = Field(None, description="Link to payment record")
-    payment_date: date = Field(..., description="When ₹5,000 was paid")
-    assigned_date: Optional[date] = Field(None, description="When partner was assigned")
-    completed_date: Optional[date] = Field(None, description="When query reached completed status")
+    wish_brief: Dict[str, Any] = Field(..., description="Structured Make A Wish output (contains all formula data)")
 
 
 class QueryCreate(QueryBase):
@@ -245,7 +236,7 @@ class QueryResponse(QueryBase):
 
 
 class QueryListResponse(BaseModel):
-    """Schema for query list item (simplified)"""
+    """Schema for query list item (simplified for current requirements)"""
     id: str = Field(..., alias="_id")
     display_id: str
     formula_name: str
@@ -254,13 +245,6 @@ class QueryListResponse(BaseModel):
     product_type: str
     category: str
     status: QueryStatus
-    priority: QueryPriority
-    partner_id: Optional[str] = None
-    partner_name: Optional[str] = None
-    current_milestone: int
-    payment_date: date
-    note_count: int = 0
-    last_activity: Optional[datetime] = None
     created_at: datetime
 
     class Config:
@@ -294,6 +278,11 @@ class QueryReassignRequest(BaseModel):
     """Schema for reassigning a query"""
     partner_id: str = Field(..., description="New partner ID")
     reason: Optional[str] = Field(None, description="Reason for reassignment")
+
+
+class RefundRequest(BaseModel):
+    """Schema for processing refund after consultation call"""
+    refund_reason: Optional[str] = Field(None, description="Reason for refund (default: Consultation call completed)")
 
 
 # ============================================================================
@@ -361,11 +350,9 @@ class QueryListPaginatedResponse(PaginatedResponse):
 # ============================================================================
 
 class QueryStatsResponse(BaseModel):
-    """Schema for query statistics"""
+    """Schema for query statistics (simplified)"""
     total_queries: int
     by_status: Dict[str, int]
-    by_priority: Dict[str, int]
-    unassigned_count: int
     revenue: float = Field(..., description="Total revenue in ₹")
 
 
