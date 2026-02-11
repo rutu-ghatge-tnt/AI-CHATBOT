@@ -10,7 +10,7 @@ import json
 import statistics
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-from serpapi import GoogleSearch
+from serpapi.google_search import GoogleSearch
 
 from app.ai_ingredient_intelligence.utils.trend_cache import TrendCache
 
