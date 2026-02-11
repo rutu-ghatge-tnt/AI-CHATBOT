@@ -1418,8 +1418,8 @@ async def submit_commercialization_request(
                 detail=f"Commercialization request already exists for this formula. Query ID: {display_id}"
             )
         
-        # Generate queue number (for display purposes)
-        queue_number = generate_queue_number()
+        # Generate queue number (for display purposes) - simple sequential starting from 221
+        queue_number = await generate_queue_number()
         created_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
         
         # Determine queue position (simplified)
@@ -1531,7 +1531,8 @@ async def submit_commercialization_request(
                     "preferred_batch": request.quantity_interest,
                     "background": None,  # Not in request
                 },
-                payment_id=request.payment_id  # Optional - None if not provided
+                payment_id=request.payment_id,  # Optional - None if not provided
+                queue_number=queue_number  # Pass queue number to store in query
             )
             
             # Get query display_id for logging and response

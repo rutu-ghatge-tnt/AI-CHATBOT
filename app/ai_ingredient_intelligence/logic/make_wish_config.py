@@ -420,19 +420,27 @@ COMPATIBILITY_RULES = {
 # QUEUE NUMBER GENERATION
 # ============================================================================
 
-def generate_queue_number():
-    """Generate queue number: FLX-YYMMDD-XXX"""
-    from datetime import datetime
-    import random
+async def generate_queue_number():
+    """Generate simple sequential queue number starting from 221"""
+    from app.ai_ingredient_intelligence.db.collections import qms_queries_col
     
-    prefix = "FLX"
-    date_part = datetime.now().strftime("%y%m%d")
+    # Find the highest queue number in the database
+    # Queue numbers are stored as integers in the query document
+    pipeline = [
+        {"$match": {"queue_number": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": None, "max_queue": {"$max": "$queue_number"}}}
+    ]
     
-    # For demo purposes, generate random sequence
-    # In production, this would query database for today's count
-    sequence = str(random.randint(1, 999)).zfill(3)
+    result = await qms_queries_col.aggregate(pipeline).to_list(length=1)
     
-    return f"{prefix}-{date_part}-{sequence}"
+    if result and result[0].get("max_queue"):
+        # Increment from highest queue number
+        next_queue = result[0]["max_queue"] + 1
+    else:
+        # Start from 221 if no queue numbers exist
+        next_queue = 221
+    
+    return str(next_queue)
 
 # ============================================================================
 # HELPER FUNCTIONS
