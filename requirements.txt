@@ -76,6 +76,9 @@ rapidfuzz>=3.0.0
 # JWT Authentication
 PyJWT>=2.8.0
 
+# SQL (Bookmarks module)
+sqlalchemy>=2.0.0
+
 # Excel file handling
 openpyxl>=3.1.0
 

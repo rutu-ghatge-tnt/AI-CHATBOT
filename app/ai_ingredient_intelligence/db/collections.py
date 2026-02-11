@@ -67,3 +67,8 @@ qms_audit_log_col = db["qms_audit_log"]
 
 # Market trends storage - stores pre-fetched market trend data for ingredients/topics
 market_trends_storage_col = db["market_trends_storage"]
+
+# BOOKMARKS
+# ============================================================================
+
+bookmarks_col = db["bookmarks"]
