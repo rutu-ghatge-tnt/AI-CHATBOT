@@ -716,6 +716,76 @@ async def delete_note(
 
 
 # ============================================================================
+# QUERY CREATION FROM COMMERCIALIZATION REQUEST
+# ============================================================================
+
+@router.post("/admin/queries/create-from-commercialization/{request_id}")
+async def create_query_from_commercialization(
+    request_id: str,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Create a QMS query from an existing commercialization request.
+    This is useful for migrating existing requests or when payment happens separately.
+    Admin only.
+    """
+    try:
+        user_role = current_user.get("role", "user")
+        if user_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        from app.ai_ingredient_intelligence.db.collections import commercialization_requests_col
+        from app.ai_ingredient_intelligence.api.qms_utils import create_query_from_commercialization_request
+        
+        # Get commercialization request
+        commercialization_request = await commercialization_requests_col.find_one({
+            "request_id": request_id
+        })
+        
+        if not commercialization_request:
+            raise HTTPException(status_code=404, detail="Commercialization request not found")
+        
+        # Get wish history
+        history_id = commercialization_request.get("history_id")
+        if not history_id:
+            raise HTTPException(status_code=400, detail="Commercialization request missing history_id")
+        
+        from app.ai_ingredient_intelligence.db.collections import wish_history_col
+        wish_history = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+        
+        if not wish_history:
+            raise HTTPException(status_code=404, detail="Wish history not found")
+        
+        # Create query
+        query_id = await create_query_from_commercialization_request(
+            commercialization_request,
+            wish_history
+        )
+        
+        if not query_id:
+            raise HTTPException(status_code=500, detail="Failed to create query")
+        
+        # Get created query
+        query = await qms_queries_col.find_one({"_id": ObjectId(query_id)})
+        
+        return {
+            "success": True,
+            "message": "Query created successfully",
+            "query_id": query_id,
+            "display_id": query.get("display_id"),
+            "status": query.get("status")
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error creating query from commercialization: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to create query: {str(e)}")
+
+
+# ============================================================================
 # DASHBOARD STATS
 # ============================================================================
 

@@ -64,7 +64,8 @@ from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_f
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
     wish_history_col, commercialization_requests_col, 
-    formula_versions_col, quotes_col, ingredient_alternatives_cache_col
+    formula_versions_col, quotes_col, ingredient_alternatives_cache_col,
+    qms_queries_col  # For QMS query creation
 )
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish - Revised"])
@@ -1230,10 +1231,67 @@ async def submit_commercialization_request(
             print(f"⚠️ Warning: Failed to save commercialization request: {db_error}")
             # Continue without failing the response
         
+        # ========================================================================
+        # CREATE QMS QUERY (Auto-create query, payment optional)
+        # ========================================================================
+        query_id = None
+        query_display_id = None
+        try:
+            from app.ai_ingredient_intelligence.api.qms_utils import create_query_from_commercialization
+            
+            # Build wish_brief from history_item
+            wish_brief = {
+                "formula_id": request.formula_id,
+                "history_id": request.history_id,
+                "formula_name": history_item.get("formula_name") or "Custom Formula",
+                "product_type": history_item.get("product_type") or "Product",
+                "category": history_item.get("category") or "skincare",
+                "wish_data": history_item.get("wish_data", {}),
+                "optimized_formula": history_item.get("formula", {}),
+                "commercialization_request": {
+                    "request_id": request_id,
+                    "queue_number": queue_number,
+                    "experience_level": request.experience_level,
+                    "timeline": request.timeline,
+                    "additional_notes": request.additional_notes,
+                }
+            }
+            
+            # Create query (payment_id is optional - can be None for now)
+            query_id = await create_query_from_commercialization(
+                user_id=user_id,
+                wish_history_id=request.history_id,
+                formula_id=request.formula_id,
+                user_info={
+                    "name": request.name,
+                    "phone": request.phone,
+                    "city": request.city,
+                    "preferred_batch": request.quantity_interest,
+                    "background": None,  # Not in request
+                },
+                wish_brief=wish_brief,
+                payment_id=request.payment_id  # Optional - None if not provided
+            )
+            
+            # Get query display_id for logging
+            if query_id:
+                query_obj = await qms_queries_col.find_one({"_id": ObjectId(query_id)})
+                if query_obj:
+                    query_display_id = query_obj.get("display_id")
+                    print(f"✅ Created QMS query: {query_display_id}")
+            
+        except Exception as qms_error:
+            # Don't fail the request if QMS query creation fails
+            print(f"⚠️ Warning: Failed to create QMS query: {qms_error}")
+            import traceback
+            traceback.print_exc()
+        
         print(f"✅ Commercialization request submitted")
         print(f"   Queue Number: {queue_number}")
         print(f"   Experience Level: {request.experience_level}")
         print(f"   Timeline: {request.timeline}")
+        if query_display_id:
+            print(f"   QMS Query: {query_display_id}")
         
         return GetThisMadeResponse(
             success=True,
@@ -1242,6 +1300,8 @@ async def submit_commercialization_request(
             request_id=request_id,
             created_at=created_at,
             next_steps=next_steps,
+            query_id=query_id,
+            query_display_id=query_display_id,
             # commitment_info=commitment_info
         )
     
