@@ -64,6 +64,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_f
 # Import trend analyzer for market intelligence
 from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
 from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+from app.ai_ingredient_intelligence.logic.market_trends_storage import (
+    get_stored_trend_data_for_ingredients
+)
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -84,6 +87,9 @@ async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[
     Fetch trend analysis and synthesis data for hero ingredients.
     Runs internally as part of make-wish generation.
     
+    First tries to fetch from stored database data (pre-fetched by scheduled script).
+    Falls back to API calls only if stored data is not available.
+    
     Args:
         hero_ingredients: List of hero ingredient names
         
@@ -97,14 +103,79 @@ async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[
         }
     """
     trend_data = {}
-    analyzer = TrendAnalyzer()
     
     if not hero_ingredients:
         return trend_data
     
     print(f"📊 Fetching trend data for {len(hero_ingredients)} hero ingredients...")
     
+    # First, try to get stored data from database
+    print(f"   🔍 Checking stored trend data...")
+    stored_data = await get_stored_trend_data_for_ingredients(hero_ingredients, max_age_days=30)
+    
+    # Track which ingredients have stored data
+    ingredients_with_stored_data = []
+    ingredients_needing_api = []
+    
     for ingredient in hero_ingredients:
+        if not ingredient or not ingredient.strip():
+            continue
+        
+        clean_ingredient = ingredient.split("(")[0].strip()
+        
+        # Check if we have stored data for this ingredient
+        stored_trend_data = stored_data.get(ingredient) or stored_data.get(clean_ingredient)
+        
+        if stored_trend_data:
+            print(f"   ✅ Found stored data for: {clean_ingredient}")
+            # Use stored data
+            trend_data[ingredient] = {
+                "analyze": stored_trend_data.get("analyze"),
+                "synthesis": stored_trend_data.get("synthesis"),
+                "consumer_intent": stored_trend_data.get("consumer_intent"),
+                "competitive": stored_trend_data.get("competitive"),
+                "regional": stored_trend_data.get("regional"),
+                "source": "stored"  # Mark as from stored data
+            }
+            ingredients_with_stored_data.append(ingredient)
+        else:
+            print(f"   ⚠️  No stored data found for: {clean_ingredient}")
+            ingredients_needing_api.append(ingredient)
+    
+    print(f"   📊 Summary: {len(ingredients_with_stored_data)} from storage, {len(ingredients_needing_api)} need API calls")
+    
+    # If all ingredients have stored data, return early
+    if not ingredients_needing_api:
+        print(f"✅ All trend data retrieved from storage")
+        return trend_data
+    
+    # For ingredients without stored data, skip API calls for now
+    # (API calls will be enabled once data document is provided)
+    print(f"   ⏭️  Skipping API calls for {len(ingredients_needing_api)} ingredients (no stored data available)")
+    print(f"   ℹ️  These ingredients will not have trend data until the scheduled script runs with data")
+    
+    # Mark ingredients without stored data as missing
+    for ingredient in ingredients_needing_api:
+        if not ingredient or not ingredient.strip():
+            continue
+        
+        clean_ingredient = ingredient.split("(")[0].strip()
+        print(f"   ⚠️  No trend data available for: {clean_ingredient}")
+        
+        trend_data[ingredient] = {
+            "analyze": None,
+            "synthesis": None,
+            "source": "missing",
+            "note": "No stored data available. Trend data will be available after scheduled script runs."
+        }
+    
+    # TODO: Once data document is provided, uncomment the API fallback code below
+    # This will enable real-time API calls as a fallback when stored data is not available
+    """
+    # Fallback to API calls for ingredients without stored data
+    analyzer = TrendAnalyzer()
+    
+    for ingredient in ingredients_needing_api:
         if not ingredient or not ingredient.strip():
             continue
             
@@ -256,6 +327,7 @@ async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[
                 "synthesis": None,
                 "error": f"Exception: {str(e)}"
             }
+    """
     
     print(f"✅ Completed trend analysis for {len(trend_data)} ingredients")
     return trend_data
