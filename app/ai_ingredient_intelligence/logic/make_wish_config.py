@@ -425,20 +425,41 @@ async def generate_queue_number():
     from app.ai_ingredient_intelligence.db.collections import qms_queries_col
     
     # Find the highest queue number in the database
-    # Queue numbers are stored as integers in the query document
-    pipeline = [
-        {"$match": {"queue_number": {"$exists": True, "$ne": None}}},
-        {"$group": {"_id": None, "max_queue": {"$max": "$queue_number"}}}
-    ]
+    # Handle both integer and string queue numbers (for backward compatibility)
+    queries = await qms_queries_col.find(
+        {"queue_number": {"$exists": True, "$ne": None}},
+        {"queue_number": 1}
+    ).to_list(length=1000)  # Get up to 1000 queries to find max
     
-    result = await qms_queries_col.aggregate(pipeline).to_list(length=1)
+    max_queue = 220  # Start from 220 so first will be 221
     
-    if result and result[0].get("max_queue"):
-        # Increment from highest queue number
-        next_queue = result[0]["max_queue"] + 1
-    else:
-        # Start from 221 if no queue numbers exist
-        next_queue = 221
+    for query in queries:
+        queue_num = query.get("queue_number")
+        if queue_num is None:
+            continue
+        
+        # Convert to int if it's a string (handle old format)
+        try:
+            if isinstance(queue_num, str):
+                # If it's a simple number string like "221", convert it
+                if queue_num.isdigit():
+                    queue_num = int(queue_num)
+                else:
+                    # Skip old format like "FLX-250115-123"
+                    continue
+            elif isinstance(queue_num, int):
+                queue_num = int(queue_num)
+            else:
+                continue
+            
+            if queue_num > max_queue:
+                max_queue = queue_num
+        except (ValueError, TypeError):
+            # Skip invalid queue numbers
+            continue
+    
+    # Increment from highest queue number (or start at 221 if none found)
+    next_queue = max_queue + 1
     
     return str(next_queue)
 
