@@ -212,11 +212,9 @@ class PaymentResponse(PaymentBase):
 class QueryBase(BaseModel):
     """Base query schema - simplified for current requirements (get it made, list, status)"""
     user_id: str = Field(..., description="The customer who requested the formula")
-    formula_name: str = Field(..., description="Product formula name from Make A Wish")
-    product_type: str = Field(..., description="Serum, Face Wash, Cream, etc.")
-    category: str = Field(..., description="Skincare, Hair Care, etc.")
+    formula_id: str = Field(..., description="Formula ID - can fetch all data from wish_history")
+    history_id: str = Field(..., description="Wish history ID - can fetch all data from wish_history")
     status: QueryStatus = Field(QueryStatus.NEW, description="Query status")
-    wish_brief: Dict[str, Any] = Field(..., description="Structured Make A Wish output (contains all formula data)")
 
 
 class QueryCreate(QueryBase):
@@ -253,31 +251,30 @@ class QueryListResponse(BaseModel):
 
 class QueryDetailResponse(QueryResponse):
     """Schema for detailed query response"""
+    wish_brief: Optional[Dict[str, Any]] = Field(None, description="Fetched from wish_history when needed")
     user: Optional[UserResponse] = None
     partner: Optional[PartnerResponse] = None
     payment: Optional[PaymentResponse] = None
     notes: List["NoteResponse"] = Field(default_factory=list)
 
 
-class QueryAssignRequest(BaseModel):
-    """Schema for assigning a partner to a query"""
-    partner_id: str = Field(..., description="Partner ID to assign")
-
-
 class QueryStatusUpdateRequest(BaseModel):
     """Schema for updating query status"""
     status: QueryStatus = Field(..., description="New status")
 
-
-class QueryPriorityUpdateRequest(BaseModel):
-    """Schema for updating query priority"""
-    priority: QueryPriority = Field(..., description="New priority")
-
-
-class QueryReassignRequest(BaseModel):
-    """Schema for reassigning a query"""
-    partner_id: str = Field(..., description="New partner ID")
-    reason: Optional[str] = Field(None, description="Reason for reassignment")
+# TODO: These schemas are for future features (partner assignment, priority) - not needed for current requirements
+# class QueryAssignRequest(BaseModel):
+#     """Schema for assigning a partner to a query"""
+#     partner_id: str = Field(..., description="Partner ID to assign")
+#
+# class QueryPriorityUpdateRequest(BaseModel):
+#     """Schema for updating query priority"""
+#     priority: QueryPriority = Field(..., description="New priority")
+#
+# class QueryReassignRequest(BaseModel):
+#     """Schema for reassigning a query"""
+#     partner_id: str = Field(..., description="New partner ID")
+#     reason: Optional[str] = Field(None, description="Reason for reassignment")
 
 
 class RefundRequest(BaseModel):
@@ -320,10 +317,8 @@ class NoteResponse(NoteBase):
 # ============================================================================
 
 class QueryFilters(BaseModel):
-    """Schema for query list filters"""
+    """Schema for query list filters (simplified - priority and partner_id removed)"""
     status: Optional[QueryStatus] = None
-    priority: Optional[QueryPriority] = None
-    partner_id: Optional[str] = None
     user_id: Optional[str] = None
     search: Optional[str] = Field(None, description="Search in formula name, user name")
     date_from: Optional[date] = None

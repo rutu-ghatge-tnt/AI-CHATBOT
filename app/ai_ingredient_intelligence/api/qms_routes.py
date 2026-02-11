@@ -157,13 +157,7 @@ async def list_queries(
             else:
                 filter_dict["created_at"] = {"$lte": date_to_dt}
         
-        # Search filter
-        if search:
-            filter_dict["$or"] = [
-                {"formula_name": {"$regex": search, "$options": "i"}},
-            ]
-        
-        # Get total count
+        # Get total count (search will be done after fetching wish_history)
         total = await qms_queries_col.count_documents(filter_dict)
         
         # Get paginated results
@@ -171,7 +165,8 @@ async def list_queries(
         queries_cursor = qms_queries_col.find(filter_dict).sort("created_at", -1).skip(skip).limit(limit)
         queries = await queries_cursor.to_list(length=limit)
         
-        # Enrich with user names
+        # Enrich with user names and fetch formula details from wish_history
+        from app.ai_ingredient_intelligence.db.collections import wish_history_col
         query_responses = []
         for query in queries:
             # Get user name
@@ -183,17 +178,53 @@ async def list_queries(
                     user_name = user.get("name")
                     user_city = user.get("city")
             
+            # Fetch formula details from wish_history
+            formula_name = "Custom Formula"
+            product_type = "Product"
+            category = "skincare"
+            history_id = query.get("history_id")
+            if history_id:
+                wish_history = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+                if wish_history:
+                    formula_name = (
+                        wish_history.get("name") 
+                        or wish_history.get("formula_name")
+                        or "Custom Formula"
+                    )
+                    product_type = (
+                        wish_history.get("parsed_data", {}).get("product_type", {}).get("name")
+                        or wish_history.get("wish_data", {}).get("productType")
+                        or wish_history.get("product_type")
+                        or "Product"
+                    )
+                    category = (
+                        wish_history.get("parsed_data", {}).get("category")
+                        or wish_history.get("wish_data", {}).get("category")
+                        or wish_history.get("category")
+                        or "skincare"
+                    )
+            
+            # Apply search filter if provided (after fetching formula_name)
+            if search:
+                search_lower = search.lower()
+                if search_lower not in formula_name.lower() and search_lower not in (user_name or "").lower():
+                    continue  # Skip this query if it doesn't match search
+            
             query_responses.append(QueryListResponse(
                 id=str(query["_id"]),
                 display_id=query.get("display_id", ""),
-                formula_name=query.get("formula_name", ""),
+                formula_name=formula_name,
                 user_name=user_name,
                 user_city=user_city,
-                product_type=query.get("product_type", ""),
-                category=query.get("category", ""),
+                product_type=product_type,
+                category=category,
                 status=QueryStatus(query.get("status", "new")),
                 created_at=query.get("created_at", datetime.now())
             ))
+        
+        # Recalculate total if search was applied (since we filtered in memory)
+        if search:
+            total = len(query_responses)
         
         total_pages = math.ceil(total / limit) if total > 0 else 0
         
@@ -329,15 +360,42 @@ async def get_query_detail(
                 deleted_at=note_doc.get("deleted_at")
             ))
         
+        # Fetch wish_brief from wish_history if needed
+        wish_brief = None
+        history_id = query.get("history_id")
+        if history_id:
+            from app.ai_ingredient_intelligence.db.collections import wish_history_col
+            wish_history = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+            if wish_history:
+                # Return the full wish_history as wish_brief
+                wish_brief = {
+                    "formula_id": query.get("formula_id"),
+                    "history_id": history_id,
+                    "formula_name": wish_history.get("name") or wish_history.get("formula_name"),
+                    "product_type": wish_history.get("parsed_data", {}).get("product_type", {}).get("name") or wish_history.get("product_type"),
+                    "category": wish_history.get("parsed_data", {}).get("category") or wish_history.get("wish_data", {}).get("category"),
+                    "wish_data": wish_history.get("wish_data", {}),
+                    "formula_data": wish_history.get("formula_data", {}),
+                    "optimized_formula": wish_history.get("formula_data", {}) or wish_history.get("basic_mode_result", {})
+                }
+        
+        # Extract formula_name, product_type, category from wish_brief if available, otherwise from query
+        formula_name = "Custom Formula"
+        product_type = "Product"
+        category = "skincare"
+        if wish_brief:
+            formula_name = wish_brief.get("formula_name", "Custom Formula")
+            product_type = wish_brief.get("product_type", "Product")
+            category = wish_brief.get("category", "skincare")
+        
         return QueryDetailResponse(
             id=str(query["_id"]),
             display_id=query.get("display_id", ""),
             user_id=str(query.get("user_id", "")),
-            formula_name=query.get("formula_name", ""),
-            product_type=query.get("product_type", ""),
-            category=query.get("category", ""),
+            formula_id=query.get("formula_id", ""),
+            history_id=query.get("history_id", ""),
             status=QueryStatus(query.get("status", "new")),
-            wish_brief=query.get("wish_brief", {}),
+            wish_brief=wish_brief,
             created_at=query.get("created_at", datetime.now()),
             updated_at=query.get("updated_at", datetime.now()),
             user=user,
