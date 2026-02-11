@@ -114,18 +114,70 @@ async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[
             
             print(f"   Analyzing trends for: {clean_ingredient}")
             
-            # Fetch trend analysis
+            # Fetch trend analysis with retry logic and alternative queries
             analyze_data = None
-            try:
-                analyze_data = await analyzer.analyze_ingredient_trend(
-                    clean_ingredient,
-                    time_range="today 12-m"
-                )
-                if analyze_data and "error" in analyze_data:
-                    print(f"   ⚠️ Analyze error for {clean_ingredient}: {analyze_data.get('error')}")
-                    analyze_data = None
-            except Exception as e:
-                print(f"   ⚠️ Error analyzing {clean_ingredient}: {str(e)}")
+            max_retries = 2
+            
+            # For ingredients with potentially low search volume (like UV filters), try alternative search queries
+            search_queries = [clean_ingredient]  # Start with original
+            
+            # Add context-based queries for better results
+            ingredient_lower = clean_ingredient.lower()
+            if any(term in ingredient_lower for term in ["octinoxate", "avobenzone", "octisalate", "octocrylene", "zinc oxide", "titanium dioxide"]):
+                # UV filters - try with sunscreen context
+                search_queries.append(f"{clean_ingredient} sunscreen")
+                search_queries.append(f"sunscreen with {clean_ingredient}")
+            
+            # Try each search query variant
+            for search_query in search_queries:
+                if analyze_data and isinstance(analyze_data, dict) and "error" not in analyze_data:
+                    break  # Success, stop trying
+                    
+                for retry in range(max_retries):
+                    try:
+                        analyze_data = await analyzer.analyze_ingredient_trend(
+                            search_query,
+                            time_range="today 12-m"
+                        )
+                        if analyze_data and "error" in analyze_data:
+                            error_msg = analyze_data.get('error', 'Unknown error')
+                            # If it's an "insufficient search volume" error, try next query variant
+                            if "insufficient search volume" in error_msg.lower() or "no timeline data" in error_msg.lower():
+                                if search_query != search_queries[-1]:  # Not the last query
+                                    print(f"   ⚠️ Low search volume for '{search_query}', trying alternatives...")
+                                    analyze_data = None
+                                    break  # Try next query
+                                else:
+                                    print(f"   ⚠️ All query variants failed - insufficient search volume for {clean_ingredient}")
+                                    analyze_data = None
+                                    break
+                            # Retry on temporary errors
+                            elif retry < max_retries - 1 and ("temporarily unavailable" in error_msg.lower() or "rate limit" in error_msg.lower()):
+                                print(f"   ⚠️ Temporary error for '{search_query}' (attempt {retry + 1}): {error_msg}")
+                                import asyncio
+                                await asyncio.sleep(2 * (retry + 1))  # Exponential backoff
+                                continue
+                            else:
+                                print(f"   ⚠️ Analyze error for '{search_query}': {error_msg}")
+                                analyze_data = None
+                                break  # Try next query
+                        elif analyze_data and isinstance(analyze_data, dict):
+                            # Success - got valid data
+                            if search_query != clean_ingredient:
+                                print(f"   ✅ Successfully analyzed using alternative query: '{search_query}'")
+                            else:
+                                print(f"   ✅ Successfully analyzed '{clean_ingredient}'")
+                            break
+                    except Exception as e:
+                        print(f"   ⚠️ Error analyzing '{search_query}' (attempt {retry + 1}): {str(e)}")
+                        if retry < max_retries - 1:
+                            import asyncio
+                            await asyncio.sleep(2 * (retry + 1))  # Exponential backoff
+                            continue
+                        analyze_data = None
+                
+                if analyze_data and isinstance(analyze_data, dict) and "error" not in analyze_data:
+                    break  # Success, stop trying queries
             
             # Fetch synthesis (includes analyze + consumer intent + competitive + regional)
             synthesis_data = None
@@ -180,17 +232,29 @@ async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[
                 print(f"   ⚠️ Error synthesizing {clean_ingredient}: {str(e)}")
             
             # Store trend data for this ingredient
-            trend_data[ingredient] = {
-                "analyze": analyze_data,
-                "synthesis": synthesis_data
-            }
+            # Only store if we have at least synthesis data (synthesis can work with partial data)
+            if synthesis_data or analyze_data:
+                trend_data[ingredient] = {
+                    "analyze": analyze_data,
+                    "synthesis": synthesis_data
+                }
+            else:
+                # If both failed, still store but with error info
+                print(f"   ⚠️ Both analyze and synthesis failed for {ingredient}")
+                trend_data[ingredient] = {
+                    "analyze": None,
+                    "synthesis": None,
+                    "error": "Failed to fetch trend data - API may be temporarily unavailable or ingredient has insufficient search volume"
+                }
             
         except Exception as e:
             print(f"   ❌ Failed to fetch trend data for {ingredient}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             trend_data[ingredient] = {
                 "analyze": None,
                 "synthesis": None,
-                "error": str(e)
+                "error": f"Exception: {str(e)}"
             }
     
     print(f"✅ Completed trend analysis for {len(trend_data)} ingredients")
