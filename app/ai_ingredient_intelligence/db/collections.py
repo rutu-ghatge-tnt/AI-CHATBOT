@@ -43,8 +43,8 @@ ingredient_alternatives_cache_col = db["ingredient_alternatives_cache"]
 # QMS (Query Management System) COLLECTIONS
 # ============================================================================
 
-# Users collection (for QMS - users who paid consultation fee)
-qms_users_col = db["qms_users"]
+# Main users collection (shared across the app)
+users_col = db["users"]
 
 # Partners collection (formulation partners)
 qms_partners_col = db["qms_partners"]

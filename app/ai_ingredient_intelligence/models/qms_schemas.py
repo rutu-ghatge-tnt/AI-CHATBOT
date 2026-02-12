@@ -210,10 +210,15 @@ class PaymentResponse(PaymentBase):
 # ============================================================================
 
 class QueryBase(BaseModel):
-    """Base query schema - simplified for current requirements (get it made, list, status)"""
+    """Base query schema with form fields from get this made form"""
     user_id: str = Field(..., description="The customer who requested the formula")
-    formula_id: str = Field(..., description="Formula ID - can fetch all data from wish_history")
-    history_id: str = Field(..., description="Wish history ID - can fetch all data from wish_history")
+    formula_id: str = Field(..., description="Formula ID")
+    wish_id: str = Field(..., description="Wish history ID (alias for history_id)")
+    formula_name: str = Field(..., description="Formula name")
+    experience_level: str = Field(..., description="Experience level: 'dreaming', 'researching', 'ready', or 'existing'")
+    timeline: str = Field(..., description="Timeline: 'asap', '3months', '6months', or 'exploring'")
+    quantity_interest: Optional[str] = Field(None, description="Quantity interest")
+    additional_notes: Optional[str] = Field(None, description="Additional notes from form")
     status: QueryStatus = Field(QueryStatus.NEW, description="Query status")
 
 
@@ -231,6 +236,14 @@ class QueryResponse(QueryBase):
 
     class Config:
         populate_by_name = True
+
+
+class UserInfo(BaseModel):
+    """User information embedded in query response"""
+    fullname: str = Field(..., description="User full name")
+    phone: str = Field(..., description="User phone number")
+    city: Optional[str] = Field(None, description="User city")
+    pincode: Optional[str] = Field(None, description="User pincode")
 
 
 class QueryListResponse(BaseModel):
@@ -252,7 +265,7 @@ class QueryListResponse(BaseModel):
 class QueryDetailResponse(QueryResponse):
     """Schema for detailed query response"""
     wish_brief: Optional[Dict[str, Any]] = Field(None, description="Fetched from wish_history when needed")
-    user: Optional[UserResponse] = None
+    user: Optional[UserInfo] = Field(None, description="User information from main user table")
     partner: Optional[PartnerResponse] = None
     payment: Optional[PaymentResponse] = None
     notes: List["NoteResponse"] = Field(default_factory=list)
