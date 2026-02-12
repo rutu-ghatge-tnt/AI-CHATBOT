@@ -2267,6 +2267,18 @@ class URLScraper:
             # Extract product image
             product_image = await self.extract_product_image(driver, url)
             
+            # Download and store image in S3 if we have a valid image URL
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3: {stored_image_url[:100]}")
+                        product_image = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
+            
             return {
                 "extracted_text": extracted_text,
                 "platform": platform,
@@ -3454,6 +3466,19 @@ Return validated data as JSON with correct prices."""
                 extraction_error = str(e)
                 print(f"Error extracting ingredients from text: {e}")
             
+            # Download and store product image if available
+            product_image = scrape_result.get("product_image")
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3: {stored_image_url[:100]}")
+                        product_image = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
+            
             # If extraction succeeded, return direct results
             if ingredients and len(ingredients) > 0:
                 print(f"Successfully extracted {len(ingredients)} ingredients directly from URL")
@@ -3465,7 +3490,7 @@ Return validated data as JSON with correct prices."""
                     "is_estimated": False,
                     "source": "url_extraction",
                     "product_name": None,
-                    "product_image": scrape_result.get("product_image")
+                    "product_image": product_image
                 }
             
             # If we have ingredient content but extraction failed, try direct parsing fallback
@@ -3502,7 +3527,7 @@ Return validated data as JSON with correct prices."""
                                 "is_estimated": False,
                                 "source": "url_extraction",
                                 "product_name": None,
-                                "product_image": scrape_result.get("product_image")
+                                "product_image": product_image
                             }
                 except Exception as e:
                     print(f"Direct parsing fallback failed: {e}")
@@ -3522,7 +3547,7 @@ Return validated data as JSON with correct prices."""
                             "is_estimated": False,
                             "source": "url_extraction",
                             "product_name": None,
-                            "product_image": scrape_result.get("product_image")
+                            "product_image": product_image
                         }
                 except Exception as e:
                     print(f"Claude retry also failed: {e}")
@@ -3549,7 +3574,7 @@ Return validated data as JSON with correct prices."""
                         "is_estimated": True,
                         "source": "ai_search",
                         "product_name": product_name,
-                        "product_image": scrape_result.get("product_image")
+                        "product_image": product_image
                     }
             
             # If fallback also failed, return empty
@@ -3561,7 +3586,7 @@ Return validated data as JSON with correct prices."""
                 "is_estimated": False,
                 "source": "url_extraction",
                 "product_name": product_name,
-                "product_image": scrape_result.get("product_image")
+                "product_image": product_image
             }
             
         except Exception as e:

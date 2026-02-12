@@ -67,6 +67,20 @@ async def fetch_product_from_url(url: str, force_refresh: bool = False) -> Dict[
             # Ensure from_cache flag is set
             cached_data["from_cache"] = True
             
+            # Ensure image is stored in S3 if it's a URL (for backward compatibility with cached data)
+            product_image = cached_data.get("product_image") or cached_data.get("image")
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3 (from cache): {stored_image_url[:100]}")
+                        cached_data["product_image"] = stored_image_url
+                        cached_data["image"] = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store cached image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
+            
             print(f"✅ Returning cached data for {url} (original source: {original_source})")
             return cached_data
     
@@ -99,6 +113,18 @@ async def fetch_product_from_url(url: str, force_refresh: bool = False) -> Dict[
         product_image = result.get("product_image")
         if not product_image:
             product_image = "🧴"
+        else:
+            # Ensure image is stored in S3 if it's a URL (for backward compatibility with cached data)
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3 (from cache): {stored_image_url[:100]}")
+                        product_image = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store cached image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
         
         # Extract product name - prioritize from result (already validated), fallback to text extraction
         product_name = result.get("product_name")
@@ -339,6 +365,21 @@ async def extract_ingredients_from_url_cached(url: str, force_refresh: bool = Fa
                 source = f"{original_source}_cached" if original_source != "cache" else original_source
                 message = "This URL was previously scraped. Data retrieved from cache."
             
+            # Get product image from cache
+            product_image = cached_data.get("product_image") or cached_data.get("image", "🧴")
+            
+            # Ensure image is stored in S3 if it's a URL (for backward compatibility with cached data)
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3 (from cache): {stored_image_url[:100]}")
+                        product_image = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store cached image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
+            
             print(f"✅ Using cached data for ingredient extraction: {url} (original source: {original_source})")
             return {
                 "ingredients": cached_data.get("ingredients", []),
@@ -348,7 +389,7 @@ async def extract_ingredients_from_url_cached(url: str, force_refresh: bool = Fa
                 "is_estimated": cached_data.get("is_estimated", False),
                 "source": source,
                 "product_name": cached_data.get("product_name") or cached_data.get("name"),
-                "product_image": cached_data.get("product_image") or cached_data.get("image", "🧴"),
+                "product_image": product_image,
                 "message": message,
                 "from_cache": True
             }
