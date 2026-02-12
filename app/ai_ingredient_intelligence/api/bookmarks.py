@@ -52,19 +52,21 @@ def _get_user_id(current_user: dict) -> str:
 @router.get("")
 async def list_bookmarks(
     type: Optional[str] = Query(None, description="Filter by type: INGREDIENT, PRODUCT, RECIPE, URL"),
+    search: Optional[str] = Query(None, description="Search in name, title, url, and tags (case-insensitive)"),
     limit: int = Query(50, ge=1, le=100, description="Number of results per page"),
     skip: int = Query(0, ge=0, description="Number of results to skip"),
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
-    List your bookmarks with pagination and optional type filter.
+    List your bookmarks with pagination, optional type filter, and search.
 
     Query parameters:
     - type: Filter by bookmark type (INGREDIENT, PRODUCT, RECIPE, URL). Case-insensitive.
+    - search: Search in reference name, title, url, and tags (case-insensitive substring match).
     - limit: Number of results (default: 50, max: 100).
     - skip: Number of results to skip (default: 0).
 
-    Example: GET /api/bookmarks?type=INGREDIENT&limit=20&skip=0
+    Example: GET /api/bookmarks?type=INGREDIENT&search=niacin&limit=20&skip=0
     """
     try:
         user_id = _get_user_id(current_user)
@@ -79,7 +81,7 @@ async def list_bookmarks(
                     detail=f"Invalid type. Use one of: INGREDIENT, PRODUCT, RECIPE, URL",
                 )
         data = await get_bookmarks_for_user(
-            user_id, bookmark_type=bookmark_type, skip=skip, limit=limit
+            user_id, bookmark_type=bookmark_type, skip=skip, limit=limit, search=search
         )
         items = []
         for doc in data["items"]:

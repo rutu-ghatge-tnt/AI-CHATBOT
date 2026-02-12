@@ -948,6 +948,7 @@ class IngredientInfoFull(BaseModel):
     chemical_classes: List[List[str]] = Field(default_factory=list, description="Chemical class tree paths")
     cost_per_kg: Optional[float] = Field(None, description="Cost per kg from distributor")
     found: bool = Field(..., description="Whether ingredient was found in database")
+    is_bookmarked: bool = Field(False, description="Whether this ingredient is bookmarked by the current user")
 
 
 class IngredientInfoDescriptionOnly(BaseModel):
@@ -955,6 +956,7 @@ class IngredientInfoDescriptionOnly(BaseModel):
     ingredient_name: str = Field(..., description="Branded ingredient name (shown even if INCI exists)")
     description: Optional[str] = Field(None, description="Description from INCI if available, otherwise from branded ingredient (enhanced_description)")
     found: bool = Field(..., description="Whether ingredient was found in database")
+    is_bookmarked: bool = Field(False, description="Whether this ingredient is bookmarked by the current user")
 
 
 class IngredientInfoResponse(BaseModel):

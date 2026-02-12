@@ -6,6 +6,7 @@ Documents use a `reference` object:
 - URL: reference = { title, url }
 """
 
+import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Set, Tuple, Optional, Any, Dict
 
@@ -75,6 +76,40 @@ async def find_existing_item_ids(
     return existing
 
 
+async def find_existing_ingredient_bookmark_keys(
+    user_id: str,
+    candidate_keys: List[str],
+) -> Set[str]:
+    """
+    Return set of reference.id and reference.name values that are bookmarked for this user and type INGREDIENT.
+    Match bookmarks where reference.id OR reference.name is in candidate_keys (so ingredient matches by id or name).
+    """
+    if not candidate_keys:
+        return set()
+    keys_clean = [k.strip() for k in candidate_keys if k and str(k).strip()]
+    if not keys_clean:
+        return set()
+    cursor = bookmarks_col.find(
+        {
+            "user_id": user_id,
+            "type": BookmarkType.INGREDIENT.value,
+            "$or": [
+                {"reference.id": {"$in": keys_clean}},
+                {"reference.name": {"$in": keys_clean}},
+            ],
+        },
+        {"reference.id": 1, "reference.name": 1},
+    )
+    bookmarked = set()
+    async for doc in cursor:
+        ref = doc.get("reference") or {}
+        for field in ("id", "name"):
+            val = ref.get(field)
+            if val is not None and str(val).strip():
+                bookmarked.add(str(val).strip())
+    return bookmarked
+
+
 async def add_bookmarks(
     user_id: str,
     docs_to_insert: List[Dict[str, Any]],
@@ -117,19 +152,37 @@ async def add_bookmarks(
     return added, already_bookmarked, failed
 
 
+def _search_query(search: str):
+    """Build $or query for case-insensitive search on reference.name, title, url, and tags."""
+    escaped = re.escape(search.strip())
+    regex = {"$regex": escaped, "$options": "i"}
+    return {
+        "$or": [
+            {"reference.name": regex},
+            {"reference.title": regex},
+            {"reference.url": regex},
+            {"reference.tags": regex},
+        ]
+    }
+
+
 async def get_bookmarks_for_user(
     user_id: str,
     bookmark_type: Optional[BookmarkType] = None,
     skip: int = 0,
     limit: int = 50,
+    search: Optional[str] = None,
 ):
     """
-    List bookmarks for a user with optional type filter and pagination.
+    List bookmarks for a user with optional type filter, search, and pagination.
+    Search matches reference.name, reference.title, reference.url, and reference.tags (case-insensitive).
     Returns items (type, reference, created_at) and total count.
     """
     query = {"user_id": user_id}
     if bookmark_type is not None:
         query["type"] = bookmark_type.value
+    if search and search.strip():
+        query = {"$and": [query, _search_query(search)]}
     total = await bookmarks_col.count_documents(query)
     cursor = bookmarks_col.find(
         query,

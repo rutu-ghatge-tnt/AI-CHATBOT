@@ -16,6 +16,7 @@ from app.ai_ingredient_intelligence.db.collections import (
     chemical_classes_col
 )
 from app.ai_ingredient_intelligence.db.mongodb import db
+from app.ai_ingredient_intelligence.logic.bookmark_manager import find_existing_ingredient_bookmark_keys
 from app.ai_ingredient_intelligence.logic.matcher import build_category_tree
 from app.ai_ingredient_intelligence.models.schemas import (
     IngredientInfoRequest,
@@ -642,6 +643,9 @@ async def get_ingredients_info(
         if not ingredient_names_clean:
             return IngredientInfoResponse(results=[])
         
+        user_id = current_user.get("user_id") or current_user.get("_id")
+        user_id = str(user_id) if user_id else None
+        
         # Helper function to normalize ingredient names for matching
         def normalize_for_match(name: str) -> str:
             """Normalize ingredient name by removing common variations"""
@@ -759,6 +763,7 @@ async def get_ingredients_info(
                         "description": inci_doc.get("description", "")
                     }
             
+            matches = []  # (ingredient_name, doc or None)
             for ingredient_name in ingredient_names_clean:
                 ing_name_lower = ingredient_name.lower()
                 ing_name_normalized = normalize_for_match(ingredient_name)
@@ -792,21 +797,45 @@ async def get_ingredients_info(
                             ing_name_normalized in found_original_inci):
                             doc = found_doc
                             break
-                
+                matches.append((ingredient_name, doc))
+            
+            candidate_keys_desc = []
+            for req_name, doc in matches:
                 if doc:
-                    # Use enhanced_description if available, otherwise fallback to description
+                    candidate_keys_desc.append(str(doc["_id"]))
+                    name_from_doc = (doc.get("ingredient_name") or "").strip()
+                    if name_from_doc:
+                        candidate_keys_desc.append(name_from_doc)
+                if req_name and (req_name or "").strip():
+                    candidate_keys_desc.append((req_name or "").strip())
+            bookmarked_set_desc = set()
+            if user_id and candidate_keys_desc:
+                bookmarked_set_desc = await find_existing_ingredient_bookmark_keys(user_id, candidate_keys_desc)
+            
+            for ingredient_name, doc in matches:
+                if doc:
                     description = doc.get("enhanced_description") or doc.get("description")
-                    
+                    ing_id = str(doc["_id"])
+                    name_from_doc = (doc.get("ingredient_name") or "").strip()
+                    req_name_norm = (ingredient_name or "").strip()
+                    is_bm = (
+                        ing_id in bookmarked_set_desc
+                        or (req_name_norm and req_name_norm in bookmarked_set_desc)
+                        or (name_from_doc and name_from_doc in bookmarked_set_desc)
+                    )
                     results.append(IngredientInfoDescriptionOnly(
                         ingredient_name=ingredient_name,
                         description=description,
-                        found=True
+                        found=True,
+                        is_bookmarked=is_bm,
                     ))
                 else:
+                    req_name_norm = (ingredient_name or "").strip()
                     results.append(IngredientInfoDescriptionOnly(
                         ingredient_name=ingredient_name,
                         description=None,
-                        found=False
+                        found=False,
+                        is_bookmarked=bool(req_name_norm and req_name_norm in bookmarked_set_desc),
                     ))
             
             return IngredientInfoResponse(results=results)
@@ -881,6 +910,18 @@ async def get_ingredients_info(
                         all_supplier_ids.append(ObjectId(supplier_id))
                     except:
                         pass
+        
+        candidate_keys_full = list(all_ingredient_ids)
+        for name in ingredient_names_clean:
+            if name and name.strip():
+                candidate_keys_full.append(name.strip())
+        for doc in all_docs:
+            name_from_doc = (doc.get("ingredient_name") or "").strip()
+            if name_from_doc:
+                candidate_keys_full.append(name_from_doc)
+        bookmarked_set_full = set()
+        if user_id and candidate_keys_full:
+            bookmarked_set_full = await find_existing_ingredient_bookmark_keys(user_id, candidate_keys_full)
         
         # Batch fetch INCI documents
         inci_map = {}
@@ -1483,10 +1524,16 @@ async def get_ingredients_info(
                     functional_categories=functional_categories,
                     chemical_classes=chemical_classes,
                     cost_per_kg=cost_per_kg,
-                    found=True
+                    found=True,
+                    is_bookmarked=(
+                        ing_id in bookmarked_set_full
+                        or ((ingredient_name or "").strip() in bookmarked_set_full)
+                        or ((doc.get("ingredient_name") or "").strip() in bookmarked_set_full)
+                    ),
                 ))
             else:
-                # Ingredient not found
+                # Ingredient not found - can still be bookmarked by name
+                req_name_norm = (ingredient_name or "").strip()
                 results.append(IngredientInfoFull(
                     ingredient_id="",
                     ingredient_name=ingredient_name,
@@ -1500,7 +1547,8 @@ async def get_ingredients_info(
                     functional_categories=[],
                     chemical_classes=[],
                     cost_per_kg=None,
-                    found=False
+                    found=False,
+                    is_bookmarked=bool(req_name_norm and req_name_norm in bookmarked_set_full),
                 ))
         
         return IngredientInfoResponse(results=results)
