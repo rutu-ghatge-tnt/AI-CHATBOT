@@ -468,13 +468,30 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 ### YOUR TASK
 
 1. Calculate detailed cost breakdown
-2. Estimate packaging costs for common sizes (30ml, 50ml, 100ml)
-3. Calculate total product cost with packaging
-4. Provide pricing recommendations (D2C, retail, premium)
-5. Suggest cost optimization opportunities
-6. Compare with competitor products if applicable
+2. Estimate packaging costs for ALL common sizes: 30ml, 50ml, 100ml, 30g, 50g, 100g
+3. Estimate labelling costs for each size:
+   - 30ml/30g: ₹3-5
+   - 50ml/50g: ₹4-6
+   - 100ml/100g: ₹5-7
+4. Estimate carton box costs for each size:
+   - 30ml/30g: ₹6-9
+   - 50ml/50g: ₹6-9
+   - 100ml/100g: ₹7-10
+5. Calculate total product cost for ALL sizes including: raw materials + packaging + labelling + carton box
+6. Calculate manufacturing overhead (20% of subtotal: raw materials + packaging + labelling + carton box) for ALL sizes
+7. Provide pricing recommendations (D2C 5x, retail 6x, premium 8x) for ALL sizes
+8. Suggest cost optimization opportunities
+9. Compare with competitor products if applicable
 
-Return the complete cost analysis as JSON following the specified format.
+CRITICAL REQUIREMENTS:
+- MUST include data for ALL sizes: 30ml, 50ml, 100ml, 30g, 50g, 100g
+- This allows frontend users to switch between sizes without regenerating
+- Include packaging_cost, labelling_cost, and carton_box_cost separately in packaging_estimate
+- Manufacturing overhead is 20% of (raw material + packaging + labelling + carton box costs)
+- D2C markup is 5x (changed from 4x)
+- Calculate formula_cost for each size: (size/100) × formula_cost_per_100g
+
+Return the complete cost analysis as JSON following the specified format with ALL sizes included.
 
 """
 

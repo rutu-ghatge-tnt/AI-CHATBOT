@@ -515,18 +515,37 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
 - Calculate based on percentage and cost/kg
 - Formula: (Percentage/100) × (Cost per kg/10) = Cost per 100g
 
-### 2. PACKAGING COST (estimates)
+### 2a. PACKAGING COST (estimates)
 
-- Dropper bottle (30ml): ₹15-25
-- Pump bottle (100ml): ₹25-40
-- Jar (50g): ₹20-35
-- Tube (100g): ₹15-25
-- Airless pump (30ml): ₹35-60
+- Dropper bottle (30ml): ₹15-20
+- Pump bottle (100ml): ₹20-30
+- Glass Jar (50g): ₹20-35
+- Plastic Jar (50g): ₹10-20
+- Tube (100g): ₹10-12
+- Airless pump (30ml): ₹30-60
+
+### 2b. LABELLING COST (estimates)
+
+- 100ml: ₹5-7.00
+- 50ml: ₹4-6.00
+- 30ml: ₹3-5.00
+- 100g: ₹4-6.00
+- 50g: ₹3-5.00
+- 30g: ₹2-4.00
+
+### 2c. Carton Box Cost (estimates)
+
+- 100ml: ₹7-10.00
+- 50ml: ₹6-9.00
+- 30ml: ₹6-9.00
+- 100g: ₹7-10.00
+- 50g: ₹6-9.00
+- 30g: ₹6-9.00
 
 ### 3. MANUFACTURING OVERHEAD
 
 - Lab scale: Minimal
-- Commercial: Add 15-25% to raw material cost
+- Commercial: Add 20% to raw material cost + packaging cost + labelling cost + carton box cost
 
 ### 4. TYPICAL MARGINS
 
@@ -551,34 +570,166 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
   },
   
   "packaging_estimate": {
-    "option_1": {"type": "Dropper bottle 30ml", "cost": 20, "total_unit": 33.65},
-    "option_2": {"type": "Pump bottle 50ml", "cost": 30, "total_unit": 52.75}
+    "option_1": {
+      "type": "Dropper bottle 30ml",
+      "packaging_cost": 20,
+      "labelling_cost": 4,
+      "carton_box_cost": 7,
+      "total_packaging_cost": 31,
+      "total_unit": 33.65
+    },
+    "option_2": {
+      "type": "Pump bottle 50ml",
+      "packaging_cost": 25,
+      "labelling_cost": 5,
+      "carton_box_cost": 8,
+      "total_packaging_cost": 38,
+      "total_unit": 52.75
+    },
+    "option_3": {
+      "type": "Pump bottle 100ml",
+      "packaging_cost": 25,
+      "labelling_cost": 6,
+      "carton_box_cost": 8,
+      "total_packaging_cost": 39,
+      "total_unit": 90.50
+    },
+    "option_4": {
+      "type": "Plastic Jar 30g",
+      "packaging_cost": 15,
+      "labelling_cost": 3,
+      "carton_box_cost": 7,
+      "total_packaging_cost": 25,
+      "total_unit": 18.65
+    },
+    "option_5": {
+      "type": "Plastic Jar 50g",
+      "packaging_cost": 15,
+      "labelling_cost": 4,
+      "carton_box_cost": 7,
+      "total_packaging_cost": 26,
+      "total_unit": 28.75
+    },
+    "option_6": {
+      "type": "Plastic Jar 100g",
+      "packaging_cost": 18,
+      "labelling_cost": 5,
+      "carton_box_cost": 8,
+      "total_packaging_cost": 31,
+      "total_unit": 54.50
+    }
   },
   
   "total_product_cost": {
     "formula_only_per_100g": 45.50,
     "with_packaging_per_unit": {
-      "30ml": 33.65,
-      "50ml": 52.75
+      "30ml": {
+        "formula_cost": 13.65,
+        "packaging_cost": 20,
+        "labelling_cost": 4,
+        "carton_box_cost": 7,
+        "subtotal": 44.65,
+        "total": 44.65
+      },
+      "50ml": {
+        "formula_cost": 22.75,
+        "packaging_cost": 25,
+        "labelling_cost": 5,
+        "carton_box_cost": 8,
+        "subtotal": 60.75,
+        "total": 60.75
+      },
+      "100ml": {
+        "formula_cost": 45.50,
+        "packaging_cost": 25,
+        "labelling_cost": 6,
+        "carton_box_cost": 8,
+        "subtotal": 84.50,
+        "total": 84.50
+      },
+      "30g": {
+        "formula_cost": 13.65,
+        "packaging_cost": 15,
+        "labelling_cost": 3,
+        "carton_box_cost": 7,
+        "subtotal": 38.65,
+        "total": 38.65
+      },
+      "50g": {
+        "formula_cost": 22.75,
+        "packaging_cost": 15,
+        "labelling_cost": 4,
+        "carton_box_cost": 7,
+        "subtotal": 48.75,
+        "total": 48.75
+      },
+      "100g": {
+        "formula_cost": 45.50,
+        "packaging_cost": 18,
+        "labelling_cost": 5,
+        "carton_box_cost": 8,
+        "subtotal": 76.50,
+        "total": 76.50
+      }
     },
-    "with_overhead_15_percent": {
-      "30ml": 38.70,
-      "50ml": 60.66
+    "with_overhead_20_percent": {
+      "30ml": {
+        "subtotal_before_overhead": 44.65,
+        "manufacturing_overhead_20_percent": 8.93,
+        "total": 53.58
+      },
+      "50ml": {
+        "subtotal_before_overhead": 60.75,
+        "manufacturing_overhead_20_percent": 12.15,
+        "total": 72.90
+      },
+      "100ml": {
+        "subtotal_before_overhead": 84.50,
+        "manufacturing_overhead_20_percent": 16.90,
+        "total": 101.40
+      },
+      "30g": {
+        "subtotal_before_overhead": 38.65,
+        "manufacturing_overhead_20_percent": 7.73,
+        "total": 46.38
+      },
+      "50g": {
+        "subtotal_before_overhead": 48.75,
+        "manufacturing_overhead_20_percent": 9.75,
+        "total": 58.50
+      },
+      "100g": {
+        "subtotal_before_overhead": 76.50,
+        "manufacturing_overhead_20_percent": 15.30,
+        "total": 91.80
+      }
     }
   },
   
   "pricing_recommendations": {
-    "d2c_mrp_4x": {
-      "30ml": 139,
-      "50ml": 199
+    "d2c_mrp_5x": {
+      "30ml": 268,
+      "50ml": 365,
+      "100ml": 507,
+      "30g": 232,
+      "50g": 293,
+      "100g": 459
     },
     "retail_mrp_6x": {
-      "30ml": 199,
-      "50ml": 299
+      "30ml": 322,
+      "50ml": 437,
+      "100ml": 608,
+      "30g": 278,
+      "50g": 351,
+      "100g": 551
     },
     "premium_positioning_8x": {
-      "30ml": 299,
-      "50ml": 449
+      "30ml": 429,
+      "50ml": 583,
+      "100ml": 811,
+      "30g": 371,
+      "50g": 468,
+      "100g": 734
     }
   },
   
@@ -603,6 +754,12 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
     "competitive_position": "Your formula at ₹X is positioned competitively against market leaders"
   }
 }
+
+CRITICAL: You MUST include cost data for ALL common sizes (30ml, 50ml, 100ml, 30g, 50g, 100g) in the response. This allows frontend users to switch between sizes dynamically without needing to regenerate the cost analysis. Every size must have complete data in:
+- packaging_estimate (at least one option per size)
+- total_product_cost.with_packaging_per_unit
+- total_product_cost.with_overhead_20_percent
+- pricing_recommendations (all three pricing tiers)
 """
 
 # ============================================================================
