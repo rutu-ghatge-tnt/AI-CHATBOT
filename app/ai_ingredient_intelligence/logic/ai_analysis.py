@@ -260,18 +260,31 @@ TASK:
 Return your analysis as JSON with the structure specified in the system prompt."""
 
     try:
+        # Get cache_control for prompt caching to reduce token costs
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+        cache_control = get_cache_control_for_prompt(
+            system_prompt=system_prompt,
+            prompt_type="formulation_analysis",
+            claude_client=claude_client,
+            ttl="1h"
+        )
+        
         # Set max_tokens based on model (claude-3-opus-20240229 has max 4096)
         max_tokens = 4096 if "claude-3-opus-20240229" in claude_model else 8192
         
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=max_tokens,
-            temperature=0.2,  # Lower temperature for more consistent classification
-            system=system_prompt,
-            messages=[
+        api_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens,
+            "temperature": 0.2,  # Lower temperature for more consistent classification
+            "system": system_prompt,
+            "messages": [
                 {"role": "user", "content": user_prompt}
             ]
-        )
+        }
+        if cache_control:
+            api_params["cache_control"] = cache_control
+        
+        response = claude_client.messages.create(**api_params)
         
         if not response.content or len(response.content) == 0:
             return {
@@ -451,17 +464,30 @@ CRITICAL: If the URL path or product name contains words like "cleanser", "face"
 Return your analysis as JSON with the structure specified in the system prompt."""
 
     try:
+        # Get cache_control for prompt caching to reduce token costs
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+        cache_control = get_cache_control_for_prompt(
+            system_prompt=system_prompt,
+            prompt_type="category_analysis",
+            claude_client=claude_client,
+            ttl="1h"
+        )
+        
         max_tokens = 4096 if "claude-3-opus-20240229" in claude_model else 8192
         
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=max_tokens,
-            temperature=0.1,  # Lower temperature for more consistent categorization
-            system=system_prompt,
-            messages=[
+        api_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens,
+            "temperature": 0.1,  # Lower temperature for more consistent categorization
+            "system": system_prompt,
+            "messages": [
                 {"role": "user", "content": user_prompt}
             ]
-        )
+        }
+        if cache_control:
+            api_params["cache_control"] = cache_control
+        
+        response = claude_client.messages.create(**api_params)
         
         if not response.content or len(response.content) == 0:
             return {
@@ -639,17 +665,30 @@ Generate a comprehensive market research overview that includes:
 Make it insightful, professional, and actionable. If keywords were selected for filtering, acknowledge how they influenced the results."""
 
     try:
+        # Get cache_control for prompt caching to reduce token costs
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+        cache_control = get_cache_control_for_prompt(
+            system_prompt=system_prompt,
+            prompt_type="market_research_overview",
+            claude_client=claude_client,
+            ttl="1h"
+        )
+        
         max_tokens = 4096 if "claude-3-opus-20240229" in claude_model else 8192
         
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=max_tokens,
-            temperature=0.3,
-            system=system_prompt,
-            messages=[
+        api_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens,
+            "temperature": 0.3,
+            "system": system_prompt,
+            "messages": [
                 {"role": "user", "content": user_prompt}
             ]
-        )
+        }
+        if cache_control:
+            api_params["cache_control"] = cache_control
+        
+        response = claude_client.messages.create(**api_params)
         
         if not response.content or len(response.content) == 0:
             # Return fallback overview if AI response is empty

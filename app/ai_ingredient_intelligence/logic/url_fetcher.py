@@ -701,12 +701,14 @@ Your task:
 
 Brand name:"""
 
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=100,
-            temperature=0.1,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        # Get cache_control for prompt caching (no system prompt here, so no caching)
+        api_params = {
+            "model": claude_model,
+            "max_tokens": 100,
+            "temperature": 0.1,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        response = claude_client.messages.create(**api_params)
         
         brand = response.content[0].text.strip()
         
@@ -1086,16 +1088,29 @@ Valid Tags (choose from these):
 
 Return JSON with "category" (string, required), "benefits" (array, at least 3 items), "tags" (array), and "target_audience" (array)."""
 
-        # Call Claude API
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=2048,
-            temperature=0.3,
-            system=system_prompt,
-            messages=[
+        # Get cache_control for prompt caching to reduce token costs
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+        cache_control = get_cache_control_for_prompt(
+            system_prompt=system_prompt,
+            prompt_type="url_category_extraction",
+            claude_client=claude_client,
+            ttl="1h"
+        )
+        
+        # Call Claude API with caching support
+        api_params = {
+            "model": claude_model,
+            "max_tokens": 2048,
+            "temperature": 0.3,
+            "system": system_prompt,
+            "messages": [
                 {"role": "user", "content": user_prompt}
             ]
-        )
+        }
+        if cache_control:
+            api_params["cache_control"] = cache_control
+        
+        response = claude_client.messages.create(**api_params)
         
         if not response.content or len(response.content) == 0:
             return {

@@ -546,12 +546,12 @@ async def call_ai_with_claude(
     if not claude_model:
         raise RuntimeError("Claude model not configured. Check CLAUDE_MODEL environment variable.")
     
-    # Get cache manager and check if we should use caching
+    # Get cache manager and get cache_control config
     cache_manager = get_cache_manager(claude_client)
-    cache_block_id = await cache_manager.get_or_create_cache(
+    cache_control = cache_manager.get_cache_control_config(
         prompt_type=prompt_type,
         system_prompt=system_prompt,
-        claude_client=claude_client
+        ttl="1h"  # 1 hour ephemeral cache
     )
     
     # Prepare API call parameters
@@ -565,13 +565,18 @@ async def call_ai_with_claude(
         ]
     }
     
-    # Use cache_control if caching is enabled
+    # Add cache_control if caching is enabled
     # Claude's ephemeral cache automatically caches system prompts when cache_control is used
     # This reduces costs by ~90% on system prompt tokens after the first call
-    if cache_block_id:
-        print(f"💾 Using cached system prompt for {prompt_type}")
+    # Cached tokens are charged at only 20% of normal input token rate
+    if cache_control:
+        api_params["cache_control"] = cache_control
+        if cache_manager.should_use_cache(prompt_type, system_prompt):
+            print(f"💾 Using cached system prompt for {prompt_type} (saving ~90% on system prompt tokens)")
+        else:
+            print(f"📝 First call for {prompt_type} - will cache system prompt for 1 hour")
     else:
-        print(f"📝 Using uncached system prompt for {prompt_type} (first call)")
+        print(f"⚠️ Caching disabled for {prompt_type}")
     
     for attempt in range(max_retries):
         try:
