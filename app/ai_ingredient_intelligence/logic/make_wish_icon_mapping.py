@@ -42,6 +42,7 @@ EMOJI_TO_ICON = {
     "📋": "clipboard",  # Documentation
     "🏭": "factory",  # Manufacturing
     "📊": "bar-chart",  # Analysis
+    "📈": "arrow-trending-up",  # Cost factors / growth
     "💾": "save",  # Save
     "📝": "file-text",  # Notes
     "🔍": "search",  # Search
@@ -104,6 +105,30 @@ def replace_emoji_in_dict(data: dict, emoji_key: str = "emoji", icon_key: str = 
                 result[key] = replace_emoji_in_dict(value, emoji_key, icon_key)
             elif isinstance(value, list):
                 result[key] = [replace_emoji_in_dict(item, emoji_key, icon_key) if isinstance(item, dict) else item for item in value]
+        return result
+    return data
+
+
+def replace_icon_emoji_values(data, icon_key: str = "icon", default_icon: str = "circle"):
+    """
+    Recursively replace any "icon" key whose value is an emoji with heroicon/lucide name.
+    Used for basic_mode_result so responses use icon names (like advanced mode) not emojis.
+    If the value is already a known icon name, it is left unchanged.
+    """
+    if isinstance(data, dict):
+        result = {}
+        for k, v in data.items():
+            if k == icon_key and isinstance(v, str):
+                result[k] = EMOJI_TO_ICON.get(v, v)  # replace only known emojis; leave icon names as-is
+            elif isinstance(v, dict):
+                result[k] = replace_icon_emoji_values(v, icon_key, default_icon)
+            elif isinstance(v, list):
+                result[k] = [
+                    replace_icon_emoji_values(i, icon_key, default_icon) if isinstance(i, dict) else i
+                    for i in v
+                ]
+            else:
+                result[k] = v
         return result
     return data
 

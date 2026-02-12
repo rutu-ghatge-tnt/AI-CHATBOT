@@ -264,7 +264,7 @@ async def generate_make_wish_formula(
         print(f"   Benefits: {', '.join(wish_data['benefits'])}")
         print(f"   Exclusions: {', '.join(wish_data.get('exclusions', []))}")
         print(f"   Hero Ingredients: {', '.join(wish_data.get('heroIngredients', []))}")
-        print(f"   Cost Range: ₹{wish_data['costMin']} - ₹{wish_data['costMax']}/100g")
+        print(f"   Cost Range: ₹{wish_data['costMin']} - ₹{wish_data['costMax']}/unit")
         
         # Create a unique identifier for the wish data to check for duplicates
         # Use a combination of key fields to identify similar wishes
@@ -351,7 +351,7 @@ async def generate_make_wish_formula(
         cost_analysis = result.get("cost_analysis", {})
         compliance = result.get("compliance", {})
         
-        print(f"   Formula Cost: ₹{cost_analysis.get('raw_material_cost', {}).get('total_per_100g', 0)}/100g")
+        print(f"   Formula Cost: ₹{cost_analysis.get('raw_material_cost', {}).get('total_per_100g', 0)}/unit")
         print(f"   Compliance: {compliance.get('overall_status', 'UNKNOWN')}")
         print(f"   Ingredients: {len(optimized.get('ingredients', []))}")
         

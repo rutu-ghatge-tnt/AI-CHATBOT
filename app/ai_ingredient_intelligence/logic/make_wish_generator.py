@@ -37,6 +37,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_rules_engine import (
     ValidationSeverity
 )
 
+# Import unit helper
+from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
+
 # Claude API setup
 try:
     import anthropic
@@ -143,7 +146,7 @@ def generate_ingredient_selection_prompt(wish_data: dict) -> str:
 
 ### COST TARGET
 
-- Target formula cost: ₹{cost_min} - ₹{cost_max} per 100g
+- Target formula cost: ₹{cost_min} - ₹{cost_max} per unit
 - This is the RAW MATERIAL cost, not retail price
 - Optimize ingredient selection to meet this target
 
@@ -327,7 +330,7 @@ def generate_optimization_prompt(wish_data: dict, selected_ingredients: list) ->
 
 ### COST TARGET
 
-- Formula cost: ₹{cost_min} - ₹{cost_max} per 100g
+- Formula cost: ₹{cost_min} - ₹{cost_max} per unit
 - Optimize percentages to achieve this cost
 
 ### SELECTED INGREDIENTS TO OPTIMIZE
@@ -436,14 +439,32 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
     cost_breakdown = optimized_formula.get('cost_breakdown', {})
     total_cost = cost_breakdown.get('total_per_100g', 0)
     
+    cost_min = wish_data.get('costMin', 30)
+    cost_max = wish_data.get('costMax', 60)
+    product_type = wish_data.get('productType', 'serum')
+    benefits = wish_data.get('benefits', [])
+    hero_ingredients = wish_data.get('heroIngredients', [])
+    
+    # Determine unit based on product type
+    unit = get_unit_for_product_type(product_type)
+    
     # Format ingredients with costs
     ingredients_text = "\n".join([
-        f"  • {ing.get('name', 'Unknown')}: {ing.get('percent', 0)}% @ ₹{ing.get('cost_per_kg', 0)}/kg = ₹{ing.get('cost_contribution', 0)} per 100g"
+        f"  • {ing.get('name', 'Unknown')}: {ing.get('percent', 0)}% @ ₹{ing.get('cost_per_kg', 0)}/kg = ₹{ing.get('cost_contribution', 0)} per {unit}"
         for ing in ingredients
     ])
     
-    cost_min = wish_data.get('costMin', 30)
-    cost_max = wish_data.get('costMax', 60)
+    # Format benefits and hero ingredients for context
+    benefits_text = ", ".join(benefits) if benefits else "General benefits"
+    hero_text = ", ".join(hero_ingredients) if hero_ingredients else "None specified"
+    
+    # Determine common sizes based on unit
+    if unit == "ml":
+        common_sizes = "30ml, 50ml, 100ml"
+        size_examples = "30ml, 50ml, 100ml"
+    else:
+        common_sizes = "30g, 50g, 100g"
+        size_examples = "30g, 50g, 100g"
     
     return f"""
 ## ANALYZE FORMULA COSTS
@@ -451,8 +472,12 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 ### FORMULA INFORMATION
 
 - Formula Name: {formula_name}
-- Current Formula Cost: ₹{total_cost} per 100g
-- Target Cost Range: ₹{cost_min} - ₹{cost_max} per 100g
+- Product Type: {product_type}
+- **Unit: {unit}** (use {unit} for all cost calculations and displays)
+- Current Formula Cost: ₹{total_cost} per {unit}
+- Target Cost Range: ₹{cost_min} - ₹{cost_max} per {unit}
+- Target Benefits: {benefits_text}
+- Hero Ingredients: {hero_text}
 
 ### INGREDIENT COSTS
 
@@ -460,10 +485,10 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 
 ### COST BREAKDOWN
 
-- Actives: ₹{cost_breakdown.get('actives_cost', 0)}
-- Base Ingredients: ₹{cost_breakdown.get('base_cost', 0)}
-- Functional Ingredients: ₹{cost_breakdown.get('functional_cost', 0)}
-- Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}
+- Actives: ₹{cost_breakdown.get('actives_cost', 0)} per {unit}
+- Base Ingredients: ₹{cost_breakdown.get('base_cost', 0)} per {unit}
+- Functional Ingredients: ₹{cost_breakdown.get('functional_cost', 0)} per {unit}
+- Preservation: ₹{cost_breakdown.get('preservation_cost', 0)} per {unit}
 
 ### YOUR TASK
 
@@ -799,6 +824,37 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         print(f"✅ Generated {len(result.get('manufacturing_steps', []))} manufacturing steps")
         return result
     
+    def clean_cost_analysis_units(cost_data: dict, unit: str) -> dict:
+        """Post-process cost analysis to fix any /100g or /100ml that AI might have added"""
+        import json
+        import re
+        
+        # Convert to string, fix, convert back
+        cost_str = json.dumps(cost_data)
+        
+        # Replace /100g and /100ml with actual unit (case-insensitive)
+        cost_str = re.sub(r'/100g', f'/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        # Also catch variations like "₹13.98/100g" or "₹13.98 per 100g"
+        cost_str = re.sub(r'₹([0-9.]+)/100g', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+)/100ml', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+) per 100g', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+) per 100ml', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
+        # Clean competitor_comparison section specifically
+        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100g"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100ml"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
+        
+        try:
+            return json.loads(cost_str)
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return original (shouldn't happen but safety check)
+            print("⚠️ Warning: Failed to parse cleaned cost analysis JSON, returning original")
+            return cost_data
+    
     async def run_stage_4():
         print("💰 Stage 4: Cost Analysis...")
         cost_prompt = generate_cost_prompt(optimized_formula, wish_data)
@@ -807,7 +863,13 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
             user_prompt=cost_prompt,
             prompt_type="cost_analysis"
         )
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/100g")
+        product_type = wish_data.get('productType', 'serum')
+        unit = get_unit_for_product_type(product_type)
+        
+        # Clean up any /100g or /100ml that might have slipped through
+        result = clean_cost_analysis_units(result, unit)
+        
+        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/{unit}")
         return result
     
     async def run_stage_5():

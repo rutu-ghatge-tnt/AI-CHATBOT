@@ -7,7 +7,7 @@ The new flow introduces natural language parsing, complexity selection, ingredie
 formula editing, quote requests, and commercialization features.
 """
 
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -19,6 +19,7 @@ from datetime import datetime
 class ParseWishRequest(BaseModel):
     """Request schema for parsing natural language wish"""
     wish_text: str = Field(..., min_length=30, description="Natural language wish description (minimum 30 characters)")
+    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Wish mode: 'basic' or 'advanced'")
 
 
 class ProductTypeInfo(BaseModel):
@@ -73,6 +74,7 @@ class ParsedWishData(BaseModel):
     detected_hair_concerns: List[str] = Field(default_factory=list, description="Hair concerns mentioned")
     auto_texture: TextureInfo = Field(..., description="Auto-detected texture")
     needs_clarification: List[Dict[str, Any]] = Field(default_factory=list, description="Simple clarification questions from AI")
+    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Wish mode: 'basic' or 'advanced'")
 
 
 class ParseWishResponse(BaseModel):
@@ -91,8 +93,9 @@ class MakeWishRequestRevised(BaseModel):
     # Core inputs
     wish_text: str = Field(..., description="Original natural language wish")
     parsed_data: ParsedWishData = Field(..., description="Parsed wish data from /parse-wish endpoint")
+    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Output mode: 'basic' (layman) or 'advanced' (formulator)")
     
-    # New: Complexity selection
+    # Complexity selection
     complexity: str = Field(..., description="Formula complexity: 'minimalist', 'classic', or 'luxe'")
     
     # Optional overrides from clarification questions
@@ -209,21 +212,36 @@ class FormulaInsights(BaseModel):
     faq: List[FAQItem] = Field(..., description="Frequently asked questions")
 
 
+class MakeWishBasicResponseRevised(BaseModel):
+    """Minimal response for basic mode: success + ids only. Full result is in history / basic_mode_result fetch."""
+    success: bool = Field(..., description="Whether generation was successful")
+    formula_id: str = Field(..., description="Unique ID for this formula")
+    history_id: str = Field(..., description="History tracking ID")
+
+
 class MakeWishResponseRevised(BaseModel):
-    """Revised response schema for Make a Wish formula generation"""
+    """Revised response schema for Make a Wish formula generation (advanced mode).
+    Response shape is always the same: formula, insights, manufacturing, compliance,
+    and basic_mode_result are always present (basic_mode_result is {} when mode is advanced).
+    """
     success: bool = Field(..., description="Whether generation was successful")
     formula_id: str = Field(..., description="Unique ID for this formula")
     history_id: str = Field(..., description="History tracking ID")
     
-    # Formula core
+    # Mode: basic (layman) vs advanced (formulator)
+    mode: Literal["basic", "advanced"] = Field(default="advanced", description="'basic' or 'advanced'")
+    # Always an object: full result when mode is 'basic', empty dict when 'advanced'
+    basic_mode_result: Dict[str, Any] = Field(default_factory=dict, description="Full result when mode is 'basic'; {} when advanced")
+    
+    # Formula core - always present (minimal placeholder in basic mode)
     formula: FormulaOutput = Field(..., description="Complete formula")
     
-    # New: Insights
+    # Insights - always present (empty lists in basic mode)
     insights: FormulaInsights = Field(..., description="Formula insights")
     
-    # Existing (kept)
-    manufacturing: Dict[str, Any] = Field(..., description="Manufacturing process")
-    compliance: Dict[str, Any] = Field(..., description="Compliance information")
+    # Always present
+    manufacturing: Dict[str, Any] = Field(default_factory=dict, description="Manufacturing process")
+    compliance: Dict[str, Any] = Field(default_factory=dict, description="Compliance information")
     
     # Note: cost_analysis moved to separate /request-quote endpoint
 
@@ -395,6 +413,7 @@ class GetThisMadeRequest(BaseModel):
     timeline: str = Field(..., description="Timeline")
     quantity_interest: Optional[str] = Field(None, description="Quantity interest")
     additional_notes: Optional[str] = Field(None, description="Additional notes")
+    payment_id: Optional[str] = Field(None, description="Payment ID (optional - for future payment integration)")
 
 
 class NextStep(BaseModel):
@@ -424,4 +443,6 @@ class GetThisMadeResponse(BaseModel):
     request_id: str = Field(..., description="Request tracking ID")
     created_at: datetime = Field(..., description="Creation timestamp")
     next_steps: List[NextStep] = Field(..., description="Next steps")
+    query_id: Optional[str] = Field(None, description="QMS Query ID (if created)")
+    query_display_id: Optional[str] = Field(None, description="QMS Query Display ID (e.g., QRY-2025-001)")
     # commitment_info: CommitmentInfo = Field(..., description="Commitment information")

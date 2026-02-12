@@ -420,19 +420,48 @@ COMPATIBILITY_RULES = {
 # QUEUE NUMBER GENERATION
 # ============================================================================
 
-def generate_queue_number():
-    """Generate queue number: FLX-YYMMDD-XXX"""
-    from datetime import datetime
-    import random
+async def generate_queue_number():
+    """Generate simple sequential queue number starting from 221"""
+    from app.ai_ingredient_intelligence.db.collections import qms_queries_col
     
-    prefix = "FLX"
-    date_part = datetime.now().strftime("%y%m%d")
+    # Find the highest queue number in the database
+    # Handle both integer and string queue numbers (for backward compatibility)
+    queries = await qms_queries_col.find(
+        {"queue_number": {"$exists": True, "$ne": None}},
+        {"queue_number": 1}
+    ).to_list(length=1000)  # Get up to 1000 queries to find max
     
-    # For demo purposes, generate random sequence
-    # In production, this would query database for today's count
-    sequence = str(random.randint(1, 999)).zfill(3)
+    max_queue = 220  # Start from 220 so first will be 221
     
-    return f"{prefix}-{date_part}-{sequence}"
+    for query in queries:
+        queue_num = query.get("queue_number")
+        if queue_num is None:
+            continue
+        
+        # Convert to int if it's a string (handle old format)
+        try:
+            if isinstance(queue_num, str):
+                # If it's a simple number string like "221", convert it
+                if queue_num.isdigit():
+                    queue_num = int(queue_num)
+                else:
+                    # Skip old format like "FLX-250115-123"
+                    continue
+            elif isinstance(queue_num, int):
+                queue_num = int(queue_num)
+            else:
+                continue
+            
+            if queue_num > max_queue:
+                max_queue = queue_num
+        except (ValueError, TypeError):
+            # Skip invalid queue numbers
+            continue
+    
+    # Increment from highest queue number (or start at 221 if none found)
+    next_queue = max_queue + 1
+    
+    return str(next_queue)
 
 # ============================================================================
 # HELPER FUNCTIONS

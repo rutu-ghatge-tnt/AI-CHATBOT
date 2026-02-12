@@ -51,6 +51,14 @@ from app.ai_ingredient_intelligence.api.ingredient_history import router as ingr
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.health_checks import router as health_checks_router
 
+# Import Trend Insights router (with error handling for missing dependencies)
+try:
+    from app.ai_ingredient_intelligence.api.trend_insights import router as trend_insights_router
+except ImportError as e:
+    print(f"Warning: Could not import trend_insights router: {e}")
+    print("   Trend Insights API will not be available. This is not critical.")
+    trend_insights_router = None
+
 # Import Formula Generation router (with error handling for missing dependencies)
 try:
     from app.ai_ingredient_intelligence.api.formula_generation import router as formula_generation_router
@@ -164,6 +172,10 @@ def custom_openapi():
             {
                 "name": "Dashboard",
                 "description": "Dashboard statistics and analytics endpoints"
+            },
+            {
+                "name": "Trend Insights",
+                "description": "Real-time market intelligence and trend analysis using SerpAPI"
             },
             {
                 "name": "Make a Wish",
@@ -289,6 +301,12 @@ app.include_router(product_comparison_router, prefix="/api")
 
 # ✅ Add health checks API
 app.include_router(health_checks_router, prefix="/api")
+
+# ✅ Add trend insights API
+if trend_insights_router is not None:
+    app.include_router(trend_insights_router, prefix="/api")
+else:
+    print("Warning: Trend Insights router not available, skipping registration")
 
 # ✅ Add formula generation API
 if formula_generation_router is not None:
