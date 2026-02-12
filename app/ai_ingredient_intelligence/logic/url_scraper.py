@@ -2267,6 +2267,18 @@ class URLScraper:
             # Extract product image
             product_image = await self.extract_product_image(driver, url)
             
+            # Download and store image in S3 if we have a valid image URL
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3: {stored_image_url[:100]}")
+                        product_image = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
+            
             return {
                 "extracted_text": extracted_text,
                 "platform": platform,
@@ -3031,8 +3043,8 @@ Return only the JSON array of INCI names:"""
             else:
                 text_to_analyze = raw_text[:8000]
             
-            prompt = f"""
-You are an expert cosmetic ingredient analyst. Your task is to extract ALL INCI (International Nomenclature of Cosmetic Ingredients) names from the following text scraped from an e-commerce product page.
+            # System prompt for caching
+            system_prompt = """You are an expert cosmetic ingredient analyst. Your task is to extract ALL INCI (International Nomenclature of Cosmetic Ingredients) names from text scraped from an e-commerce product page.
 
 CRITICAL REQUIREMENTS:
 1. Extract ALL ingredients from the ingredient list - do NOT skip any ingredients
@@ -3064,15 +3076,25 @@ Example: If you see "Full Ingredient List: Aqua / Water, Ethylhexyl Methoxycinna
 You should extract: ["Aqua", "Water", "Ethylhexyl Methoxycinnamate", "Dimethicone", "Glycerin", "Drometrizole Trisiloxane", ...]
 
 Example output format:
-["Water", "Glycerin", "Sodium Hyaluronate", "Hyaluronic Acid", "Dimethicone", "Ethylhexyl Methoxycinnamate", ...]
+["Water", "Glycerin", "Sodium Hyaluronate", "Hyaluronic Acid", "Dimethicone", "Ethylhexyl Methoxycinnamate", ...]"""
 
-Text to analyze:
+            # User prompt with dynamic content
+            user_prompt = f"""Text to analyze:
 {text_to_analyze}
 
 Return only the JSON array with ALL ingredients:"""
 
             # Get Claude client (lazy-loaded)
             claude_client = self._get_claude_client()
+            
+            # Get cache_control for prompt caching to reduce token costs
+            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+            cache_control = get_cache_control_for_prompt(
+                system_prompt=system_prompt,
+                prompt_type="url_ingredient_extraction",
+                claude_client=claude_client,
+                ttl="1h"
+            )
             
             # Call Claude API - use config model (defaults to claude-sonnet-4-5-20250929)
             from app.config import CLAUDE_MODEL
@@ -3081,17 +3103,22 @@ Return only the JSON array with ALL ingredients:"""
             # Set max_tokens based on model (claude-3-opus-20240229 has max 4096)
             max_tokens = 4096 if "claude-3-opus-20240229" in model_name else 8192
             
-            response = claude_client.messages.create(
-                model=model_name,
-                max_tokens=max_tokens,
-                temperature=0.1,
-                messages=[
+            api_params = {
+                "model": model_name,
+                "max_tokens": max_tokens,
+                "temperature": 0.1,
+                "system": system_prompt,
+                "messages": [
                     {
                         "role": "user",
-                        "content": prompt
+                        "content": user_prompt
                     }
                 ]
-            )
+            }
+            if cache_control:
+                api_params["cache_control"] = cache_control
+            
+            response = claude_client.messages.create(**api_params)
             
             # Extract response content
             claude_response = response.content[0].text.strip()
@@ -3454,6 +3481,19 @@ Return validated data as JSON with correct prices."""
                 extraction_error = str(e)
                 print(f"Error extracting ingredients from text: {e}")
             
+            # Download and store product image if available
+            product_image = scrape_result.get("product_image")
+            if product_image and product_image.startswith(('http://', 'https://')):
+                try:
+                    from app.ai_ingredient_intelligence.logic.image_storage import download_and_store_image
+                    stored_image_url = await download_and_store_image(product_image)
+                    if stored_image_url and stored_image_url != product_image:
+                        print(f"✅ Image stored in S3: {stored_image_url[:100]}")
+                        product_image = stored_image_url
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to store image, using original URL: {str(e)}")
+                    # Continue with original URL if storage fails
+            
             # If extraction succeeded, return direct results
             if ingredients and len(ingredients) > 0:
                 print(f"Successfully extracted {len(ingredients)} ingredients directly from URL")
@@ -3465,7 +3505,7 @@ Return validated data as JSON with correct prices."""
                     "is_estimated": False,
                     "source": "url_extraction",
                     "product_name": None,
-                    "product_image": scrape_result.get("product_image")
+                    "product_image": product_image
                 }
             
             # If we have ingredient content but extraction failed, try direct parsing fallback
@@ -3502,7 +3542,7 @@ Return validated data as JSON with correct prices."""
                                 "is_estimated": False,
                                 "source": "url_extraction",
                                 "product_name": None,
-                                "product_image": scrape_result.get("product_image")
+                                "product_image": product_image
                             }
                 except Exception as e:
                     print(f"Direct parsing fallback failed: {e}")
@@ -3522,7 +3562,7 @@ Return validated data as JSON with correct prices."""
                             "is_estimated": False,
                             "source": "url_extraction",
                             "product_name": None,
-                            "product_image": scrape_result.get("product_image")
+                            "product_image": product_image
                         }
                 except Exception as e:
                     print(f"Claude retry also failed: {e}")
@@ -3549,7 +3589,7 @@ Return validated data as JSON with correct prices."""
                         "is_estimated": True,
                         "source": "ai_search",
                         "product_name": product_name,
-                        "product_image": scrape_result.get("product_image")
+                        "product_image": product_image
                     }
             
             # If fallback also failed, return empty
@@ -3561,7 +3601,7 @@ Return validated data as JSON with correct prices."""
                 "is_estimated": False,
                 "source": "url_extraction",
                 "product_name": product_name,
-                "product_image": scrape_result.get("product_image")
+                "product_image": product_image
             }
             
         except Exception as e:

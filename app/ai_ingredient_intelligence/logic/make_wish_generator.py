@@ -492,36 +492,31 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 
 ### YOUR TASK
 
-1. Calculate detailed cost breakdown using **{unit}** as the unit
-2. Estimate packaging costs for common sizes ({common_sizes})
-3. Calculate total product cost with packaging (use {unit} consistently)
-4. Provide pricing recommendations (D2C, retail, premium) for sizes: {size_examples}
-5. Suggest cost optimization opportunities (savings should be in ₹ per {unit})
-6. **CRITICAL: Compare with competitor products and calculate advantages:**
-   - Find 4-6 similar products in the Indian market
-   - For each competitor, calculate price_per_unit (MRP / size)
-   - **IMPORTANT**: Calculate price per {unit} (NOT per 100{unit} unless product size is exactly 100{unit})
-   - Compare your recommended MRP (from pricing_recommendations) with competitor MRPs
-   - **MANDATORY: For EVERY product in similar_products, you MUST provide a corresponding entry in the advantages array**
-   - The advantages array must have EXACTLY the same number of entries as similar_products
-   - Match advantages to products by competitor_brand (must match the "brand" field in similar_products)
-   - For each competitor, provide a specific "advantage" description:
-     * If your price is lower: "Lower price per {unit}"
-     * If your price is higher but value is better: "Better value with [specific benefit]"
-     * If you have superior ingredients: "Higher [ingredient] concentration" or "Premium [ingredient]"
-     * If you have unique formulation: "Cleaner formula" or "No [exclusion]"
-     * **CRITICAL: NEVER use dashes ("—" or "-") or leave empty. Always provide a meaningful, specific advantage text.**
-     * **If no clear advantage exists, compare price, ingredients, or formulation quality and state the comparison clearly (e.g., "Competitive pricing with enhanced formulation")**
-   - **Use {unit} consistently in all cost displays and comparisons**
+1. Calculate detailed cost breakdown
+2. Estimate packaging costs for ALL common sizes: 30ml, 50ml, 100ml, 30g, 50g, 100g
+3. Estimate labelling costs for each size:
+   - 30ml/30g: ₹3-5
+   - 50ml/50g: ₹4-6
+   - 100ml/100g: ₹5-7
+4. Estimate carton box costs for each size:
+   - 30ml/30g: ₹6-9
+   - 50ml/50g: ₹6-9
+   - 100ml/100g: ₹7-10
+5. Calculate total product cost for ALL sizes including: raw materials + packaging + labelling + carton box
+6. Calculate manufacturing overhead (20% of subtotal: raw materials + packaging + labelling + carton box) for ALL sizes
+7. Provide pricing recommendations (D2C 5x, retail 6x, premium 8x) for ALL sizes
+8. Suggest cost optimization opportunities
+9. Compare with competitor products if applicable
 
-**CRITICAL REMINDER: 
-- All costs, prices, and comparisons must use {unit} as the unit (e.g., "₹30-60/{unit}" or "per {unit}")
-- NEVER use "/100g" or "/100ml" - always use the actual unit from product type
-- For serums/toners → use "ml". For creams/lotions → use "g"
-- In display_range fields, use "per {unit}" NOT "per 100{unit}"
-- In cost_per_100g_range fields, use "₹X - ₹Y per {unit}" NOT "per 100{unit}"**
+CRITICAL REQUIREMENTS:
+- MUST include data for ALL sizes: 30ml, 50ml, 100ml, 30g, 50g, 100g
+- This allows frontend users to switch between sizes without regenerating
+- Include packaging_cost, labelling_cost, and carton_box_cost separately in packaging_estimate
+- Manufacturing overhead is 20% of (raw material + packaging + labelling + carton box costs)
+- D2C markup is 5x (changed from 4x)
+- Calculate formula_cost for each size: (size/100) × formula_cost_per_100g
 
-Return the complete cost analysis as JSON following the specified format with competitor_comparison including advantages for each product.
+Return the complete cost analysis as JSON following the specified format with ALL sizes included.
 
 """
 
@@ -593,12 +588,12 @@ async def call_ai_with_claude(
     if not claude_model:
         raise RuntimeError("Claude model not configured. Check CLAUDE_MODEL environment variable.")
     
-    # Get cache manager and check if we should use caching
+    # Get cache manager and get cache_control config
     cache_manager = get_cache_manager(claude_client)
-    cache_block_id = await cache_manager.get_or_create_cache(
+    cache_control = cache_manager.get_cache_control_config(
         prompt_type=prompt_type,
         system_prompt=system_prompt,
-        claude_client=claude_client
+        ttl="1h"  # 1 hour ephemeral cache
     )
     
     # Prepare API call parameters
@@ -612,13 +607,18 @@ async def call_ai_with_claude(
         ]
     }
     
-    # Use cache_control if caching is enabled
+    # Add cache_control if caching is enabled
     # Claude's ephemeral cache automatically caches system prompts when cache_control is used
     # This reduces costs by ~90% on system prompt tokens after the first call
-    if cache_block_id:
-        print(f"💾 Using cached system prompt for {prompt_type}")
+    # Cached tokens are charged at only 20% of normal input token rate
+    if cache_control:
+        api_params["cache_control"] = cache_control
+        if cache_manager.should_use_cache(prompt_type, system_prompt):
+            print(f"💾 Using cached system prompt for {prompt_type} (saving ~90% on system prompt tokens)")
+        else:
+            print(f"📝 First call for {prompt_type} - will cache system prompt for 1 hour")
     else:
-        print(f"📝 Using uncached system prompt for {prompt_type} (first call)")
+        print(f"⚠️ Caching disabled for {prompt_type}")
     
     for attempt in range(max_retries):
         try:

@@ -764,85 +764,48 @@ You are a cosmetic manufacturing expert. Generate detailed manufacturing instruc
 # ============================================================================
 
 COST_ANALYSIS_SYSTEM_PROMPT = """
-You are a cosmetic product cost analyst with 15+ years of experience in the Indian personal care industry. 
-You have direct procurement experience with distributors like IMCD India, Brenntag India, DKSH, and Barentz.
+You are a cosmetic product cost analyst specializing in the Indian market. Calculate detailed cost breakdown for formulations.
 
-## YOUR TASK
-Calculate a detailed, honest cost breakdown for a cosmetic formula. 
-Your estimates will be used for business planning, so ACCURACY and HONESTY about uncertainty matter more than precision.
+## COST COMPONENTS:
 
-## CRITICAL: UNIT SELECTION BASED ON PRODUCT TYPE
+### 1. RAW MATERIAL COST
 
-**IMPORTANT: The unit (ml or g) depends on the product type:**
-- **Liquid products** (serum, toner, shampoo, conditioner, oil, essence, ampoule, face_mist): Use **ml** (e.g., ₹30-60/ml, cost per ml)
-- **Solid/semi-solid products** (cream, lotion, mask, gel, balm, butter, pomade, paste): Use **g** (e.g., ₹30-60/g, cost per g)
+- Calculate based on percentage and cost/kg
+- Formula: (Percentage/100) × (Cost per kg/10) = Cost per 100g
 
-**When generating cost information, ALWAYS:**
-- For serums, toners, shampoos, conditioners, oils → use "/ml" in all cost displays
-- For creams, lotions, masks, gels, balms → use "/g" in all cost displays
-- In text descriptions, use "per ml" or "per g" based on product type
-- In cost breakdowns, use the appropriate unit consistently
+### 2a. PACKAGING COST (estimates)
 
-## COST CALCULATION METHOD
+- Dropper bottle (30ml): ₹15-20
+- Pump bottle (100ml): ₹20-30
+- Glass Jar (50g): ₹20-35
+- Plastic Jar (50g): ₹10-20
+- Tube (100g): ₹10-12
+- Airless pump (30ml): ₹30-60
 
-### Step 1: For EACH ingredient in the formula
-1. Look up the ingredient in the Reference Price Table provided
-2. If not found, reason from the closest analogous ingredient
-3. Apply modifiers (import, MOQ, grade)
-4. Calculate: (percentage / 100) × (cost_per_kg / 1000) = cost per g
-5. Do this for LOW, MID, and HIGH price estimates
-6. Assign confidence: HIGH / MEDIUM / LOW
+### 2b. LABELLING COST (estimates)
 
-### Step 2: Sum and Validate
-1. Add all ingredient costs for total raw material cost per g
-2. Run ALL sanity checks (see validation rules)
-3. If any check fails, go back and re-examine
+- 100ml: ₹5-7.00
+- 50ml: ₹4-6.00
+- 30ml: ₹3-5.00
+- 100g: ₹4-6.00
+- 50g: ₹3-5.00
+- 30g: ₹2-4.00
 
-### Step 3: Add Non-Formula Costs
-- Packaging: Use provided packaging reference costs
-- Labels & secondary packaging: ₹8-15 per unit
-- Manufacturing overhead: 15-20% of raw material cost
-- Wastage: 3-5% for emulsions, 1-2% for anhydrous
-- Testing (stability, micro): ₹5,000-15,000 per batch (amortize)
+### 2c. Carton Box Cost (estimates)
 
-### Step 4: Pricing Guidance
-- Calculate landed cost per unit (formula + packaging + overhead)
-- D2C MRP = Landed cost × 4-5
-- Retail MRP = Landed cost × 6-8
-- Compare against real market competitor products
+- 100ml: ₹7-10.00
+- 50ml: ₹6-9.00
+- 30ml: ₹6-9.00
+- 100g: ₹7-10.00
+- 50g: ₹6-9.00
+- 30g: ₹6-9.00
 
-## CRITICAL RULES
-1. ALWAYS show your reasoning for each ingredient's cost estimate
-2. NEVER give a single point estimate — always LOW / MID / HIGH
-3. Flag any ingredient where you have LOW confidence
-4. If a specialty/patented ingredient dominates >40% of formula cost, 
-   prominently flag this and recommend the user get a supplier quote
-5. Total raw material cost for water-based products should reflect that 
-   50-70% of the formula is water (which costs almost nothing)
-6. Compare your total against the product type benchmark ranges
+### 3. MANUFACTURING OVERHEAD
 
-""" + COST_REFERENCE_ANCHORS + COST_VALIDATION_RULES + """
+- Lab scale: Minimal
+- Commercial: Add 20% to raw material cost + packaging cost + labelling cost + carton box cost
 
-## PACKAGING COST REFERENCE (Indian Market, per-unit, small MOQ)
-| Package Type | Size | Cost Range (₹) | Premium Version (₹) |
-|-------------|------|----------------|---------------------|
-| Dropper Bottle (Glass) | 30ml | 18-30 | 35-55 |
-| Airless Pump | 30ml | 30-50 | 50-80 |
-| Jar (PP) | 50g | 15-25 | 30-45 |
-| Airless Pump Jar | 50g | 30-50 | 55-85 |
-| Glass Jar + Spatula | 50g | 22-35 | 40-65 |
-| Tube (Laminate) | 50g | 10-18 | 20-30 |
-| Tube (Laminate) | 100g | 14-22 | 25-38 |
-| Jar (PP) | 100g | 20-32 | 38-55 |
-| PET Bottle + Pump | 200ml | 18-30 | 35-50 |
-| PET Bottle + Flip Cap | 200ml | 12-20 | 25-35 |
-| HDPE Bottle | 300ml | 15-25 | 28-40 |
-| Outer Box (Carton) | Small | 6-10 | 12-20 |
-| Outer Box (Carton) | Medium | 8-14 | 15-25 |
-| Labels (Sticker) | — | 3-6 | 8-15 |
-| Shrink Wrap | — | 1-3 | — |
-
-## OUTPUT FORMAT (JSON):
+### 4. TYPICAL MARGINS
 
 IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND the new format:
 
@@ -931,8 +894,54 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
     ]
   },
   "packaging_estimate": {
-    "option_1": {"type": "Dropper bottle 30ml", "cost": 20, "total_unit": 33.65},
-    "option_2": {"type": "Pump bottle 50ml", "cost": 30, "total_unit": 52.75}
+    "option_1": {
+      "type": "Dropper bottle 30ml",
+      "packaging_cost": 20,
+      "labelling_cost": 4,
+      "carton_box_cost": 7,
+      "total_packaging_cost": 31,
+      "total_unit": 33.65
+    },
+    "option_2": {
+      "type": "Pump bottle 50ml",
+      "packaging_cost": 25,
+      "labelling_cost": 5,
+      "carton_box_cost": 8,
+      "total_packaging_cost": 38,
+      "total_unit": 52.75
+    },
+    "option_3": {
+      "type": "Pump bottle 100ml",
+      "packaging_cost": 25,
+      "labelling_cost": 6,
+      "carton_box_cost": 8,
+      "total_packaging_cost": 39,
+      "total_unit": 90.50
+    },
+    "option_4": {
+      "type": "Plastic Jar 30g",
+      "packaging_cost": 15,
+      "labelling_cost": 3,
+      "carton_box_cost": 7,
+      "total_packaging_cost": 25,
+      "total_unit": 18.65
+    },
+    "option_5": {
+      "type": "Plastic Jar 50g",
+      "packaging_cost": 15,
+      "labelling_cost": 4,
+      "carton_box_cost": 7,
+      "total_packaging_cost": 26,
+      "total_unit": 28.75
+    },
+    "option_6": {
+      "type": "Plastic Jar 100g",
+      "packaging_cost": 18,
+      "labelling_cost": 5,
+      "carton_box_cost": 8,
+      "total_packaging_cost": 31,
+      "total_unit": 54.50
+    }
   },
   "total_product_cost": {
     "formula_only_per_g": {
@@ -946,26 +955,112 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
       "conservative": 128.0
     },
     "with_packaging_per_unit": {
-      "30ml": {"optimistic": 25.0, "realistic": 33.65, "conservative": 45.0},
-      "50ml": {"optimistic": 38.0, "realistic": 52.75, "conservative": 72.0}
+      "30ml": {
+        "formula_cost": 13.65,
+        "packaging_cost": 20,
+        "labelling_cost": 4,
+        "carton_box_cost": 7,
+        "subtotal": 44.65,
+        "total": 44.65
+      },
+      "50ml": {
+        "formula_cost": 22.75,
+        "packaging_cost": 25,
+        "labelling_cost": 5,
+        "carton_box_cost": 8,
+        "subtotal": 60.75,
+        "total": 60.75
+      },
+      "100ml": {
+        "formula_cost": 45.50,
+        "packaging_cost": 25,
+        "labelling_cost": 6,
+        "carton_box_cost": 8,
+        "subtotal": 84.50,
+        "total": 84.50
+      },
+      "30g": {
+        "formula_cost": 13.65,
+        "packaging_cost": 15,
+        "labelling_cost": 3,
+        "carton_box_cost": 7,
+        "subtotal": 38.65,
+        "total": 38.65
+      },
+      "50g": {
+        "formula_cost": 22.75,
+        "packaging_cost": 15,
+        "labelling_cost": 4,
+        "carton_box_cost": 7,
+        "subtotal": 48.75,
+        "total": 48.75
+      },
+      "100g": {
+        "formula_cost": 45.50,
+        "packaging_cost": 18,
+        "labelling_cost": 5,
+        "carton_box_cost": 8,
+        "subtotal": 76.50,
+        "total": 76.50
+      }
     },
-    "with_overhead_15_percent": {
-      "30ml": {"optimistic": 28.75, "realistic": 38.70, "conservative": 51.75},
-      "50ml": {"optimistic": 43.70, "realistic": 60.66, "conservative": 82.80}
+    "with_overhead_20_percent": {
+      "30ml": {
+        "subtotal_before_overhead": 44.65,
+        "manufacturing_overhead_20_percent": 8.93,
+        "total": 53.58
+      },
+      "50ml": {
+        "subtotal_before_overhead": 60.75,
+        "manufacturing_overhead_20_percent": 12.15,
+        "total": 72.90
+      },
+      "100ml": {
+        "subtotal_before_overhead": 84.50,
+        "manufacturing_overhead_20_percent": 16.90,
+        "total": 101.40
+      },
+      "30g": {
+        "subtotal_before_overhead": 38.65,
+        "manufacturing_overhead_20_percent": 7.73,
+        "total": 46.38
+      },
+      "50g": {
+        "subtotal_before_overhead": 48.75,
+        "manufacturing_overhead_20_percent": 9.75,
+        "total": 58.50
+      },
+      "100g": {
+        "subtotal_before_overhead": 76.50,
+        "manufacturing_overhead_20_percent": 15.30,
+        "total": 91.80
+      }
     }
   },
   "pricing_recommendations": {
-    "d2c_mrp_4x": {
-      "30ml": {"optimistic": 115, "realistic": 155, "conservative": 207},
-      "50ml": {"optimistic": 175, "realistic": 211, "conservative": 331}
+    "d2c_mrp_5x": {
+      "30ml": 268,
+      "50ml": 365,
+      "100ml": 507,
+      "30g": 232,
+      "50g": 293,
+      "100g": 459
     },
     "retail_mrp_6x": {
-      "30ml": {"optimistic": 173, "realistic": 232, "conservative": 311},
-      "50ml": {"optimistic": 262, "realistic": 317, "conservative": 497}
+      "30ml": 322,
+      "50ml": 437,
+      "100ml": 608,
+      "30g": 278,
+      "50g": 351,
+      "100g": 551
     },
     "premium_positioning_8x": {
-      "30ml": {"optimistic": 230, "realistic": 310, "conservative": 414},
-      "50ml": {"optimistic": 350, "realistic": 422, "conservative": 662}
+      "30ml": 429,
+      "50ml": 583,
+      "100ml": 811,
+      "30g": 371,
+      "50g": 468,
+      "100g": 734
     }
   },
   "cost_optimization_suggestions": [
@@ -1040,6 +1135,12 @@ IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND
     ]
   }
 }
+
+CRITICAL: You MUST include cost data for ALL common sizes (30ml, 50ml, 100ml, 30g, 50g, 100g) in the response. This allows frontend users to switch between sizes dynamically without needing to regenerate the cost analysis. Every size must have complete data in:
+- packaging_estimate (at least one option per size)
+- total_product_cost.with_packaging_per_unit
+- total_product_cost.with_overhead_20_percent
+- pricing_recommendations (all three pricing tiers)
 """
 
 # ============================================================================

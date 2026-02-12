@@ -78,61 +78,75 @@ class PromptCacheManager:
         prompt_hash = self._get_prompt_hash(prompt)
         return f"{prompt_type}:{prompt_hash}"
     
-    async def get_or_create_cache(
-        self,
-        prompt_type: str,
-        system_prompt: str,
-        claude_client=None
-    ) -> Optional[str]:
+    def should_use_cache(self, prompt_type: str, system_prompt: str) -> bool:
         """
-        Get existing cache block ID or create a new one.
-        
-        This function:
-        1. Checks if we have a cached block ID for this prompt
-        2. If yes and not expired, returns it
-        3. If no or expired, creates a new cache block via Claude API
-        4. Stores the cache block ID for future use
+        Check if we should use caching for this prompt.
         
         Args:
             prompt_type: Type of prompt (e.g., "ingredient_selection", "optimization")
-            system_prompt: The system prompt to cache
-            claude_client: Anthropic client (optional, uses instance client or global)
+            system_prompt: The system prompt to check
             
         Returns:
-            Cache block ID string, or None if caching is not available
+            True if caching should be used, False otherwise
         """
-        if not claude_client:
-            claude_client = self.claude_client
-        
-        if not claude_client:
-            # No client available, return None (will use regular API call)
-            return None
-        
         cache_key = self._get_cache_key(prompt_type, system_prompt)
-        
-        # Check if we have a valid cached block ID
         cached_entry = self._cache_store.get(cache_key)
+        
         if cached_entry:
             created_at = datetime.fromisoformat(cached_entry['created_at'])
             age = (datetime.now() - created_at).total_seconds()
             
             if age < cached_entry.get('ttl', CACHE_TTL):
                 # Cache is still valid
-                print(f"✅ Cache HIT for {prompt_type} (age: {age:.0f}s)")
-                return cached_entry['cache_block_id']
+                return True
+            else:
+                # Cache expired, remove it
+                del self._cache_store[cache_key]
+        
+        return False
+    
+    def get_cache_control_config(
+        self,
+        prompt_type: str,
+        system_prompt: str,
+        ttl: str = "1h"
+    ) -> Optional[Dict[str, str]]:
+        """
+        Get cache_control configuration for Claude API.
+        
+        Claude's ephemeral caching automatically caches system prompts when cache_control
+        is used. This reduces costs by ~90% on system prompt tokens after the first call.
+        
+        Args:
+            prompt_type: Type of prompt (e.g., "ingredient_selection", "optimization")
+            system_prompt: The system prompt to cache
+            ttl: Time-to-live for cache (default: "1h" for 1 hour)
+            
+        Returns:
+            cache_control dict with {"type": "ephemeral", "ttl": ttl}, or None if caching disabled
+        """
+        cache_key = self._get_cache_key(prompt_type, system_prompt)
+        
+        # Check if we have a valid cached entry
+        cached_entry = self._cache_store.get(cache_key)
+        if cached_entry:
+            created_at = datetime.fromisoformat(cached_entry['created_at'])
+            age = (datetime.now() - created_at).total_seconds()
+            
+            if age < cached_entry.get('ttl', CACHE_TTL):
+                # Cache is still valid - Claude will use cached version
+                print(f"✅ Cache HIT for {prompt_type} (age: {age:.0f}s) - using cached system prompt")
+                return {"type": "ephemeral", "ttl": ttl}
             else:
                 # Cache expired, remove it
                 print(f"⏰ Cache EXPIRED for {prompt_type} (age: {age:.0f}s)")
                 del self._cache_store[cache_key]
         
-        # No valid cache, mark that we should use caching for this prompt
-        # Claude's ephemeral caching works automatically when we use cache_control
-        # We just need to track that this prompt should use caching
+        # No valid cache, create new cache entry
         try:
-            print(f"📝 Setting up cache for {prompt_type}...")
+            print(f"📝 Setting up cache for {prompt_type} (will cache for {ttl})...")
             
-            # Store cache metadata - we'll use the prompt hash to track cached prompts
-            # Claude's ephemeral cache is automatic when cache_control is used
+            # Store cache metadata
             cache_block_id = self._get_prompt_hash(system_prompt)
             
             self._cache_store[cache_key] = {
@@ -143,13 +157,41 @@ class PromptCacheManager:
                 "system_prompt": system_prompt  # Store for reference
             }
             
-            print(f"✅ Cache configured for {prompt_type}")
-            return cache_block_id
+            print(f"✅ Cache configured for {prompt_type} - first call will write to cache")
+            return {"type": "ephemeral", "ttl": ttl}
             
         except Exception as e:
-            print(f"⚠️ Failed to create cache block for {prompt_type}: {e}")
+            print(f"⚠️ Failed to configure cache for {prompt_type}: {e}")
             # Return None to fall back to regular API call
             return None
+    
+    async def get_or_create_cache(
+        self,
+        prompt_type: str,
+        system_prompt: str,
+        claude_client=None
+    ) -> Optional[str]:
+        """
+        Get existing cache block ID or create a new one.
+        
+        DEPRECATED: Use get_cache_control_config() instead for proper Claude API integration.
+        This method is kept for backward compatibility.
+        
+        Args:
+            prompt_type: Type of prompt (e.g., "ingredient_selection", "optimization")
+            system_prompt: The system prompt to cache
+            claude_client: Anthropic client (optional, uses instance client or global)
+            
+        Returns:
+            Cache block ID string, or None if caching is not available
+        """
+        cache_control = self.get_cache_control_config(prompt_type, system_prompt)
+        if cache_control:
+            cache_key = self._get_cache_key(prompt_type, system_prompt)
+            cached_entry = self._cache_store.get(cache_key)
+            if cached_entry:
+                return cached_entry.get('cache_block_id')
+        return None
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """
@@ -217,4 +259,36 @@ def get_cache_manager(claude_client=None) -> PromptCacheManager:
     if _cache_manager is None:
         _cache_manager = PromptCacheManager(claude_client=claude_client)
     return _cache_manager
+
+
+def get_cache_control_for_prompt(
+    system_prompt: Optional[str],
+    prompt_type: str = "general",
+    claude_client=None,
+    ttl: str = "1h"
+) -> Optional[Dict[str, str]]:
+    """
+    Helper function to get cache_control config for Claude API calls.
+    
+    This is a convenience function that can be used across all Claude API calls
+    in the project to enable prompt caching and reduce token costs.
+    
+    Args:
+        system_prompt: The system prompt to cache (None if no system prompt)
+        prompt_type: Type of prompt for tracking (e.g., "ingredient_selection", "url_extraction")
+        claude_client: Anthropic client (optional)
+        ttl: Cache time-to-live (default: "1h" for 1 hour)
+        
+    Returns:
+        cache_control dict with {"type": "ephemeral", "ttl": ttl}, or None if no system prompt
+    """
+    if not system_prompt:
+        return None
+    
+    cache_manager = get_cache_manager(claude_client)
+    return cache_manager.get_cache_control_config(
+        prompt_type=prompt_type,
+        system_prompt=system_prompt,
+        ttl=ttl
+    )
 

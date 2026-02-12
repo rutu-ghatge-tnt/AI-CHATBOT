@@ -90,11 +90,8 @@ class OCRProcessor:
     async def extract_ingredients_with_claude(self, raw_text: str) -> List[str]:
         """Use Claude API to extract and format INCI names from raw text"""
         try:
-            # Prepare prompt for Claude
-            prompt = f"""
-You are an expert cosmetic ingredient analyst. Your task is to extract INCI (International Nomenclature of Cosmetic Ingredients) names from the following raw text extracted from a product label or document.
-
-Please analyze the text and return ONLY a JSON array of INCI names in the exact format shown below.
+            # System prompt for caching
+            system_prompt = """You are an expert cosmetic ingredient analyst. Your task is to extract INCI (International Nomenclature of Cosmetic Ingredients) names from raw text extracted from a product label or document.
 
 Requirements:
 1. Extract only valid INCI ingredient names
@@ -104,25 +101,40 @@ Requirements:
 5. If no valid ingredients found, return empty array []
 
 Example output format:
-["Water", "Glycerin", "Sodium Hyaluronate", "Hyaluronic Acid"]
+["Water", "Glycerin", "Sodium Hyaluronate", "Hyaluronic Acid"]"""
 
-Raw text to analyze:
+            # User prompt with dynamic content
+            user_prompt = f"""Raw text to analyze:
 {raw_text}
 
 Return only the JSON array:"""
 
+            # Get cache_control for prompt caching to reduce token costs
+            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+            cache_control = get_cache_control_for_prompt(
+                system_prompt=system_prompt,
+                prompt_type="ocr_ingredient_extraction",
+                claude_client=self.claude_client,
+                ttl="1h"
+            )
+
             # Call Claude API
-            response = self.claude_client.messages.create(
-                model=CLAUDE_MODEL if CLAUDE_MODEL else (os.getenv("CLAUDE_MODEL") or os.getenv("MODEL_NAME") or "claude-sonnet-4-5-20250929"),
-                max_tokens=4096,
-                temperature=0.1,
-                messages=[
+            api_params = {
+                "model": CLAUDE_MODEL if CLAUDE_MODEL else (os.getenv("CLAUDE_MODEL") or os.getenv("MODEL_NAME") or "claude-sonnet-4-5-20250929"),
+                "max_tokens": 4096,
+                "temperature": 0.1,
+                "system": system_prompt,
+                "messages": [
                     {
                         "role": "user",
-                        "content": prompt
+                        "content": user_prompt
                     }
                 ]
-            )
+            }
+            if cache_control:
+                api_params["cache_control"] = cache_control
+            
+            response = self.claude_client.messages.create(**api_params)
             
             # Extract response content
             claude_response = response.content[0].text.strip()

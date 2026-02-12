@@ -937,16 +937,29 @@ REFORMATTED CAUTIONS:"""
                     if cautions:
                         print(f"   - {ing}: {len(cautions)} caution(s)")
             
+            # Get cache_control for prompt caching to reduce token costs
+            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+            cache_control = get_cache_control_for_prompt(
+                system_prompt=SYSTEM_PROMPT,
+                prompt_type="formulation_report",
+                claude_client=claude_client,
+                ttl="1h"
+            )
+            
             # Use Claude API to generate report
-            message = claude_client.messages.create(
-                model=claude_model,
-                max_tokens=4096,
-                temperature=0.1,
-                system=SYSTEM_PROMPT,
-                messages=[
+            api_params = {
+                "model": claude_model,
+                "max_tokens": 4096,
+                "temperature": 0.1,
+                "system": SYSTEM_PROMPT,
+                "messages": [
                     {"role": "user", "content": user_prompt}
                 ]
-            )
+            }
+            if cache_control:
+                api_params["cache_control"] = cache_control
+            
+            message = claude_client.messages.create(**api_params)
             report_text = message.content[0].text
             report_text = clean_ai_response(report_text)
             
@@ -1364,15 +1377,28 @@ async def generate_report(
             # Regenerate with Claude
             if claude_client:
                 try:
-                    retry_message = claude_client.messages.create(
-                        model=claude_model,
-                        max_tokens=4096,
-                        temperature=0.1,
-                        system=SYSTEM_PROMPT,
-                        messages=[
+                    # Get cache_control for prompt caching (reuses same system prompt)
+                    from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+                    cache_control = get_cache_control_for_prompt(
+                        system_prompt=SYSTEM_PROMPT,
+                        prompt_type="formulation_report",
+                        claude_client=claude_client,
+                        ttl="1h"
+                    )
+                    
+                    retry_api_params = {
+                        "model": claude_model,
+                        "max_tokens": 4096,
+                        "temperature": 0.1,
+                        "system": SYSTEM_PROMPT,
+                        "messages": [
                             {"role": "user", "content": retry_prompt}
                         ]
-                    )
+                    }
+                    if cache_control:
+                        retry_api_params["cache_control"] = cache_control
+                    
+                    retry_message = claude_client.messages.create(**retry_api_params)
                     report_text = retry_message.content[0].text
                 except Exception as e:
                     error_msg = str(e)
