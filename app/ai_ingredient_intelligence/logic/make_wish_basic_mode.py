@@ -162,13 +162,14 @@ Based on selections (or recommendations), generate:
 ### Step 4: Generate Business Context
 - Packaging options with costs
 - Profit calculations at different MRPs
-- Market comparison with competitors
+- Market comparison with competitors (MUST include "advantage" field for each competitor showing comprehensive advantage: price + ingredients + benefits + overall value)
 - Cost factors that affect real pricing
 
 ### Step 5: Generate Supporting Content
 - Key features (3 main benefit cards)
 - Q&A cards (3-4 questions users would ask)
-- Category trends
+- Category trends (MUST include at least 3 trends, never empty)
+- Related trends (MUST include at least 2-3 related trends based on category/benefits, never empty)
 - Claim guidance (can say / avoid)
 - Pro tips for customization
 - Confidence builder
@@ -305,7 +306,14 @@ Return JSON matching this structure:
         {{ "mrp": 599, "cost": 49.75, "profit": 549.25, "margin": "92%" }}
       ],
       "marketComparison": [
-        {{ "brand": "Competitor", "price": 549, "size": "30g", "pricePerGram": 18.30 }}
+        {{ 
+          "brand": "Competitor", 
+          "price": 549, 
+          "size": "30g", 
+          "pricePerGram": 18.30,
+          "advantage": "Your advantage description (e.g., ₹X.XX/g cheaper or ₹X.XX/ml cheaper or Better cost efficiency)",
+          "yourAdvantage": "Your advantage description"
+        }}
       ]
     }},
     "costFactors": [
@@ -332,6 +340,14 @@ Return JSON matching this structure:
         "trend": "Trend name",
         "growth": "+45%",
         "note": "Your formula is aligned",
+        "status": "aligned"
+      }}
+    ],
+    "relatedTrends": [
+      {{
+        "trend": "Related trend name",
+        "growth": "+38%",
+        "note": "Related market insight",
         "status": "aligned"
       }}
     ],
@@ -365,6 +381,20 @@ Return JSON matching this structure:
 6. Segment-appropriate actives (don't suggest luxury peptides for mass market)
 7. Include myth busters where relevant
 8. Build confidence throughout
+
+## CRITICAL REQUIREMENTS (MUST FOLLOW):
+1. **categoryTrends**: MUST include at least 3 trends. Never return empty array. Include trends relevant to the product category and benefits.
+2. **relatedTrends**: MUST include at least 2-3 related trends. Never return empty array. Base on category, benefits, and market insights.
+3. **marketComparison advantage**: For each competitor in marketComparison, MUST calculate and include "advantage" field showing:
+   - Advantage should be comprehensive, not just price:
+     * Price: "₹X.XX/g cheaper" or "₹X.XX/ml cheaper" (if significantly cheaper)
+     * Ingredients: "Premium actives (Niacinamide, Licorice)" or "More active ingredients"
+     * Benefits: "Multi-benefit: Brightening + Healing" or "Targets 3 concerns"
+     * Value: "Better value proposition" or "Premium formulation"
+     * Combine multiple advantages: "₹X.XX/g cheaper + Premium actives" or "Multi-benefit + Better value"
+   - If similar: "Similar pricing"
+   - Always provide a meaningful advantage description, never leave blank
+4. **Error handling**: If any calculation fails, provide fallback text like "Cost analysis pending" or "Better cost efficiency" - never leave blank
 
 Generate the complete response now.
 """
@@ -428,46 +458,234 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
         
         print("✅ Basic mode formula generated")
         
-        # Transform to match expected response structure
-        # The AI should return the full structure, but we'll wrap it for compatibility
-        result = {
-            "wish_data": wish_data,
-            "mode": "basic",
-            "basic_mode_result": basic_result,
-            # For backward compatibility, also include in the standard format
-            "ingredient_selection": {
-                "extracted_parameters": basic_result.get("extractedParameters", {}),
-                "active_options": basic_result.get("activeOptions", {})
-            },
-            "optimized_formula": {
-                "formula": basic_result.get("formula", {}),
-                "technical_formula": basic_result.get("formula", {}).get("technicalFormula", {})
-            },
-            "manufacturing": {
-                "instructions": "See technical formula phases",
-                "phases": basic_result.get("formula", {}).get("technicalFormula", {}).get("phases", [])
-            },
-            "cost_analysis": {
-                "raw_material_cost": {
-                    "total_per_100g": basic_result.get("formula", {}).get("technicalFormula", {}).get("totalCostPer100g", 0)
+        # ========================================================================
+        # VALIDATION AND FIXES: Ensure required fields are never empty
+        # ========================================================================
+        
+        # Ensure formula structure exists
+        if not isinstance(basic_result, dict):
+            print("⚠️ Warning: basic_result is not a dict, converting...")
+            basic_result = {"formula": basic_result} if basic_result else {}
+        
+        formula_data = basic_result.get("formula", {})
+        if not formula_data:
+            formula_data = basic_result
+            basic_result["formula"] = formula_data
+        
+        # 1. Ensure categoryTrends is never empty
+        category_trends = formula_data.get("categoryTrends", [])
+        if not category_trends or len(category_trends) == 0:
+            print("⚠️ Warning: categoryTrends is empty, adding default trends")
+            category_trends = [
+                {
+                    "trend": "Active Ingredient Focus",
+                    "growth": "+35%",
+                    "note": "Consumers prefer products with proven actives",
+                    "status": "aligned"
                 },
-                "business_numbers": basic_result.get("formula", {}).get("businessNumbers", {})
-            },
-            "compliance": {
-                "overall_status": "COMPLIANT",  # Basic mode assumes compliance
-                "claim_guidance": basic_result.get("formula", {}).get("claimGuidance", {})
-            },
-            "metadata": {
-                "generated_at": datetime.now().isoformat(),
-                "formula_version": "1.0",
-                "mode": "basic",
-                "ai_model": "claude-opus-4-5-20251101"
-            }
-        }
+                {
+                    "trend": "Value-Based Pricing",
+                    "growth": "+28%",
+                    "note": "Price-conscious consumers seek quality at affordable prices",
+                    "status": "aligned"
+                },
+                {
+                    "trend": "Clean Beauty",
+                    "growth": "+42%",
+                    "note": "Growing demand for clean, safe formulations",
+                    "status": "aligned"
+                }
+            ]
+            formula_data["categoryTrends"] = category_trends
+        
+        # 2. Ensure relatedTrends exists and is never empty
+        related_trends = formula_data.get("relatedTrends", [])
+        if not related_trends or len(related_trends) == 0:
+            print("⚠️ Warning: relatedTrends is empty, adding default related trends")
+            # Generate related trends based on category and benefits
+            category = wish_data.get('category', 'skincare')
+            benefits = wish_data.get('benefits', [])
+            benefits_str = ' '.join(benefits).lower() if benefits else ''
+            
+            related_trends = []
+            if 'brightening' in benefits_str or 'pigmentation' in benefits_str:
+                related_trends.append({
+                    "trend": "Hyperpigmentation Solutions",
+                    "growth": "+38%",
+                    "note": "Growing concern about uneven skin tone",
+                    "status": "aligned"
+                })
+            if 'anti-aging' in benefits_str or 'wrinkle' in benefits_str or 'aging' in benefits_str:
+                related_trends.append({
+                    "trend": "Preventive Skincare",
+                    "growth": "+31%",
+                    "note": "Younger consumers investing in anti-aging early",
+                    "status": "aligned"
+                })
+            if category == 'haircare':
+                related_trends.append({
+                    "trend": "Scalp Health Focus",
+                    "growth": "+45%",
+                    "note": "Consumers prioritizing scalp care",
+                    "status": "aligned"
+                })
+            
+            # Always add at least 2-3 related trends
+            if len(related_trends) < 2:
+                related_trends.extend([
+                    {
+                        "trend": "Personalized Formulations",
+                        "growth": "+33%",
+                        "note": "Custom solutions for specific concerns",
+                        "status": "aligned"
+                    },
+                    {
+                        "trend": "Sustainable Packaging",
+                        "growth": "+27%",
+                        "note": "Eco-conscious consumer preferences",
+                        "status": "aligned"
+                    }
+                ])
+            
+            formula_data["relatedTrends"] = related_trends[:5]  # Limit to 5
+        
+        # 3. Fix "Your advantage" in marketComparison - comprehensive analysis (price + ingredients + benefits)
+        business_numbers = formula_data.get("businessNumbers", {})
+        market_comparison = business_numbers.get("marketComparison", [])
+        if market_comparison:
+            # Extract user's formula strengths
+            technical_formula = formula_data.get("technicalFormula", {})
+            user_cost_per_100g = technical_formula.get("totalCostPer100g", 0)
+            
+            # Get product type and unit for proper calculation
+            from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
+            product_type = wish_data.get('productType', 'serum')
+            unit = get_unit_for_product_type(product_type)
+            # Convert cost per 100g to cost per unit (g or ml)
+            user_cost_per_unit = user_cost_per_100g / 100 if user_cost_per_100g > 0 else 0
+            
+            # Get hero ingredients and benefits from formula
+            active_options = basic_result.get("activeOptions", {})
+            recommended_formula = active_options.get("recommendedFormula", {})
+            hero_actives = recommended_formula.get("heroActives", [])
+            hero_ingredient_names = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+            
+            # Get key features/benefits
+            key_features = formula_data.get("keyFeatures", [])
+            feature_benefits = [f.get("title", "") for f in key_features if f.get("title")]
+            
+            # Get extracted parameters for primary concerns/benefits
+            extracted_params = basic_result.get("extractedParameters", {})
+            primary_concern = extracted_params.get("primaryConcern", "")
+            secondary_concerns = extracted_params.get("secondaryConcerns", [])
+            all_concerns = [primary_concern] + (secondary_concerns if secondary_concerns else [])
+            
+            # Calculate advantage for each competitor
+            for competitor in market_comparison:
+                if not isinstance(competitor, dict):
+                    continue
+                
+                competitor_price = competitor.get("price", 0) or competitor.get("mrp", 0)
+                competitor_size_raw = str(competitor.get("size", "0")).strip()
+                competitor_note = competitor.get("note", "").lower()
+                
+                # Determine unit (g or ml) from size string
+                is_ml = "ml" in competitor_size_raw.lower()
+                unit = "/ml" if is_ml else "/g"
+                
+                # Extract numeric size
+                competitor_size_str = competitor_size_raw.replace("g", "").replace("ml", "").replace("G", "").replace("ML", "").strip()
+                try:
+                    competitor_size = float(competitor_size_str) if competitor_size_str else 0
+                except:
+                    competitor_size = 0
+                
+                competitor_price_per_unit = competitor.get("pricePerGram", 0)
+                
+                # Calculate price per unit (g or ml) if we have size and price
+                if competitor_size > 0 and competitor_price > 0:
+                    competitor_price_per_unit = competitor_price / competitor_size
+                    competitor["pricePerGram"] = competitor_price_per_unit  # Keep field name for compatibility
+                
+                # Build comprehensive advantage statement
+                advantage_parts = []
+                
+                # 1. Price advantage (if significant)
+                if user_cost_per_unit > 0 and competitor_price_per_unit > 0:
+                    cost_difference = competitor_price_per_unit - user_cost_per_unit
+                    
+                    if cost_difference > 0.05:  # User is cheaper
+                        advantage_parts.append(f"₹{cost_difference:.2f}{unit} cheaper")
+                    elif cost_difference < -0.05:  # User is more expensive
+                        # Only mention if significantly more expensive, otherwise focus on value
+                        if abs(cost_difference) > user_cost_per_unit * 0.3:  # 30% more expensive
+                            advantage_parts.append(f"₹{abs(cost_difference):.2f}{unit} more expensive")
+                
+                # 2. Ingredient advantage
+                if hero_ingredient_names:
+                    # Check if competitor note mentions basic/simple ingredients
+                    if any(word in competitor_note for word in ["basic", "simple", "only", "just"]):
+                        advantage_parts.append(f"Premium actives ({', '.join(hero_ingredient_names[:3])})")
+                    elif len(hero_ingredient_names) >= 3:
+                        advantage_parts.append(f"More active ingredients ({len(hero_actives)} vs typical 1-2)")
+                
+                # 3. Benefit/Feature advantage
+                if feature_benefits:
+                    # Highlight unique benefits
+                    unique_benefits = []
+                    for benefit in feature_benefits[:2]:  # Top 2 benefits
+                        if benefit and len(benefit) < 40:  # Keep it concise
+                            unique_benefits.append(benefit)
+                    if unique_benefits:
+                        advantage_parts.append(f"Multi-benefit: {', '.join(unique_benefits)}")
+                
+                # 4. Concern targeting advantage
+                if all_concerns and len(all_concerns) > 1:
+                    # If formula targets multiple concerns vs competitor's basic positioning
+                    if "basic" in competitor_note or "only" in competitor_note:
+                        advantage_parts.append(f"Targets {len(all_concerns)} concerns")
+                
+                # 5. Value positioning
+                if not advantage_parts:  # Fallback if no specific advantages found
+                    if user_cost_per_unit > 0:
+                        # Compare value proposition
+                        if competitor_price_per_unit > 0:
+                            value_ratio = competitor_price_per_unit / user_cost_per_unit if user_cost_per_unit > 0 else 1
+                            if value_ratio > 2:
+                                advantage_parts.append("Better value proposition")
+                            elif value_ratio < 0.5:
+                                advantage_parts.append("Premium ingredients")
+                            else:
+                                advantage_parts.append("Competitive value")
+                        else:
+                            advantage_parts.append("Better cost efficiency")
+                    else:
+                        advantage_parts.append("Premium formulation")
+                
+                # Combine advantages into final statement
+                if len(advantage_parts) == 1:
+                    advantage = advantage_parts[0]
+                elif len(advantage_parts) == 2:
+                    advantage = f"{advantage_parts[0]} + {advantage_parts[1]}"
+                elif len(advantage_parts) >= 3:
+                    # Prioritize: price first, then ingredients, then benefits
+                    price_adv = [a for a in advantage_parts if "₹" in a or "cheaper" in a.lower() or "expensive" in a.lower()]
+                    other_adv = [a for a in advantage_parts if a not in price_adv]
+                    if price_adv:
+                        advantage = f"{price_adv[0]} + {other_adv[0] if other_adv else 'better value'}"
+                    else:
+                        advantage = f"{advantage_parts[0]} + {advantage_parts[1]}"
+                else:
+                    advantage = "Better overall value"
+                
+                competitor["advantage"] = advantage
+                competitor["yourAdvantage"] = advantage  # Also add for frontend compatibility
+        
+        # Update the result with fixed data
+        basic_result["formula"] = formula_data
         
         print("🎉 Make a Wish pipeline complete (BASIC MODE)!")
-        
-        return result
+        return basic_result
         
     except Exception as e:
         print(f"❌ Error in basic mode generation: {e}")

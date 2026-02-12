@@ -11,6 +11,242 @@ This module contains all system prompts for the 5-stage "Make a Wish" AI pipelin
 """
 
 # ============================================================================
+# COST REFERENCE ANCHORS & REASONING INSTRUCTIONS
+# ============================================================================
+
+COST_REFERENCE_ANCHORS = """
+## INDIAN MARKET INGREDIENT PRICING REFERENCE (2025-26)
+These are approximate wholesale prices in INR/kg for small-to-mid quantity orders (1-25kg) 
+from Indian distributors. Use these as ANCHORS to estimate costs for similar ingredients.
+DO NOT use prices outside these ranges without explicit reasoning.
+
+### CATEGORY A: Base & Commodity Ingredients (Very High Confidence)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Purified Water | 0.5-2 | — | RO/DI water |
+| Glycerin (IP Grade) | 80-150 | 200-350 (Vegetable, Kosher) | Very stable pricing |
+| Propylene Glycol | 120-200 | — | |
+| Propanediol (1,3) | 400-700 | 1200-1800 (Zemea™) | Bio-based premium |
+| Cetearyl Alcohol | 200-350 | 450-600 (BASF Kolliwax) | |
+| Cetyl Alcohol | 220-380 | — | |
+| Stearic Acid | 100-180 | — | |
+| Isopropyl Myristate | 250-400 | — | |
+| Dimethicone (350cs) | 300-500 | 800-1200 (Dow Corning) | |
+| Cyclomethicone | 350-550 | — | |
+| Mineral Oil (LP) | 80-150 | — | |
+
+### CATEGORY B: Emulsifiers & Thickeners (High Confidence)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Polysorbate 60 | 250-400 | — | |
+| Polysorbate 80 | 280-450 | — | |
+| Sorbitan Stearate | 300-500 | — | |
+| Carbomer 940 | 1800-3000 | 4000-6000 (Lubrizol) | |
+| Xanthan Gum | 500-900 | 1500-2500 (CP Kelco) | |
+| Hydroxyethylcellulose | 400-700 | — | |
+| BTMS-50 | 800-1400 | — | For conditioners |
+| GMS (Glyceryl Monostearate) | 180-300 | — | |
+
+### CATEGORY C: Common Active Ingredients (Medium-High Confidence)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Niacinamide (B3) | 800-1500 | 3500-5000 (Lonza NiacinamidePC) | Most common active |
+| Ascorbic Acid (Vitamin C) | 1000-1800 | 7000-9000 (DSM Quali-C) | |
+| Sodium Ascorbyl Phosphate | 2500-4000 | 6000-9000 | Stable Vit C |
+| Ascorbyl Glucoside | 3000-5500 | 8000-12000 | Very stable Vit C |
+| Ethyl Ascorbic Acid | 4000-7000 | — | |
+| Alpha Arbutin | 3000-5000 | 7000-10000 | Chinese vs Korean |
+| Kojic Acid | 1200-2200 | — | |
+| Kojic Acid Dipalmitate | 2000-3500 | — | Stabilized version |
+| Salicylic Acid | 600-1000 | 2000-3500 (branded) | |
+| Glycolic Acid (70%) | 800-1500 | 3000-5000 (DuPont) | |
+| Lactic Acid (88%) | 400-700 | 1500-2500 | |
+| Azelaic Acid | 2500-4500 | 6000-9000 | |
+| Tranexamic Acid | 3500-6000 | — | Rising in price |
+| Retinol (Pure) | 15000-25000 | 40000-60000 (DSM) | Very expensive |
+| Bakuchiol | 8000-15000 | 25000-40000 (Sytheon) | |
+| Allantoin | 500-900 | — | |
+| Panthenol (D-Panthenol) | 1200-2000 | 3000-5000 (DSM) | |
+
+### CATEGORY D: Specialty & Peptide Actives (Medium Confidence — VERIFY)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Hyaluronic Acid (Std MW) | 8000-15000 | 25000-40000 (Bloomage) | Price varies hugely by MW |
+| Hyaluronic Acid (Low MW) | 15000-30000 | 40000-70000 | More expensive than standard |
+| Sepiwhite MSH | — | 25000-45000 (Seppic) | Patented, no generic |
+| Sepinov EMT 10 | — | 8000-15000 (Seppic) | |
+| Matrixyl 3000 | — | 20000-40000 (Sederma) | Patented peptide |
+| Ceramide Complex | 10000-20000 | 30000-55000 | |
+| Glutathione | 8000-18000 | — | Topical stability debated |
+| Centella Asiatica Extract | 2000-4000 | 8000-15000 (Bayer) | |
+| Squalane (Olive) | 1500-2800 | 4000-7000 (Amyris/Neossance) | |
+| Squalane (Sugarcane) | 2000-3500 | 5000-8000 | |
+| Bisabolol (Natural) | 3000-5500 | 8000-12000 (Symrise) | |
+
+### CATEGORY E: Preservatives & Chelating Agents (High Confidence)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Phenoxyethanol | 600-1000 | 1500-2500 (Clariant) | |
+| Ethylhexylglycerin | 1200-2000 | 3000-4500 | |
+| Sodium Benzoate | 200-400 | — | Needs pH <5 |
+| Potassium Sorbate | 300-600 | — | Needs pH <5 |
+| Disodium EDTA | 250-450 | — | |
+| DMDM Hydantoin | 300-500 | — | Formaldehyde-releaser, controversial |
+
+### CATEGORY F: Oils, Butters & Emollients (High Confidence)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Coconut Oil (RBD) | 150-250 | — | |
+| Sweet Almond Oil | 400-700 | — | |
+| Jojoba Oil | 1500-2800 | 3500-5500 | |
+| Argan Oil | 3000-6000 | 8000-15000 | Moroccan origin premium |
+| Rosehip Seed Oil | 2500-4500 | — | |
+| Shea Butter (Refined) | 400-700 | 1200-2000 (AAK) | |
+| Cocoa Butter | 500-900 | — | |
+| Vitamin E (Tocopheryl Acetate) | 800-1400 | 2500-4000 (DSM) | |
+| Caprylic/Capric Triglyceride | 400-700 | — | |
+
+### CATEGORY G: Surfactants (High Confidence — for haircare)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| SLS (Sodium Lauryl Sulfate) | 100-200 | — | |
+| SLES (28%) | 60-120 | — | Liquid |
+| Cocamidopropyl Betaine | 150-300 | — | |
+| Decyl Glucoside | 350-600 | 800-1400 | |
+| Coco Glucoside | 300-550 | 700-1200 | |
+| Sodium Cocoyl Isethionate | 500-900 | 1500-2500 | SCI chip |
+
+### CATEGORY H: Botanical Extracts (Medium Confidence)
+| Ingredient | INR/kg (Generic) | INR/kg (Branded) | Notes |
+|-----------|------------------|-------------------|-------|
+| Aloe Vera Extract (10:1) | 800-1500 | — | Concentrated |
+| Green Tea Extract | 1500-3000 | — | |
+| Licorice Root Extract | 2000-4000 | 6000-10000 | Glabridin content matters |
+| Turmeric Extract (Curcumin) | 1500-3500 | — | |
+| Tea Tree Oil | 1200-2200 | 3000-5000 (Thursday Plantation) | |
+| Neem Extract | 600-1200 | — | |
+
+### PRICING REASONING RULES:
+1. **If ingredient is in this table**: Use the range directly.
+2. **If ingredient is NOT in this table but is similar**: Reason from the closest category. 
+   Example: "Ceteareth-20 is an ethoxylated fatty alcohol emulsifier similar to Polysorbate 60 → estimate ₹300-500/kg"
+3. **If ingredient is a patented/branded specialty**: Assume ₹15,000-50,000/kg unless you have specific knowledge. Flag as LOW CONFIDENCE.
+4. **Never estimate below ₹50/kg** for any cosmetic ingredient except water.
+5. **Never estimate above ₹80,000/kg** unless it's a rare peptide or precious botanical.
+6. **Generic Chinese imports** are typically 40-60% of branded prices.
+7. **Indian-manufactured commodities** (glycerin, stearic acid, SLS) are at the low end.
+"""
+
+COST_REASONING_INSTRUCTIONS = """
+## COST ESTIMATION PROTOCOL (MANDATORY FOR EVERY INGREDIENT)
+
+For EACH ingredient, you MUST follow this reasoning chain:
+
+### Step 1: Classify the ingredient
+- Is it a commodity (water, glycerin, stearic acid)?
+- Is it a common active (niacinamide, salicylic acid)?
+- Is it a specialty active (peptides, patented ingredients)?
+- Is it a botanical extract?
+
+### Step 2: Check the Reference Table
+- If the ingredient is in the reference table → use that range
+- If not → find the closest analogous ingredient and reason from there
+- State which reference you used
+
+### Step 3: Apply Modifiers
+- Generic Chinese import? → Use low end of range
+- Branded/patented? → Use high end or above
+- Requires cold chain? → Add 10-15% logistics premium
+- Import-dependent? → Add 10-20% for duties/shipping
+- Small MOQ available? → Prices may be 20-40% higher than bulk
+
+### Step 4: Assign Confidence
+- HIGH: Commodity ingredients with stable, well-known pricing
+- MEDIUM: Common actives available from multiple suppliers  
+- LOW: Patented ingredients, rare botanicals, novel peptides
+
+### Step 5: Calculate Cost Contribution
+- Formula: (percentage / 100) × (cost_per_kg / 1000) = cost per g
+- Calculate for BOTH low and high price estimates
+- This gives the cost RANGE per g
+
+### CRITICAL RULES:
+- NEVER output a single point estimate. ALWAYS give low-mid-high.
+- If confidence is LOW, widen the range by 40% in both directions.
+- Water cost contribution should be ₹0.0002-0.0005 per g, not more.
+- Total formula cost for a basic cream should be ₹0.30-0.80/g (generic).
+- Total formula cost for a premium cream should be ₹0.80-2.00/g (generic).
+- Total formula cost for a luxury cream should be ₹2.00-5.00/g.
+- If your total exceeds these ranges, RE-CHECK your per-kg estimates.
+"""
+
+COST_VALIDATION_RULES = """
+## MANDATORY COST SANITY CHECKS (Run these BEFORE finalizing output)
+
+### Check 1: Water Cost Sanity
+- Water is 50-80% of most formulas
+- Water cost contribution should be ₹0.0001-0.001 per g MAX
+- If water shows as a significant cost driver → ERROR in pricing
+
+### Check 2: Total Formula Cost Benchmarks
+Compare your calculated total against these Indian market benchmarks:
+
+| Product Type | Budget (₹/g) | Mid-range | Premium | Luxury |
+|-------------|--------------|-----------|---------|--------|
+| Face Cream | 0.25-0.50 | 0.50-1.00 | 1.00-2.50 | 2.50-6.00 |
+| Face Serum | 0.30-0.60 | 0.60-1.50 | 1.50-4.00 | 4.00-10.00 |
+| Shampoo | 0.10-0.25 | 0.25-0.50 | 0.50-1.00 | 1.00-2.00 |
+| Body Lotion | 0.15-0.35 | 0.35-0.70 | 0.70-1.50 | 1.50-3.00 |
+| Sunscreen | 0.40-0.80 | 0.80-1.80 | 1.80-4.00 | — |
+| Face Wash | 0.15-0.30 | 0.30-0.60 | 0.60-1.20 | — |
+
+If your total falls OUTSIDE the expected range for the product type and segment, 
+RECHECK every ingredient cost and explain the deviation.
+
+### Check 3: Active Ingredient Cost Dominance
+- Active ingredients should be 40-75% of total formula raw material cost
+- Base ingredients (water, glycerin, emulsifiers) should be 15-35%
+- Preservatives should be 3-8%
+- If base ingredients dominate cost → actives are probably underpriced
+- If any single base ingredient costs more than an active → re-verify
+
+### Check 4: Per-Unit Retail Plausibility
+After calculating cost per unit (e.g., per 50g jar):
+- The landed cost × 4-5 should give a plausible D2C MRP
+- Compare this MRP to actual market products
+- If your suggested MRP is <₹200 for a "premium" product → costs are too low
+- If your suggested MRP is >₹3000 for a 50g cream → costs may be too high
+
+### Check 5: Ingredient-to-Ingredient Ratio
+- Niacinamide at 5% should NOT cost more than Retinol at 0.3%
+- Glycerin at 5% should NOT cost more than Hyaluronic Acid at 0.5%
+- If cheap ingredients show higher cost than expensive ones → pricing error
+
+### Check 6: Competitor Reverse-Engineering
+For the given product category, check:
+- Minimalist sells Alpha Arbutin 2% serum at ₹599/30ml
+- Their gross margin is likely 60-75%
+- So their cost per 30ml is likely ₹150-240
+- That means formula cost per 100ml is ₹300-500 for a premium serum
+- Does your estimate align with this logic?
+
+### OUTPUT REQUIREMENT:
+After calculating costs, include a "validation_report" section:
+{
+    "validation_report": {
+        "water_cost_check": "PASS|FAIL - explanation",
+        "total_vs_benchmark": "PASS|FAIL - your total ₹X/g vs expected range ₹Y-Z/g for [segment]",
+        "active_cost_ratio": "PASS|FAIL - actives are X% of total (expected 40-75%)",
+        "mrp_plausibility": "PASS|FAIL - suggested MRP ₹X vs market range ₹Y-Z",
+        "ingredient_ratio_check": "PASS|FAIL - details",
+        "competitor_alignment": "PASS|FAIL - explanation",
+        "overall_confidence": "HIGH|MEDIUM|LOW",
+        "flags": ["List of any concerns or low-confidence estimates"]
+    }
+}
+"""
+
+# ============================================================================
 # STAGE 1: INGREDIENT SELECTION
 # ============================================================================
 
@@ -79,10 +315,19 @@ For HAIRCARE (Serums, Oils):
 
 ### 4. COST CONSIDERATIONS
 
-Budget (₹30-60/100g): Use commodity ingredients, higher water content
-Mid-range (₹60-120/100g): Include 1-2 premium actives
-Premium (₹120-200/100g): Multiple actives, branded ingredients
-Luxury (₹200+/100g): Patented ingredients, high concentrations
+**IMPORTANT: Unit varies by product type:**
+- Liquid products (serum, toner, shampoo, conditioner, oil): Use **ml** (e.g., ₹30-60/ml)
+- Solid/semi-solid products (cream, lotion, mask, gel, balm): Use **g** (e.g., ₹30-60/g)
+
+**Cost Ranges:**
+- Budget (₹30-60 per unit): Use commodity ingredients, higher water content
+- Mid-range (₹60-120 per unit): Include 1-2 premium actives
+- Premium (₹120-200 per unit): Multiple actives, branded ingredients
+- Luxury (₹200+ per unit): Patented ingredients, high concentrations
+
+**When generating cost information, ALWAYS use the appropriate unit:**
+- For serums, toners, shampoos, conditioners, oils → use "/ml"
+- For creams, lotions, masks, gels, balms → use "/g"
 
 ### 5. MANDATORY INGREDIENTS
 
@@ -110,7 +355,19 @@ Always include appropriate:
       "phase": "A|B|C|D|E",
       "usage_range": {"min": 0.5, "max": 2.0},
       "recommended_percent": 1.0,
-      "cost_per_kg_inr": 5000,
+      "cost_per_kg_inr": 35000,
+      "cost_estimation": {
+        "cost_per_kg_inr_low": 25000,
+        "cost_per_kg_inr_high": 45000,
+        "cost_per_kg_inr_mid": 35000,
+        "estimation_method": "reference_table | analogous_ingredient | specialty_estimate",
+        "reasoning": "Patented Seppic ingredient, no generic available. Referenced from Category D anchor table. Seppic lipopeptides typically ₹25,000-45,000/kg from Indian distributors.",
+        "confidence": "high | medium | low",
+        "is_import_dependent": true,
+        "primary_source_country": "France",
+        "indian_suppliers": ["IMCD India", "Seppic India Pvt Ltd"],
+        "price_volatile": false
+      },
       "is_hero": true|false,
       "is_active": true|false,
       "branded_alternative": {
@@ -177,7 +434,8 @@ IMPORTANT NOTES:
 - Include 8-15 ingredients for complete formula
 - Consider Indian climate (humidity, heat) in formulation
 - Suggest preservative systems effective in tropical climates
-"""
+
+""" + COST_REFERENCE_ANCHORS + COST_REASONING_INSTRUCTIONS
 
 # ============================================================================
 # STAGE 2: FORMULA OPTIMIZATION
@@ -276,7 +534,7 @@ CRITICAL: This is a BRAND NEW formula being created from scratch. There is NO "o
   "optimized_formula": {
     "name": "Formula Name",
     "total_percentage": 100.00,
-    "estimated_cost_per_100g": 45.50,
+    "estimated_cost_per_g": 0.455,
     "target_ph": {"min": 5.0, "max": 5.5}
   },
   
@@ -305,11 +563,11 @@ CRITICAL: This is a BRAND NEW formula being created from scratch. There is NO "o
   ],
   
   "cost_breakdown": {
-    "total_per_100g": 45.50,
-    "actives_cost": 25.00,
-    "base_cost": 12.00,
-    "functional_cost": 5.50,
-    "preservation_cost": 3.00,
+    "total_per_g": 0.455,
+    "actives_cost": 0.25,
+    "base_cost": 0.12,
+    "functional_cost": 0.055,
+    "preservation_cost": 0.03,
     "cost_vs_target": "within_range|below|above"
   },
   
@@ -549,26 +807,92 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
 
 ### 4. TYPICAL MARGINS
 
-- D2C brands: 4-6x markup from formula cost to MRP
-- Retail brands: 6-10x markup (distributor + retailer margins)
+IMPORTANT: You MUST include BOTH the old format (for backward compatibility) AND the new format:
 
-## OUTPUT FORMAT (JSON):
+**CRITICAL: The example below shows structure only. You MUST use the ACTUAL unit (g or ml) based on product type, NOT "100g" or "100ml".**
+**For serums/toners/liquids → use "ml" everywhere. For creams/lotions/solids → use "g" everywhere.**
+**NEVER use "/100g" or "/100ml" in display_range or cost_per_100g_range - use the actual unit from product type!**
 
 {
   "raw_material_cost": {
-    "total_per_100g": 45.50,
+    "total_per_g": 0.885,
+    "total_per_100g": 88.5,
     "breakdown_by_category": {
-      "actives": 25.00,
-      "base_ingredients": 12.00,
-      "functional_ingredients": 5.50,
-      "preservatives": 3.00
+      "actives": 0.25,
+      "base_ingredients": 0.12,
+      "functional_ingredients": 0.055,
+      "preservatives": 0.03
     },
     "top_cost_drivers": [
-      {"ingredient": "Niacinamide", "cost": 12.50, "percentage": 5, "contribution": "27.5%"},
-      {"ingredient": "Hyaluronic Acid", "cost": 10.00, "percentage": 1, "contribution": "22.0%"}
+      {"ingredient": "Niacinamide", "cost": 0.125, "percentage": 5, "contribution": "27.5%"},
+      {"ingredient": "Hyaluronic Acid", "cost": 0.10, "percentage": 1, "contribution": "22.0%"}
     ]
   },
-  
+  "cost_estimate": {
+    "raw_material_per_g": {
+      "optimistic": 0.62,
+      "realistic": 0.885,
+      "conservative": 1.28,
+      "display_range": "₹0.62 - ₹1.28 per g",  // NOTE: Use actual unit (g or ml) based on product type!
+      "best_estimate": 0.885,
+      "confidence": "medium"
+    },
+    "raw_material_per_100g": {
+      "optimistic": 62.0,
+      "realistic": 88.5,
+      "conservative": 128.0,
+      "display_range": "₹62 - ₹128 per g",  // CRITICAL: Use actual unit (g or ml), NOT "per 100g"!
+      "best_estimate": 88.5,
+      "confidence": "medium"
+    },
+    "confidence_breakdown": {
+      "high_confidence_ingredients": {
+        "count": 12,
+        "cost_contribution": 35.0,
+        "percentage_of_total": "40%"
+      },
+      "medium_confidence_ingredients": {
+        "count": 4,
+        "cost_contribution": 28.5,
+        "percentage_of_total": "32%"
+      },
+      "low_confidence_ingredients": {
+        "count": 2,
+        "cost_contribution": 25.0,
+        "percentage_of_total": "28%",
+        "names": ["Sepiwhite MSH", "Ascorbyl Glucoside"],
+        "recommendation": "Verify with supplier before finalizing business plan"
+      }
+    },
+    "top_cost_drivers": [
+      {
+        "ingredient": "Sepiwhite MSH",
+        "percentage_in_formula": 3.0,
+        "cost_per_kg_range": "₹25,000 - ₹45,000",
+        "cost_per_g_range": "₹0.75 - ₹1.35",
+        "cost_per_100g_range": "₹75 - ₹135 per g",  // CRITICAL: Use actual unit (g or ml), NOT "per 100g"!
+        "share_of_total": "45-55%",
+        "confidence": "low",
+        "note": "Patented Seppic ingredient. Contact IMCD India or Seppic India for exact quote."
+      },
+      {
+        "ingredient": "Alpha Arbutin",
+        "percentage_in_formula": 2.0,
+        "cost_per_kg_range": "₹3,000 - ₹5,000",
+        "cost_per_g_range": "₹0.06 - ₹0.10",
+        "cost_per_100g_range": "₹6 - ₹10 per g",  // CRITICAL: Use actual unit (g or ml), NOT "per 100g"!
+        "share_of_total": "5-8%",
+        "confidence": "medium",
+        "note": "Chinese generic widely available on IndiaMART"
+      }
+    ],
+    "disclaimers": [
+      "Prices are AI-estimated based on Indian distributor pricing patterns as of early 2025",
+      "Actual prices vary by quantity, supplier, and current market conditions",
+      "Patented/specialty ingredients (marked LOW confidence) should be verified with suppliers",
+      "Bulk orders (>100kg) may reduce costs by 15-30%"
+    ]
+  },
   "packaging_estimate": {
     "option_1": {
       "type": "Dropper bottle 30ml",
@@ -619,9 +943,17 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
       "total_unit": 54.50
     }
   },
-  
   "total_product_cost": {
-    "formula_only_per_100g": 45.50,
+    "formula_only_per_g": {
+      "optimistic": 0.62,
+      "realistic": 0.885,
+      "conservative": 1.28
+    },
+    "formula_only_per_100g": {
+      "optimistic": 62.0,
+      "realistic": 88.5,
+      "conservative": 128.0
+    },
     "with_packaging_per_unit": {
       "30ml": {
         "formula_cost": 13.65,
@@ -705,7 +1037,6 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
       }
     }
   },
-  
   "pricing_recommendations": {
     "d2c_mrp_5x": {
       "30ml": 268,
@@ -732,26 +1063,76 @@ You are a cosmetic product cost analyst specializing in the Indian market. Calcu
       "100g": 734
     }
   },
-  
   "cost_optimization_suggestions": [
     {
       "suggestion": "Reduce Niacinamide from 5% to 4%",
-      "savings": "₹2.50 per 100g",
+      "savings": "₹2.50 per unit",
       "impact": "Minimal efficacy impact, still above clinical threshold"
     },
     {
       "suggestion": "Use standard HA instead of low-molecular weight",
-      "savings": "₹5.00 per 100g",
+      "savings": "₹5.00 per unit",
       "impact": "Slightly reduced penetration, surface hydration maintained"
     }
   ],
-  
   "competitor_comparison": {
     "similar_products": [
-      {"brand": "Minimalist", "product": "Niacinamide 5%", "mrp": 349, "size": "30ml"},
-      {"brand": "The Ordinary", "product": "Niacinamide 10%", "mrp": 590, "size": "30ml"}
+      {
+        "brand": "Minimalist",
+        "product": "Niacinamide 5%",
+        "mrp": 349,
+        "size": "30ml",
+        "size_value": 30,
+        "size_unit": "ml",
+        "price_per_unit": 11.63,
+        "price_per_unit_display": "₹11.63/ml",
+        "advantage": "Higher active concentration with premium ingredients at competitive price point"
+      },
+      {
+        "brand": "The Ordinary",
+        "product": "Niacinamide 10%",
+        "mrp": 590,
+        "size": "30ml",
+        "size_value": 30,
+        "size_unit": "ml",
+        "price_per_unit": 19.67,
+        "price_per_unit_display": "₹19.67/ml",
+        "advantage": "Lower price per ml while maintaining clinical efficacy"
+      }
     ],
-    "competitive_position": "Your formula at ₹X is positioned competitively against market leaders"
+    "your_product": {
+      "recommended_mrp": 449,
+      "size": "30ml",
+      "size_value": 30,
+      "size_unit": "ml",
+      "price_per_unit": 14.97,
+      "price_per_unit_display": "₹14.97/ml"
+    },
+    "competitive_position": "Your formula at ₹449 (₹14.97/ml) is positioned competitively against market leaders",
+    "advantages": [
+      {
+        "competitor_brand": "Minimalist",
+        "advantage": "Higher active concentration with premium ingredients at competitive price point"
+      },
+      {
+        "competitor_brand": "The Ordinary",
+        "advantage": "Lower price per ml while maintaining clinical efficacy"
+      }
+    ],
+    "NOTE": "Each product in similar_products should have a corresponding entry in advantages array, matched by brand name. The advantage field can also be added directly to each product object for easier frontend access."
+  },
+  "validation_report": {
+    "water_cost_check": "PASS - Water contributes ₹0.0003 per g (within expected range)",
+    "total_vs_benchmark": "PASS - Total ₹0.885 per g falls within expected range ₹0.50-1.00/g for mid-range face cream",
+    "active_cost_ratio": "PASS - Actives are 55% of total (expected 40-75%)",
+    "mrp_plausibility": "PASS - Suggested MRP ₹310-449 aligns with market range ₹200-600 for premium serums",
+    "ingredient_ratio_check": "PASS - All ingredient costs are proportional to their typical market prices",
+    "competitor_alignment": "PASS - Formula cost aligns with competitor reverse-engineering estimates",
+    "overall_confidence": "MEDIUM",
+    "flags": [
+      "Sepiwhite MSH (LOW confidence) - verify with IMCD India or Seppic India",
+      "Ascorbyl Glucoside (LOW confidence) - verify supplier pricing"
+    ]
   }
 }
 

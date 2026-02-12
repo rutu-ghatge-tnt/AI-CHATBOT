@@ -28,7 +28,7 @@ from app.ai_ingredient_intelligence.auth import verify_jwt_token
 # Import revised schemas
 from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     ParseWishRequest, ParseWishResponse,
-    MakeWishRequestRevised, MakeWishResponseRevised,
+    MakeWishRequestRevised, MakeWishResponseRevised, MakeWishBasicResponseRevised,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
@@ -46,7 +46,7 @@ from app.ai_ingredient_intelligence.logic.make_wish_config import (
     get_alternatives_for_ingredient, check_compatibility,
     generate_queue_number, EDIT_RULES
 )
-from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon
+from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon, replace_icon_emoji_values
 
 # Import AI prompts
 from app.ai_ingredient_intelligence.logic.make_wish_prompts_revised import (
@@ -59,14 +59,278 @@ from app.ai_ingredient_intelligence.logic.make_wish_prompts_revised import (
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     call_ai_with_claude, generate_formula_from_wish
 )
+from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_formula_basic_mode
+
+# Import trend analyzer for market intelligence
+from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
+from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+from app.ai_ingredient_intelligence.logic.market_trends_storage import (
+    get_stored_trend_data_for_ingredients
+)
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
-    wish_history_col, commercialization_requests_col, 
-    formula_versions_col, quotes_col, ingredient_alternatives_cache_col
+    wish_history_col, 
+    formula_versions_col, quotes_col, ingredient_alternatives_cache_col,
+    qms_queries_col  # Single source of truth for commercialization requests
 )
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish - Revised"])
+
+
+# ============================================================================
+# HELPER FUNCTION: FETCH TREND DATA FOR HERO INGREDIENTS
+# ============================================================================
+
+async def fetch_trend_data_for_ingredients(hero_ingredients: List[str]) -> Dict[str, Any]:
+    """
+    Fetch trend analysis and synthesis data for hero ingredients.
+    Runs internally as part of make-wish generation.
+    
+    First tries to fetch from stored database data (pre-fetched by scheduled script).
+    Falls back to API calls only if stored data is not available.
+    
+    Args:
+        hero_ingredients: List of hero ingredient names
+        
+    Returns:
+        Dictionary with trend data for each ingredient:
+        {
+            "ingredient_name": {
+                "analyze": {...},
+                "synthesis": {...}
+            }
+        }
+    """
+    trend_data = {}
+    
+    if not hero_ingredients:
+        return trend_data
+    
+    print(f"📊 Fetching trend data for {len(hero_ingredients)} hero ingredients...")
+    
+    # First, try to get stored data from database
+    print(f"   🔍 Checking stored trend data...")
+    stored_data = await get_stored_trend_data_for_ingredients(hero_ingredients, max_age_days=30)
+    
+    # Track which ingredients have stored data
+    ingredients_with_stored_data = []
+    ingredients_needing_api = []
+    
+    for ingredient in hero_ingredients:
+        if not ingredient or not ingredient.strip():
+            continue
+        
+        clean_ingredient = ingredient.split("(")[0].strip()
+        
+        # Check if we have stored data for this ingredient
+        stored_trend_data = stored_data.get(ingredient) or stored_data.get(clean_ingredient)
+        
+        if stored_trend_data:
+            print(f"   ✅ Found stored data for: {clean_ingredient}")
+            # Use stored data
+            trend_data[ingredient] = {
+                "analyze": stored_trend_data.get("analyze"),
+                "synthesis": stored_trend_data.get("synthesis"),
+                "consumer_intent": stored_trend_data.get("consumer_intent"),
+                "competitive": stored_trend_data.get("competitive"),
+                "regional": stored_trend_data.get("regional"),
+                "source": "stored"  # Mark as from stored data
+            }
+            ingredients_with_stored_data.append(ingredient)
+        else:
+            print(f"   ⚠️  No stored data found for: {clean_ingredient}")
+            ingredients_needing_api.append(ingredient)
+    
+    print(f"   📊 Summary: {len(ingredients_with_stored_data)} from storage, {len(ingredients_needing_api)} need API calls")
+    
+    # If all ingredients have stored data, return early
+    if not ingredients_needing_api:
+        print(f"✅ All trend data retrieved from storage")
+        return trend_data
+    
+    # For ingredients without stored data, skip API calls for now
+    # (API calls will be enabled once data document is provided)
+    print(f"   ⏭️  Skipping API calls for {len(ingredients_needing_api)} ingredients (no stored data available)")
+    print(f"   ℹ️  These ingredients will not have trend data until the scheduled script runs with data")
+    
+    # Mark ingredients without stored data as missing
+    for ingredient in ingredients_needing_api:
+        if not ingredient or not ingredient.strip():
+            continue
+        
+        clean_ingredient = ingredient.split("(")[0].strip()
+        print(f"   ⚠️  No trend data available for: {clean_ingredient}")
+        
+        trend_data[ingredient] = {
+            "analyze": None,
+            "synthesis": None,
+            "source": "missing",
+            "note": "No stored data available. Trend data will be available after scheduled script runs."
+        }
+    
+    # TODO: Once data document is provided, uncomment the API fallback code below
+    # This will enable real-time API calls as a fallback when stored data is not available
+    """
+    # Fallback to API calls for ingredients without stored data
+    analyzer = TrendAnalyzer()
+    
+    for ingredient in ingredients_needing_api:
+        if not ingredient or not ingredient.strip():
+            continue
+            
+        try:
+            # Clean ingredient name (remove parentheses and extra text)
+            clean_ingredient = ingredient.split("(")[0].strip()
+            
+            print(f"   Analyzing trends for: {clean_ingredient}")
+            
+            # Fetch trend analysis with retry logic and alternative queries
+            analyze_data = None
+            max_retries = 2
+            
+            # For ingredients with potentially low search volume (like UV filters), try alternative search queries
+            search_queries = [clean_ingredient]  # Start with original
+            
+            # Add context-based queries for better results
+            ingredient_lower = clean_ingredient.lower()
+            if any(term in ingredient_lower for term in ["octinoxate", "avobenzone", "octisalate", "octocrylene", "zinc oxide", "titanium dioxide"]):
+                # UV filters - try with sunscreen context
+                search_queries.append(f"{clean_ingredient} sunscreen")
+                search_queries.append(f"sunscreen with {clean_ingredient}")
+            
+            # Try each search query variant
+            for search_query in search_queries:
+                if analyze_data and isinstance(analyze_data, dict) and "error" not in analyze_data:
+                    break  # Success, stop trying
+                    
+                for retry in range(max_retries):
+                    try:
+                        analyze_data = await analyzer.analyze_ingredient_trend(
+                            search_query,
+                            time_range="today 12-m"
+                        )
+                        if analyze_data and "error" in analyze_data:
+                            error_msg = analyze_data.get('error', 'Unknown error')
+                            # If it's an "insufficient search volume" error, try next query variant
+                            if "insufficient search volume" in error_msg.lower() or "no timeline data" in error_msg.lower():
+                                if search_query != search_queries[-1]:  # Not the last query
+                                    print(f"   ⚠️ Low search volume for '{search_query}', trying alternatives...")
+                                    analyze_data = None
+                                    break  # Try next query
+                                else:
+                                    print(f"   ⚠️ All query variants failed - insufficient search volume for {clean_ingredient}")
+                                    analyze_data = None
+                                    break
+                            # Retry on temporary errors
+                            elif retry < max_retries - 1 and ("temporarily unavailable" in error_msg.lower() or "rate limit" in error_msg.lower()):
+                                print(f"   ⚠️ Temporary error for '{search_query}' (attempt {retry + 1}): {error_msg}")
+                                import asyncio
+                                await asyncio.sleep(2 * (retry + 1))  # Exponential backoff
+                                continue
+                            else:
+                                print(f"   ⚠️ Analyze error for '{search_query}': {error_msg}")
+                                analyze_data = None
+                                break  # Try next query
+                        elif analyze_data and isinstance(analyze_data, dict):
+                            # Success - got valid data
+                            if search_query != clean_ingredient:
+                                print(f"   ✅ Successfully analyzed using alternative query: '{search_query}'")
+                            else:
+                                print(f"   ✅ Successfully analyzed '{clean_ingredient}'")
+                            break
+                    except Exception as e:
+                        print(f"   ⚠️ Error analyzing '{search_query}' (attempt {retry + 1}): {str(e)}")
+                        if retry < max_retries - 1:
+                            import asyncio
+                            await asyncio.sleep(2 * (retry + 1))  # Exponential backoff
+                            continue
+                        analyze_data = None
+                
+                if analyze_data and isinstance(analyze_data, dict) and "error" not in analyze_data:
+                    break  # Success, stop trying queries
+            
+            # Fetch synthesis (includes analyze + consumer intent + competitive + regional)
+            synthesis_data = None
+            try:
+                # Get additional data for synthesis
+                consumer_intent_data = None
+                competitive_data = None
+                regional_data = None
+                
+                try:
+                    consumer_intent_data = await analyzer.analyze_consumer_intent(clean_ingredient)
+                    if consumer_intent_data and "error" in consumer_intent_data:
+                        consumer_intent_data = None
+                except:
+                    pass
+                
+                try:
+                    competitive_data = await analyzer.analyze_competitive_landscape(f"{clean_ingredient} serum")
+                    if competitive_data and "error" in competitive_data:
+                        competitive_data = None
+                except:
+                    pass
+                
+                try:
+                    regional_data = await analyzer.analyze_regional_demand(clean_ingredient, "today 12-m")
+                    if regional_data and "error" in regional_data:
+                        regional_data = None
+                except:
+                    pass
+                
+                # Synthesize all data
+                safe_analyze = analyze_data if (analyze_data and isinstance(analyze_data, dict) and "error" not in analyze_data) else None
+                safe_consumer = consumer_intent_data if (consumer_intent_data and isinstance(consumer_intent_data, dict) and "error" not in consumer_intent_data) else None
+                safe_competitive = competitive_data if (competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data) else None
+                safe_regional = regional_data if (regional_data and isinstance(regional_data, dict) and "error" not in regional_data) else None
+                
+                # Only synthesize if we have at least some data
+                has_data = safe_analyze or safe_consumer or safe_competitive or safe_regional
+                if has_data:
+                    synthesis_result = await synthesize_trend_insights(
+                        clean_ingredient,
+                        safe_analyze,
+                        safe_consumer,
+                        safe_competitive,
+                        safe_regional
+                    )
+                    if synthesis_result and synthesis_result.get("synthesis"):
+                        synthesis_data = synthesis_result.get("synthesis")
+                    elif synthesis_result and synthesis_result.get("error"):
+                        print(f"   ⚠️ Synthesis error for {clean_ingredient}: {synthesis_result.get('error')}")
+            except Exception as e:
+                print(f"   ⚠️ Error synthesizing {clean_ingredient}: {str(e)}")
+            
+            # Store trend data for this ingredient
+            # Only store if we have at least synthesis data (synthesis can work with partial data)
+            if synthesis_data or analyze_data:
+                trend_data[ingredient] = {
+                    "analyze": analyze_data,
+                    "synthesis": synthesis_data
+                }
+            else:
+                # If both failed, still store but with error info
+                print(f"   ⚠️ Both analyze and synthesis failed for {ingredient}")
+                trend_data[ingredient] = {
+                    "analyze": None,
+                    "synthesis": None,
+                    "error": "Failed to fetch trend data - API may be temporarily unavailable or ingredient has insufficient search volume"
+                }
+            
+        except Exception as e:
+            print(f"   ❌ Failed to fetch trend data for {ingredient}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            trend_data[ingredient] = {
+                "analyze": None,
+                "synthesis": None,
+                "error": f"Exception: {str(e)}"
+            }
+    """
+    
+    print(f"✅ Completed trend analysis for {len(trend_data)} ingredients")
+    return trend_data
 
 
 # ============================================================================
@@ -117,10 +381,14 @@ async def parse_natural_language_wish(
             if isinstance(parsed_result, dict):
                 print(f"   Keys: {list(parsed_result.keys())}")
                 if 'compatibility_issues' in parsed_result:
-                    print(f"   Compatibility Issues: {len(parsed_result['compatibility_issues'])}")
-                    if parsed_result['compatibility_issues']:
-                        first_issue = parsed_result['compatibility_issues'][0]
-                        print(f"   First Issue Keys: {list(first_issue.keys())}")
+                    issues = parsed_result['compatibility_issues']
+                    print(f"   Compatibility Issues: {len(issues) if isinstance(issues, list) else 'N/A'}")
+                    if isinstance(issues, list) and issues:
+                        first_issue = issues[0]
+                        if isinstance(first_issue, dict):
+                            print(f"   First Issue Keys: {list(first_issue.keys())}")
+                        else:
+                            print(f"   First Issue (not dict): {type(first_issue).__name__}")
             
         except Exception as ai_error:
             print(f"❌ AI parsing error: {ai_error}")
@@ -136,6 +404,9 @@ async def parse_natural_language_wish(
                 detail="Invalid parsing result from AI"
             )
         
+        # Set mode from request (basic or advanced, default advanced)
+        parsed_result["mode"] = request.mode
+
         # Auto-detect texture if not provided
         product_type_id = parsed_result.get("product_type", {}).get("id", "serum")
         auto_texture = get_texture_for_product_type(product_type_id)
@@ -145,14 +416,47 @@ async def parse_natural_language_wish(
             parsed_result["auto_texture"] = auto_texture
         
         # Check for additional compatibility issues
-        detected_ingredients = [ing.get("name", "") for ing in parsed_result.get("detected_ingredients", [])]
-        compatibility_issues = parsed_result.get("compatibility_issues", [])
-        
-        # Add any additional compatibility checks
+        detected_ingredients = [ing.get("name", "") if isinstance(ing, dict) else str(ing) for ing in parsed_result.get("detected_ingredients", [])]
+        def _normalize_compatibility_issue(item: Any) -> Dict[str, Any]:
+            """Map any issue dict (AI or check_compatibility) to CompatibilityIssue shape."""
+            if isinstance(item, str):
+                return {
+                    "severity": "warning",
+                    "title": item,
+                    "problem": item,
+                    "solution": None,
+                    "ingredients_involved": None,
+                }
+            if not isinstance(item, dict):
+                return {"severity": "warning", "title": None, "problem": None, "solution": None, "ingredients_involved": None}
+            # Map issue/ingredients (config) and problem/title/description (AI) to schema fields
+            text = (
+                item.get("problem")
+                or item.get("issue")
+                or item.get("title")
+                or item.get("description")
+                or ""
+            )
+            ingredients = item.get("ingredients_involved") or item.get("ingredients")
+            return {
+                "severity": item.get("severity") or "warning",
+                "title": item.get("title") or (text[:80] + "..." if len(text) > 80 else text) or None,
+                "problem": item.get("problem") or item.get("issue") or text or None,
+                "solution": item.get("solution"),
+                "ingredients_involved": ingredients,
+            }
+
+        raw_issues = parsed_result.get("compatibility_issues", [])
+        compatibility_issues = []
+        for item in raw_issues if isinstance(raw_issues, list) else []:
+            compatibility_issues.append(_normalize_compatibility_issue(item))
+
+        # Add any additional compatibility checks (normalize so response has problem/ingredients_involved)
         additional_issues = check_compatibility(detected_ingredients)
         for issue in additional_issues:
-            if issue not in compatibility_issues:
-                compatibility_issues.append(issue)
+            normalized = _normalize_compatibility_issue(issue)
+            if normalized not in compatibility_issues:
+                compatibility_issues.append(normalized)
         
         parsed_result["compatibility_issues"] = compatibility_issues
         
@@ -182,6 +486,7 @@ async def parse_natural_language_wish(
         print(f"   Product Type: {parsed_result.get('product_type', {}).get('name', 'unknown')}")
         print(f"   Ingredients Detected: {len(parsed_result.get('detected_ingredients', []))}")
         print(f"   Compatibility Issues: {len(compatibility_issues)}")
+        print(f"   Compatibility Issues: {compatibility_issues}")
         
         return ParseWishResponse(
             success=True,
@@ -205,7 +510,7 @@ async def parse_natural_language_wish(
 # STAGE 2: REVISED GENERATE ENDPOINT
 # ============================================================================
 
-@router.post("/generate-revised", response_model=MakeWishResponseRevised)
+@router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
     current_user: dict = Depends(verify_jwt_token)
@@ -213,11 +518,15 @@ async def generate_formula_revised(
     """
     Generate formula using revised flow with complexity selection.
     
+    Mode is request.mode (or parsed_data.mode fallback): 
+    - "basic": Simplified flow for layman users (active options, business context).
+    - "advanced" (default): Full multi-stage pipeline with complexity.
+    
     This endpoint creates a formula based on:
     - Parsed natural language wish
     - Selected complexity level (minimalist/classic/luxe)
     - Auto-detected texture
-    - Enhanced insights generation
+    - Enhanced insights generation (advanced mode only)
     """
     start_time = time.time()
     
@@ -239,8 +548,95 @@ async def generate_formula_revised(
             detail="complexity must be one of: minimalist, classic, luxe"
         )
     
+    mode = request.mode or request.parsed_data.mode
+    if mode not in ["basic", "advanced"]:
+        raise HTTPException(
+            status_code=400,
+            detail="mode must be either 'basic' or 'advanced'"
+        )
+    
     try:
-        print(f"🚀 Generating revised formula...")
+        # --- BASIC MODE: simplified flow for layman users ---
+        if mode == "basic":
+            # Cost range from complexity: minimalist 30-40, classic 40-60, luxe 60-100
+            cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
+            cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
+            wish_data = {
+                "category": request.parsed_data.category,
+                "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
+                "benefits": request.parsed_data.detected_benefits,
+                "exclusions": request.parsed_data.detected_exclusions,
+                "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
+                "texture": request.parsed_data.auto_texture.label,
+                "costMin": cost_min,
+                "costMax": cost_max,
+                "claims": request.claims or [],
+                "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
+                "additionalNotes": request.additional_notes or "",
+                "mode": "basic",
+            }
+            basic_result = await generate_formula_basic_mode(wish_data)
+            basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names (like advanced)
+            
+            # Extract hero ingredients for trend analysis
+            hero_ingredients = []
+            try:
+                # Try to get from activeOptions -> recommendedFormula -> heroActives
+                active_options = basic_result.get("activeOptions", {})
+                recommended_formula = active_options.get("recommendedFormula", {})
+                hero_actives = recommended_formula.get("heroActives", [])
+                hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+                
+                # Fallback to detected ingredients from wish_data
+                if not hero_ingredients:
+                    hero_ingredients = wish_data.get("heroIngredients", [])
+            except Exception as e:
+                print(f"⚠️ Error extracting hero ingredients: {e}")
+                hero_ingredients = wish_data.get("heroIngredients", [])
+            
+            # Fetch trend data for hero ingredients
+            trend_data = {}
+            if hero_ingredients:
+                try:
+                    trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
+                except Exception as e:
+                    print(f"⚠️ Error fetching trend data: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            formula_id = str(uuid.uuid4())
+            if not history_id:
+                try:
+                    history_doc = {
+                        "mode": "basic",
+                        "user_id": user_id,
+                        "name": name,
+                        "tag": request.tag,
+                        "notes": request.notes,
+                        "wish_text": request.wish_text,
+                        "parsed_data": request.parsed_data.model_dump(),
+                        "complexity": request.complexity,
+                        "formula_id": formula_id,
+                        "formula_data": None,
+                        "basic_mode_result": basic_result,
+                        "trend_data": trend_data,  # Store trend analysis data
+                        "status": "completed",
+                        "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                        "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                    }
+                    result = await wish_history_col.insert_one(history_doc)
+                    history_id = str(result.inserted_id)
+                    print(f"[AUTO-SAVE] Created history record (basic mode): {history_id}")
+                except Exception as e:
+                    print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
+            return MakeWishBasicResponseRevised(
+                success=True,
+                formula_id=formula_id,
+                history_id=history_id or formula_id
+            )
+        
+        # --- ADVANCED MODE: full multi-stage pipeline ---
+        print(f"🚀 Generating revised formula (ADVANCED MODE)...")
         print(f"   Complexity: {request.complexity}")
         print(f"   Product Type: {request.parsed_data.product_type.name}")
         
@@ -458,6 +854,22 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
             prompt_type="insights_generation"
         )
         
+        # Extract hero ingredients for trend analysis
+        hero_ingredients = [ing.get("name", "") or ing.get("inci", "") for ing in key_ingredients if ing.get("is_hero", False)]
+        if not hero_ingredients:
+            # Fallback to detected ingredients
+            hero_ingredients = [ing.name for ing in request.parsed_data.detected_ingredients]
+        
+        # Fetch trend data for hero ingredients
+        trend_data = {}
+        if hero_ingredients:
+            try:
+                trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
+            except Exception as e:
+                print(f"⚠️ Error fetching trend data: {e}")
+                import traceback
+                traceback.print_exc()
+        
         # Generate unique IDs
         formula_id = str(uuid.uuid4())
         if not history_id:
@@ -469,6 +881,7 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
             # Create new history record
             try:
                 history_doc = {
+                    "mode": "advanced",
                     "user_id": user_id,
                     "name": name,
                     "tag": request.tag,
@@ -478,7 +891,8 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
                     "complexity": request.complexity,
                     "formula_id": formula_id,
                     "formula_data": optimized_formula,
-                    # "insights": insights,
+                    "basic_mode_result": None,
+                    "trend_data": trend_data,  # Store trend analysis data
                     "status": "completed",
                     "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                     "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
@@ -489,40 +903,13 @@ Ensure percentages are realistic and formula is manufacturable. Return ONLY the 
             except Exception as e:
                 print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
         
-        # Build response
-        response_data = {
-            "success": True,
-            "formula_id": formula_id,
-            "history_id": history_id,
-            "formula": {
-                "name": optimized_formula["optimized_formula"]["name"],
-                "complexity": request.complexity,
-                "complexity_info": {
-                    "id": request.complexity,
-                    "name": complexity_config["name"],
-                    "icon": complexity_config.get("icon", "circle"),
-                    "description": complexity_config["description"],
-                    "highlights": complexity_config["highlights"],
-                    "marketing_angle": complexity_config["marketing_angle"]
-                },
-                "product_type": request.parsed_data.product_type.model_dump(),
-                "texture": request.parsed_data.auto_texture.model_dump(),
-                "phases": [],  # TODO: Convert from optimized format
-                "hero_ingredients": [],  # TODO: Convert from optimized format
-                "total_ingredients": len(ingredients_list),
-                "total_hero_actives": len(key_ingredients),
-                "available_claims": request.claims or [],
-                "exclusions_met": request.parsed_data.detected_exclusions
-            },
-            "insights": insights,
-            "manufacturing": manufacturing,
-            "compliance": compliance
-        }
-        
         processing_time = time.time() - start_time
         print(f"✅ Revised formula generated in {processing_time:.2f}s")
-        
-        return MakeWishResponseRevised(**response_data)
+        return MakeWishBasicResponseRevised(
+            success=True,
+            formula_id=formula_id,
+            history_id=history_id or formula_id
+        )
     
     except HTTPException:
         raise
@@ -738,7 +1125,11 @@ async def edit_formula(
                 detail="Formula not found or access denied"
             )
         
-        current_formula = history_item.get("formula_data", {})
+        parsed = history_item.get("parsed_data") or {}
+        if parsed.get("mode") == "basic" and history_item.get("basic_mode_result"):
+            current_formula = history_item.get("basic_mode_result") or {}
+        else:
+            current_formula = history_item.get("formula_data") or {}
         current_complexity = history_item.get("complexity", "classic")
         
         # Validate operations
@@ -1012,23 +1403,23 @@ async def submit_commercialization_request(
                 detail="Formula not found or access denied"
             )
         
-        # Check if commercialization request already exists for this formula
-        existing_request = await commercialization_requests_col.find_one({
+        # Check if QMS query already exists for this formula
+        existing_query = await qms_queries_col.find_one({
             "user_id": user_id,
             "formula_id": request.formula_id,
             "history_id": request.history_id,
-            "status": {"$in": ["submitted", "in_progress", "review", "approved"]}
+            "status": {"$nin": ["completed", "cancelled"]}  # Active queries only
         })
         
-        if existing_request:
+        if existing_query:
+            display_id = existing_query.get("display_id", "N/A")
             raise HTTPException(
                 status_code=409,
-                detail=f"Commercialization request already exists for this formula. Request ID: {existing_request.get('request_id', 'N/A')}, Queue Number: {existing_request.get('queue_number', 'N/A')}"
+                detail=f"Commercialization request already exists for this formula. Query ID: {display_id}"
             )
         
-        # Generate queue number and request ID
-        queue_number = generate_queue_number()
-        request_id = str(uuid.uuid4())
+        # Generate queue number (for display purposes) - simple sequential starting from 221
+        queue_number = await generate_queue_number()
         created_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
         
         # Determine queue position (simplified)
@@ -1119,36 +1510,50 @@ async def submit_commercialization_request(
         #     "purpose": "To ensure dedicated time and resources for your project"
         # }
         
-        # Save commercialization request to database
-        commercialization_doc = {
-            "request_id": request_id,
-            "queue_number": queue_number,
-            "user_id": user_id,
-            "formula_id": request.formula_id,
-            "history_id": request.history_id,
-            "name": request.name,
-            "phone": request.phone,
-            "city": request.city,
-            "experience_level": request.experience_level,
-            "timeline": request.timeline,
-            "quantity_interest": request.quantity_interest,
-            "additional_notes": request.additional_notes,
-            "status": "submitted",
-            "created_at": created_at.isoformat(),
-            "next_steps": next_steps,
-            # "commitment_info": commitment_info,
-            "updated_at": created_at.isoformat()
-        }
-        
+        # ========================================================================
+        # CREATE QMS QUERY (Single source of truth - replaces commercialization_requests)
+        # ========================================================================
+        query_id = None
+        query_display_id = None
         try:
-            result = await commercialization_requests_col.insert_one(commercialization_doc)
-            print(f"💾 Saved commercialization request: {request_id}")
-        except Exception as db_error:
-            print(f"⚠️ Warning: Failed to save commercialization request: {db_error}")
-            # Continue without failing the response
+            from app.ai_ingredient_intelligence.api.qms_utils import create_query_from_commercialization
+            
+            # Create query (payment_id is optional - can be None for now)
+            # No need to pass wish_brief - we only store formula_id and history_id
+            query_id = await create_query_from_commercialization(
+                user_id=user_id,
+                wish_history_id=request.history_id,
+                formula_id=request.formula_id,
+                user_info={
+                    "name": request.name,
+                    "phone": request.phone,
+                    "city": request.city,
+                    "preferred_batch": request.quantity_interest,
+                    "background": None,  # Not in request
+                },
+                payment_id=request.payment_id,  # Optional - None if not provided
+                queue_number=queue_number  # Pass queue number to store in query
+            )
+            
+            # Get query display_id for logging and response
+            if query_id:
+                query_obj = await qms_queries_col.find_one({"_id": ObjectId(query_id)})
+                if query_obj:
+                    query_display_id = query_obj.get("display_id")
+                    print(f"✅ Created QMS query: {query_display_id} (Queue: {queue_number})")
+            
+        except Exception as qms_error:
+            print(f"❌ Failed to create QMS query: {qms_error}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create commercialization request: {str(qms_error)}"
+            )
         
         print(f"✅ Commercialization request submitted")
         print(f"   Queue Number: {queue_number}")
+        print(f"   Query ID: {query_display_id}")
         print(f"   Experience Level: {request.experience_level}")
         print(f"   Timeline: {request.timeline}")
         
@@ -1156,9 +1561,11 @@ async def submit_commercialization_request(
             success=True,
             queue_number=queue_number,
             queue_position=queue_position,
-            request_id=request_id,
+            request_id=query_display_id,  # Use display_id as request_id
             created_at=created_at,
             next_steps=next_steps,
+            query_id=query_id,
+            query_display_id=query_display_id,
             # commitment_info=commitment_info
         )
     
