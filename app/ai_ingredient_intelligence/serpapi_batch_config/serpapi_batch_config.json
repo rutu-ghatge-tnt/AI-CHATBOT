@@ -1,0 +1,2095 @@
+{
+    "_meta": {
+      "name": "Formulynx SerpAPI Market Trends Batch Config",
+      "version": "2.0.0",
+      "description": "Master configuration for monthly SerpAPI batch fetching. Contains all ingredients (modern + Ayurvedic/natural), brands, benefits, product formats, and query generation rules. V2 adds 45+ Ayurvedic/natural ingredients, 13 additional brands, Hindi search terms, traditional formulations, and Ayurvedic comparison groups.",
+      "last_updated": "2025-02-12",
+      "estimated_monthly_queries": 1250,
+      "estimated_monthly_cost_usd": 12.50,
+      "notes": "SerpAPI Basic Plan = $50/5000 searches. We use ~1250/month = well within budget with 3750 remaining for on-demand.",
+      "ingredient_count": {
+        "skincare_modern": 42,
+        "skincare_ayurvedic_natural": 35,
+        "skincare_traditional_formulations": 5,
+        "haircare_modern": 10,
+        "haircare_ayurvedic": 13,
+        "total": 105
+      },
+      "brand_count": {
+        "d2c_skincare": 10,
+        "mass_market_skincare": 10,
+        "premium_skincare": 6,
+        "ayurvedic_natural_brands": 17,
+        "haircare_brands": 8,
+        "total": 51
+      }
+    },
+  
+    "batch_job_config": {
+      "schedule": "0 2 1 * *",
+      "schedule_description": "1st of every month at 2:00 AM IST",
+      "rate_limit_per_second": 5,
+      "max_retries": 3,
+      "retry_delay_seconds": 10,
+      "freshness_threshold_days": 35,
+      "on_demand_auto_add_threshold": 3,
+      "on_demand_auto_add_description": "If an on-demand query is triggered 3+ times in a month, auto-add to master batch list",
+      "geo": "IN",
+      "language": "en",
+      "serpapi_engines": {
+        "trends": "google_trends",
+        "shopping": "google_shopping",
+        "search": "google"
+      },
+      "trends_time_range": "today 12-m",
+      "trends_time_range_description": "Last 12 months of data"
+    },
+  
+    "ingredients": {
+      "_description": "Master ingredient database. Each ingredient has metadata for query generation and matching.",
+     
+      "skincare": {
+        "brightening": [
+          {
+            "id": "vitamin_c",
+            "common_name": "Vitamin C",
+            "inci_names": ["Ascorbic Acid", "Ethyl Ascorbic Acid", "Sodium Ascorbyl Phosphate", "Ascorbyl Glucoside", "3-O-Ethyl Ascorbic Acid", "Ascorbyl Tetraisopalmitate"],
+            "search_terms": ["Vitamin C", "Vit C"],
+            "related_benefits": ["brightening", "anti_aging", "antioxidant", "pigmentation", "dark_spots", "glow"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "face_wash", "toner", "mask", "sunscreen"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 1
+          },
+          {
+            "id": "niacinamide",
+            "common_name": "Niacinamide",
+            "inci_names": ["Niacinamide", "Nicotinamide", "Vitamin B3"],
+            "search_terms": ["Niacinamide", "Vitamin B3", "10% Niacinamide"],
+            "related_benefits": ["brightening", "pore_minimizing", "oil_control", "barrier_repair", "pigmentation"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "toner", "face_wash", "mask"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 2
+          },
+          {
+            "id": "alpha_arbutin",
+            "common_name": "Alpha Arbutin",
+            "inci_names": ["Alpha-Arbutin", "4-Hydroxyphenyl α-D-glucopyranoside"],
+            "search_terms": ["Alpha Arbutin", "Arbutin"],
+            "related_benefits": ["brightening", "pigmentation", "dark_spots", "melasma", "even_tone"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "toner"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 5
+          },
+          {
+            "id": "kojic_acid",
+            "common_name": "Kojic Acid",
+            "inci_names": ["Kojic Acid", "Kojic Acid Dipalmitate"],
+            "search_terms": ["Kojic Acid", "Kojic Acid Soap"],
+            "related_benefits": ["brightening", "pigmentation", "dark_spots", "tan_removal"],
+            "compatible_formats": ["serum", "cream", "soap", "face_wash", "mask"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 8
+          },
+          {
+            "id": "tranexamic_acid",
+            "common_name": "Tranexamic Acid",
+            "inci_names": ["Tranexamic Acid"],
+            "search_terms": ["Tranexamic Acid", "TXA"],
+            "related_benefits": ["brightening", "melasma", "pigmentation", "dark_spots", "redness"],
+            "compatible_formats": ["serum", "cream", "toner"],
+            "trending_tier": "rising_fast",
+            "price_segment": "mid",
+            "popularity_rank": 6
+          },
+          {
+            "id": "glutathione",
+            "common_name": "Glutathione",
+            "inci_names": ["Glutathione", "L-Glutathione"],
+            "search_terms": ["Glutathione", "Glutathione skin"],
+            "related_benefits": ["brightening", "skin_whitening", "antioxidant", "glow", "detox"],
+            "compatible_formats": ["serum", "cream", "supplement", "mask"],
+            "trending_tier": "rising",
+            "price_segment": "premium",
+            "popularity_rank": 10
+          },
+          {
+            "id": "licorice_extract",
+            "common_name": "Licorice Extract",
+            "inci_names": ["Glycyrrhiza Glabra Root Extract", "Glabridin"],
+            "search_terms": ["Licorice Extract", "Mulethi extract skin"],
+            "related_benefits": ["brightening", "pigmentation", "soothing", "dark_spots", "even_tone"],
+            "compatible_formats": ["serum", "cream", "toner", "face_wash", "mask"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 12
+          },
+          {
+            "id": "saffron",
+            "common_name": "Saffron",
+            "inci_names": ["Crocus Sativus Flower Extract", "Saffron Extract"],
+            "search_terms": ["Saffron", "Kesar", "Kumkumadi"],
+            "related_benefits": ["brightening", "glow", "radiance", "luxury", "ayurvedic"],
+            "compatible_formats": ["serum", "cream", "oil", "mask", "face_wash"],
+            "trending_tier": "stable",
+            "price_segment": "premium",
+            "popularity_rank": 9
+          },
+          {
+            "id": "azelaic_acid",
+            "common_name": "Azelaic Acid",
+            "inci_names": ["Azelaic Acid", "Potassium Azeloyl Diglycinate"],
+            "search_terms": ["Azelaic Acid"],
+            "related_benefits": ["brightening", "acne", "pigmentation", "rosacea", "texture"],
+            "compatible_formats": ["serum", "cream", "gel"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 11
+          }
+        ],
+       
+        "anti_aging": [
+          {
+            "id": "retinol",
+            "common_name": "Retinol",
+            "inci_names": ["Retinol", "Retinal", "Retinaldehyde", "Retinyl Palmitate", "Hydroxypinacolone Retinoate", "Adapalene"],
+            "search_terms": ["Retinol", "Retinal", "Retinoid", "Vitamin A"],
+            "related_benefits": ["anti_aging", "wrinkles", "fine_lines", "acne", "texture", "collagen"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "oil", "eye_cream"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 3
+          },
+          {
+            "id": "peptides",
+            "common_name": "Peptides",
+            "inci_names": ["Matrixyl", "Argireline", "Copper Peptides", "Palmitoyl Tripeptide-1", "Palmitoyl Tetrapeptide-7", "Acetyl Hexapeptide-8"],
+            "search_terms": ["Peptide serum", "Copper Peptides", "Matrixyl"],
+            "related_benefits": ["anti_aging", "firming", "wrinkles", "collagen_boost", "plumping"],
+            "compatible_formats": ["serum", "cream", "eye_cream", "moisturizer"],
+            "trending_tier": "rising",
+            "price_segment": "premium",
+            "popularity_rank": 7
+          },
+          {
+            "id": "bakuchiol",
+            "common_name": "Bakuchiol",
+            "inci_names": ["Bakuchiol", "Psoralea Corylifolia Seed Extract"],
+            "search_terms": ["Bakuchiol", "Bakuchi", "Natural Retinol Alternative"],
+            "related_benefits": ["anti_aging", "wrinkles", "natural_retinol", "gentle", "sensitive_skin"],
+            "compatible_formats": ["serum", "cream", "oil", "moisturizer"],
+            "trending_tier": "rising_fast",
+            "price_segment": "mid",
+            "popularity_rank": 14
+          },
+          {
+            "id": "collagen",
+            "common_name": "Collagen",
+            "inci_names": ["Hydrolyzed Collagen", "Marine Collagen", "Soluble Collagen"],
+            "search_terms": ["Collagen", "Marine Collagen", "Collagen boost"],
+            "related_benefits": ["anti_aging", "firming", "plumping", "elasticity", "wrinkles"],
+            "compatible_formats": ["serum", "cream", "mask", "supplement", "moisturizer"],
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 13
+          },
+          {
+            "id": "coenzyme_q10",
+            "common_name": "Coenzyme Q10",
+            "inci_names": ["Ubiquinone", "Coenzyme Q10"],
+            "search_terms": ["CoQ10", "Coenzyme Q10 skin"],
+            "related_benefits": ["anti_aging", "antioxidant", "energizing", "wrinkles"],
+            "compatible_formats": ["serum", "cream", "moisturizer"],
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 22
+          },
+          {
+            "id": "edelweiss",
+            "common_name": "Edelweiss Extract",
+            "inci_names": ["Leontopodium Alpinum Extract"],
+            "search_terms": ["Edelweiss skincare"],
+            "related_benefits": ["anti_aging", "antioxidant", "protection", "firming"],
+            "compatible_formats": ["serum", "cream"],
+            "trending_tier": "emerging",
+            "price_segment": "premium",
+            "popularity_rank": 35
+          }
+        ],
+       
+        "hydration": [
+          {
+            "id": "hyaluronic_acid",
+            "common_name": "Hyaluronic Acid",
+            "inci_names": ["Hyaluronic Acid", "Sodium Hyaluronate", "Hydrolyzed Hyaluronic Acid"],
+            "search_terms": ["Hyaluronic Acid", "HA serum", "Hyaluronic"],
+            "related_benefits": ["hydration", "plumping", "moisture", "dewy_skin", "anti_aging"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "toner", "mask", "eye_cream"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 4
+          },
+          {
+            "id": "ceramides",
+            "common_name": "Ceramides",
+            "inci_names": ["Ceramide NP", "Ceramide AP", "Ceramide EOP", "Phytosphingosine"],
+            "search_terms": ["Ceramide", "Ceramide cream", "Ceramide moisturizer"],
+            "related_benefits": ["barrier_repair", "hydration", "sensitive_skin", "moisture_lock", "eczema"],
+            "compatible_formats": ["cream", "moisturizer", "serum", "toner", "cleanser"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 10
+          },
+          {
+            "id": "squalane",
+            "common_name": "Squalane",
+            "inci_names": ["Squalane", "Squalene"],
+            "search_terms": ["Squalane", "Squalane oil"],
+            "related_benefits": ["hydration", "moisturizing", "lightweight", "non_comedogenic", "barrier"],
+            "compatible_formats": ["oil", "serum", "moisturizer", "cream"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 16
+          },
+          {
+            "id": "panthenol",
+            "common_name": "Panthenol",
+            "inci_names": ["Panthenol", "D-Panthenol", "Provitamin B5", "Dexpanthenol"],
+            "search_terms": ["Panthenol", "Vitamin B5 skin", "Dexpanthenol"],
+            "related_benefits": ["hydration", "soothing", "healing", "barrier_repair", "calming"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "spray", "gel"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 18
+          },
+          {
+            "id": "centella_asiatica",
+            "common_name": "Centella Asiatica",
+            "inci_names": ["Centella Asiatica Extract", "Madecassoside", "Asiaticoside"],
+            "search_terms": ["Centella Asiatica", "Cica", "Cica cream", "Madecassoside"],
+            "related_benefits": ["soothing", "barrier_repair", "healing", "anti_redness", "sensitive_skin"],
+            "compatible_formats": ["serum", "cream", "moisturizer", "toner", "gel", "mask"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 8
+          },
+          {
+            "id": "snail_mucin",
+            "common_name": "Snail Mucin",
+            "inci_names": ["Snail Secretion Filtrate"],
+            "search_terms": ["Snail Mucin", "Snail serum"],
+            "related_benefits": ["hydration", "healing", "texture", "anti_aging", "glow"],
+            "compatible_formats": ["serum", "cream", "essence", "moisturizer"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 15
+          },
+          {
+            "id": "aloe_vera",
+            "common_name": "Aloe Vera",
+            "inci_names": ["Aloe Barbadensis Leaf Juice", "Aloe Barbadensis Leaf Extract"],
+            "search_terms": ["Aloe Vera", "Aloe Vera gel", "Aloe Vera skin"],
+            "related_benefits": ["hydration", "soothing", "cooling", "sunburn", "natural"],
+            "compatible_formats": ["gel", "cream", "moisturizer", "face_wash", "mask", "toner"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 6
+          }
+        ],
+       
+        "acne": [
+          {
+            "id": "salicylic_acid",
+            "common_name": "Salicylic Acid",
+            "inci_names": ["Salicylic Acid", "Beta Hydroxy Acid", "BHA"],
+            "search_terms": ["Salicylic Acid", "BHA", "2% Salicylic Acid"],
+            "related_benefits": ["acne", "pore_minimizing", "blackheads", "oily_skin", "exfoliation"],
+            "compatible_formats": ["face_wash", "serum", "toner", "gel", "mask", "cream"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 5
+          },
+          {
+            "id": "benzoyl_peroxide",
+            "common_name": "Benzoyl Peroxide",
+            "inci_names": ["Benzoyl Peroxide"],
+            "search_terms": ["Benzoyl Peroxide", "BP for acne", "2.5% Benzoyl Peroxide"],
+            "related_benefits": ["acne", "bacteria_killing", "breakouts", "cystic_acne"],
+            "compatible_formats": ["gel", "face_wash", "cream", "spot_treatment"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 15
+          },
+          {
+            "id": "tea_tree",
+            "common_name": "Tea Tree",
+            "inci_names": ["Melaleuca Alternifolia Leaf Oil", "Tea Tree Oil"],
+            "search_terms": ["Tea Tree", "Tea Tree Oil", "Tea Tree face wash"],
+            "related_benefits": ["acne", "antibacterial", "oil_control", "natural", "spot_treatment"],
+            "compatible_formats": ["face_wash", "toner", "serum", "gel", "mask", "oil"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 11
+          },
+          {
+            "id": "zinc_pca",
+            "common_name": "Zinc PCA",
+            "inci_names": ["Zinc PCA", "Zinc Pyrrolidone Carboxylate"],
+            "search_terms": ["Zinc PCA", "Zinc for acne", "Zinc serum"],
+            "related_benefits": ["acne", "oil_control", "sebum_regulation", "pores"],
+            "compatible_formats": ["serum", "moisturizer", "toner", "gel"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 20
+          },
+          {
+            "id": "neem",
+            "common_name": "Neem",
+            "inci_names": ["Azadirachta Indica Leaf Extract", "Neem Oil"],
+            "search_terms": ["Neem", "Neem face wash", "Neem for acne"],
+            "related_benefits": ["acne", "antibacterial", "purifying", "natural", "ayurvedic"],
+            "compatible_formats": ["face_wash", "mask", "toner", "cream", "oil"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 7
+          },
+          {
+            "id": "sulfur",
+            "common_name": "Sulfur",
+            "inci_names": ["Sulfur", "Colloidal Sulfur"],
+            "search_terms": ["Sulfur acne", "Sulfur mask"],
+            "related_benefits": ["acne", "anti_fungal", "oil_absorption", "purifying"],
+            "compatible_formats": ["mask", "spot_treatment", "face_wash"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 28
+          }
+        ],
+       
+        "exfoliation": [
+          {
+            "id": "glycolic_acid",
+            "common_name": "Glycolic Acid",
+            "inci_names": ["Glycolic Acid"],
+            "search_terms": ["Glycolic Acid", "AHA", "Glycolic peel"],
+            "related_benefits": ["exfoliation", "brightening", "texture", "anti_aging", "dark_spots"],
+            "compatible_formats": ["serum", "toner", "peel", "face_wash", "mask"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 9
+          },
+          {
+            "id": "lactic_acid",
+            "common_name": "Lactic Acid",
+            "inci_names": ["Lactic Acid"],
+            "search_terms": ["Lactic Acid", "Lactic Acid peel", "Gentle AHA"],
+            "related_benefits": ["exfoliation", "hydration", "brightening", "gentle", "sensitive_skin"],
+            "compatible_formats": ["serum", "toner", "peel", "cream"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 16
+          },
+          {
+            "id": "mandelic_acid",
+            "common_name": "Mandelic Acid",
+            "inci_names": ["Mandelic Acid"],
+            "search_terms": ["Mandelic Acid", "Mandelic Acid serum"],
+            "related_benefits": ["exfoliation", "acne", "pigmentation", "gentle", "sensitive_skin"],
+            "compatible_formats": ["serum", "toner", "peel"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 19
+          },
+          {
+            "id": "pha",
+            "common_name": "PHA",
+            "inci_names": ["Gluconolactone", "Lactobionic Acid"],
+            "search_terms": ["PHA", "Polyhydroxy Acid", "Gluconolactone"],
+            "related_benefits": ["exfoliation", "gentle", "hydrating_exfoliation", "sensitive_skin", "anti_aging"],
+            "compatible_formats": ["serum", "toner", "cream"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 25
+          }
+        ],
+       
+        "sun_protection": [
+          {
+            "id": "spf",
+            "common_name": "SPF / Sunscreen",
+            "inci_names": ["Zinc Oxide", "Titanium Dioxide", "Octinoxate", "Avobenzone", "Bemotrizinol"],
+            "search_terms": ["Sunscreen SPF 50", "Mineral Sunscreen", "Sunscreen for oily skin", "Sunscreen for dry skin", "Gel sunscreen"],
+            "related_benefits": ["sun_protection", "anti_aging", "pigmentation_prevention", "daily_use"],
+            "compatible_formats": ["sunscreen", "cream", "gel", "lotion", "spray", "moisturizer"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 2
+          }
+        ],
+       
+        "sensitive_skin": [
+          {
+            "id": "allantoin",
+            "common_name": "Allantoin",
+            "inci_names": ["Allantoin"],
+            "search_terms": ["Allantoin skincare"],
+            "related_benefits": ["soothing", "healing", "sensitive_skin", "moisturizing"],
+            "compatible_formats": ["cream", "serum", "gel", "moisturizer"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 30
+          },
+          {
+            "id": "oat_extract",
+            "common_name": "Oat Extract",
+            "inci_names": ["Avena Sativa Kernel Extract", "Colloidal Oatmeal"],
+            "search_terms": ["Oat skincare", "Colloidal Oatmeal"],
+            "related_benefits": ["soothing", "sensitive_skin", "eczema", "barrier_repair", "calming"],
+            "compatible_formats": ["cream", "moisturizer", "cleanser", "mask"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 24
+          }
+        ],
+  
+        "ayurvedic_brightening": [
+          {
+            "id": "turmeric",
+            "common_name": "Turmeric",
+            "inci_names": ["Curcuma Longa Root Extract", "Turmeric Extract", "Curcumin"],
+            "search_terms": ["Turmeric", "Haldi", "Haldi face pack", "Turmeric face pack", "Turmeric cream", "Haldi cream", "Turmeric for glowing skin"],
+            "hindi_terms": ["हल्दी", "हल्दी फेस पैक"],
+            "related_benefits": ["brightening", "anti_inflammatory", "acne", "glow", "ayurvedic", "tan_removal"],
+            "compatible_formats": ["cream", "mask", "face_wash", "serum", "oil", "body_lotion", "soap"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 3
+          },
+          {
+            "id": "kumkumadi",
+            "common_name": "Kumkumadi",
+            "inci_names": ["Kumkumadi Tailam", "Kumkumadi Oil"],
+            "search_terms": ["Kumkumadi", "Kumkumadi oil", "Kumkumadi serum", "Kumkumadi tailam", "Kumkumadi face oil", "Kumkumadi night serum"],
+            "hindi_terms": ["कुमकुमादी तैलम"],
+            "related_benefits": ["brightening", "glow", "radiance", "luxury", "ayurvedic", "anti_aging", "pigmentation"],
+            "compatible_formats": ["oil", "serum", "cream", "mask"],
+            "trending_tier": "rising",
+            "price_segment": "premium",
+            "popularity_rank": 6
+          },
+          {
+            "id": "saffron",
+            "common_name": "Saffron",
+            "inci_names": ["Crocus Sativus Flower Extract", "Saffron Extract"],
+            "search_terms": ["Saffron", "Kesar", "Kesar cream", "Saffron serum", "Kesar face pack", "Saffron for skin", "Kesar for glowing skin"],
+            "hindi_terms": ["केसर", "केसर क्रीम"],
+            "related_benefits": ["brightening", "glow", "radiance", "luxury", "ayurvedic", "pigmentation", "complexion"],
+            "compatible_formats": ["cream", "serum", "oil", "mask", "face_wash"],
+            "trending_tier": "stable",
+            "price_segment": "premium",
+            "popularity_rank": 8
+          },
+          {
+            "id": "sandalwood",
+            "common_name": "Sandalwood",
+            "inci_names": ["Santalum Album Oil", "Santalum Album Wood Extract", "Sandalwood Extract"],
+            "search_terms": ["Sandalwood", "Chandan", "Chandan cream", "Sandalwood face pack", "Chandan face pack", "Sandalwood powder for skin"],
+            "hindi_terms": ["चंदन", "चंदन फेस पैक"],
+            "related_benefits": ["brightening", "soothing", "cooling", "acne", "luxury", "ayurvedic", "fragrance"],
+            "compatible_formats": ["cream", "mask", "oil", "face_wash", "soap", "powder"],
+            "trending_tier": "stable",
+            "price_segment": "premium",
+            "popularity_rank": 10
+          },
+          {
+            "id": "manjistha",
+            "common_name": "Manjistha",
+            "inci_names": ["Rubia Cordifolia Root Extract", "Manjistha Extract"],
+            "search_terms": ["Manjistha", "Manjistha for skin", "Manjistha cream", "Manjistha powder", "Rubia Cordifolia skin"],
+            "hindi_terms": ["मंजिष्ठा"],
+            "related_benefits": ["brightening", "pigmentation", "blood_purifying", "acne_scars", "even_tone", "ayurvedic"],
+            "compatible_formats": ["cream", "serum", "mask", "face_wash", "oil", "powder"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 14
+          },
+          {
+            "id": "chironji",
+            "common_name": "Chironji",
+            "inci_names": ["Buchanania Lanzan Seed Oil", "Chironji Oil"],
+            "search_terms": ["Chironji for skin", "Charoli face pack", "Chironji oil"],
+            "hindi_terms": ["चिरौंजी", "चारोली"],
+            "related_benefits": ["brightening", "moisturizing", "complexion", "ayurvedic", "nourishing"],
+            "compatible_formats": ["cream", "mask", "oil", "face_wash"],
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 30
+          },
+          {
+            "id": "mulethi",
+            "common_name": "Mulethi / Licorice",
+            "inci_names": ["Glycyrrhiza Glabra Root Extract", "Glabridin", "Licorice Extract"],
+            "search_terms": ["Mulethi", "Mulethi for skin", "Mulethi powder for face", "Licorice extract skin", "Yashtimadhu skin"],
+            "hindi_terms": ["मुलेठी", "यष्टिमधु"],
+            "related_benefits": ["brightening", "pigmentation", "dark_spots", "soothing", "even_tone", "ayurvedic"],
+            "compatible_formats": ["serum", "cream", "mask", "toner", "face_wash", "powder"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 12
+          },
+          {
+            "id": "papaya",
+            "common_name": "Papaya",
+            "inci_names": ["Carica Papaya Fruit Extract", "Papain"],
+            "search_terms": ["Papaya", "Papaya face pack", "Papaya cream", "Papaya for skin", "Papaya face wash"],
+            "hindi_terms": ["पपीता"],
+            "related_benefits": ["brightening", "exfoliation", "tan_removal", "dead_skin", "glow"],
+            "compatible_formats": ["face_wash", "mask", "cream", "scrub", "peel"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 7
+          },
+          {
+            "id": "ubtan",
+            "common_name": "Ubtan",
+            "inci_names": ["Ubtan Blend"],
+            "search_terms": ["Ubtan", "Ubtan face pack", "Ubtan face wash", "Ubtan for skin", "Haldi Chandan Ubtan", "Ubtan body wash"],
+            "hindi_terms": ["उबटन"],
+            "related_benefits": ["brightening", "tan_removal", "glow", "exfoliation", "traditional", "ayurvedic", "wedding_prep"],
+            "compatible_formats": ["mask", "face_wash", "scrub", "body_wash", "powder"],
+            "trending_tier": "rising",
+            "price_segment": "budget",
+            "popularity_rank": 5
+          },
+          {
+            "id": "besan",
+            "common_name": "Besan / Gram Flour",
+            "inci_names": ["Cicer Arietinum Seed Flour"],
+            "search_terms": ["Besan", "Besan face pack", "Gram flour face pack", "Besan for skin", "Besan Haldi face pack"],
+            "hindi_terms": ["बेसन", "बेसन फेस पैक"],
+            "related_benefits": ["brightening", "cleansing", "tan_removal", "oil_control", "exfoliation", "traditional"],
+            "compatible_formats": ["mask", "face_wash", "scrub", "powder"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 4
+          },
+          {
+            "id": "nalpamaradi",
+            "common_name": "Nalpamaradi Tailam",
+            "inci_names": ["Nalpamaradi Tailam", "Nalpamaradi Oil"],
+            "search_terms": ["Nalpamaradi", "Nalpamaradi tailam", "Nalpamaradi oil for skin"],
+            "hindi_terms": ["नालपामरादि तैलम"],
+            "related_benefits": ["brightening", "tan_removal", "pigmentation", "ayurvedic", "traditional_formulation"],
+            "compatible_formats": ["oil", "serum"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 18
+          }
+        ],
+  
+        "ayurvedic_healing_soothing": [
+          {
+            "id": "aloe_vera",
+            "common_name": "Aloe Vera",
+            "inci_names": ["Aloe Barbadensis Leaf Juice", "Aloe Barbadensis Leaf Extract"],
+            "search_terms": ["Aloe Vera", "Aloe Vera gel", "Aloe Vera for skin", "Aloe Vera face pack", "Aloe Vera moisturizer"],
+            "hindi_terms": ["एलोवेरा", "घृतकुमारी"],
+            "related_benefits": ["hydration", "soothing", "cooling", "sunburn", "natural", "healing", "acne"],
+            "compatible_formats": ["gel", "cream", "moisturizer", "face_wash", "mask", "toner", "body_lotion"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 2
+          },
+          {
+            "id": "rose",
+            "common_name": "Rose",
+            "inci_names": ["Rosa Damascena Flower Water", "Rosa Damascena Flower Oil", "Rosa Canina Fruit Oil", "Rosehip Oil"],
+            "search_terms": ["Rose water", "Gulab Jal", "Rosehip oil", "Rose serum", "Rose face mist", "Rose toner"],
+            "hindi_terms": ["गुलाब जल", "गुलाब"],
+            "related_benefits": ["hydration", "toning", "soothing", "fragrance", "natural", "pH_balance", "refreshing"],
+            "compatible_formats": ["toner", "mist", "oil", "cream", "serum", "face_wash", "mask"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 4
+          },
+          {
+            "id": "neem",
+            "common_name": "Neem",
+            "inci_names": ["Azadirachta Indica Leaf Extract", "Azadirachta Indica Seed Oil", "Neem Oil"],
+            "search_terms": ["Neem", "Neem face wash", "Neem for acne", "Neem face pack", "Neem oil for skin", "Neem soap"],
+            "hindi_terms": ["नीम"],
+            "related_benefits": ["acne", "antibacterial", "purifying", "natural", "ayurvedic", "detox", "anti_fungal"],
+            "compatible_formats": ["face_wash", "mask", "toner", "cream", "oil", "soap", "gel"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 3
+          },
+          {
+            "id": "vetiver",
+            "common_name": "Vetiver / Khus",
+            "inci_names": ["Vetiveria Zizanoides Root Oil", "Vetiver Oil", "Vetiver Extract"],
+            "search_terms": ["Vetiver", "Khus", "Khus water", "Vetiver for skin", "Khus khus skin"],
+            "hindi_terms": ["खस", "वेटिवर"],
+            "related_benefits": ["cooling", "oil_control", "soothing", "anti_inflammatory", "ayurvedic", "summer_care"],
+            "compatible_formats": ["toner", "mist", "cream", "oil", "face_wash", "body_lotion"],
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 20
+          },
+          {
+            "id": "camphor",
+            "common_name": "Camphor",
+            "inci_names": ["Cinnamomum Camphora Bark Oil", "Camphor"],
+            "search_terms": ["Camphor for skin", "Kapoor for face", "Camphor cream"],
+            "hindi_terms": ["कपूर", "कर्पूर"],
+            "related_benefits": ["cooling", "acne", "pain_relief", "anti_itch", "ayurvedic"],
+            "compatible_formats": ["cream", "oil", "balm"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 25
+          },
+          {
+            "id": "tulsi",
+            "common_name": "Tulsi / Holy Basil",
+            "inci_names": ["Ocimum Sanctum Leaf Extract", "Ocimum Basilicum Oil", "Holy Basil Extract"],
+            "search_terms": ["Tulsi", "Tulsi for skin", "Tulsi face wash", "Holy Basil skincare", "Tulsi face pack"],
+            "hindi_terms": ["तुलसी"],
+            "related_benefits": ["acne", "purifying", "antibacterial", "detox", "ayurvedic", "anti_inflammatory"],
+            "compatible_formats": ["face_wash", "toner", "cream", "mask", "gel", "soap"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 11
+          },
+          {
+            "id": "multani_mitti",
+            "common_name": "Multani Mitti / Fuller's Earth",
+            "inci_names": ["Bentonite", "Fuller's Earth", "Kaolin"],
+            "search_terms": ["Multani Mitti", "Multani Mitti face pack", "Fuller's Earth mask", "Multani Mitti for oily skin", "Multani Mitti for acne"],
+            "hindi_terms": ["मुल्तानी मिट्टी"],
+            "related_benefits": ["oil_control", "pore_minimizing", "tan_removal", "purifying", "acne", "traditional"],
+            "compatible_formats": ["mask", "face_wash", "powder", "scrub"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 5
+          },
+          {
+            "id": "lodhra",
+            "common_name": "Lodhra",
+            "inci_names": ["Symplocos Racemosa Bark Extract", "Lodhra Extract"],
+            "search_terms": ["Lodhra", "Lodhra for skin", "Lodhra powder for face", "Lodhra for acne"],
+            "hindi_terms": ["लोध्र"],
+            "related_benefits": ["acne", "hormonal_acne", "oil_control", "skin_tightening", "ayurvedic"],
+            "compatible_formats": ["cream", "mask", "face_wash", "serum", "powder"],
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 28
+          },
+          {
+            "id": "jaiphal",
+            "common_name": "Jaiphal / Nutmeg",
+            "inci_names": ["Myristica Fragrans Seed Extract", "Nutmeg Extract", "Nutmeg Oil"],
+            "search_terms": ["Jaiphal for skin", "Nutmeg face pack", "Jaiphal face pack", "Nutmeg for acne scars"],
+            "hindi_terms": ["जायफल"],
+            "related_benefits": ["acne_scars", "brightening", "anti_inflammatory", "exfoliation", "ayurvedic"],
+            "compatible_formats": ["mask", "cream", "oil", "powder"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 26
+          }
+        ],
+  
+        "ayurvedic_anti_aging": [
+          {
+            "id": "ashwagandha",
+            "common_name": "Ashwagandha",
+            "inci_names": ["Withania Somnifera Root Extract", "Ashwagandha Extract"],
+            "search_terms": ["Ashwagandha skin", "Ashwagandha cream", "Ashwagandha for face", "Ashwagandha anti aging", "Ashwagandha serum"],
+            "hindi_terms": ["अश्वगंधा"],
+            "related_benefits": ["anti_aging", "stress_relief", "firming", "collagen_boost", "ayurvedic", "adaptogenic"],
+            "compatible_formats": ["cream", "serum", "mask", "oil", "moisturizer"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 15
+          },
+          {
+            "id": "bakuchiol",
+            "common_name": "Bakuchiol / Babchi",
+            "inci_names": ["Bakuchiol", "Psoralea Corylifolia Seed Extract"],
+            "search_terms": ["Bakuchiol", "Babchi", "Babchi oil", "Bakuchiol serum", "Natural Retinol Alternative", "Babchi seed oil for skin"],
+            "hindi_terms": ["बाबची"],
+            "related_benefits": ["anti_aging", "wrinkles", "natural_retinol", "gentle", "sensitive_skin", "ayurvedic"],
+            "compatible_formats": ["serum", "cream", "oil", "moisturizer"],
+            "trending_tier": "rising_fast",
+            "price_segment": "mid",
+            "popularity_rank": 12
+          },
+          {
+            "id": "gotu_kola",
+            "common_name": "Gotu Kola / Brahmi (Skin)",
+            "inci_names": ["Centella Asiatica Extract", "Madecassoside", "Asiaticoside", "Gotu Kola Extract"],
+            "search_terms": ["Gotu Kola", "Gotu Kola skin", "Brahmi for skin", "Centella Asiatica Ayurvedic"],
+            "hindi_terms": ["ब्राह्मी", "मंडूकपर्णी"],
+            "related_benefits": ["anti_aging", "healing", "collagen_boost", "scar_reduction", "soothing", "ayurvedic"],
+            "compatible_formats": ["serum", "cream", "oil", "mask", "moisturizer"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 16
+          },
+          {
+            "id": "moringa",
+            "common_name": "Moringa",
+            "inci_names": ["Moringa Oleifera Seed Oil", "Moringa Oleifera Leaf Extract"],
+            "search_terms": ["Moringa", "Moringa oil skin", "Moringa for face", "Drumstick oil for skin", "Sahjan for skin"],
+            "hindi_terms": ["सहजन", "मोरिंगा"],
+            "related_benefits": ["anti_aging", "antioxidant", "nourishing", "detox", "hydration", "ayurvedic"],
+            "compatible_formats": ["oil", "serum", "cream", "mask", "cleanser"],
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 24
+          },
+          {
+            "id": "amla_skin",
+            "common_name": "Amla (Skincare)",
+            "inci_names": ["Emblica Officinalis Fruit Extract", "Phyllanthus Emblica Extract", "Indian Gooseberry Extract"],
+            "search_terms": ["Amla for skin", "Amla face pack", "Indian Gooseberry skin", "Amla Vitamin C skin"],
+            "hindi_terms": ["आंवला"],
+            "related_benefits": ["anti_aging", "brightening", "antioxidant", "vitamin_c_source", "collagen", "ayurvedic"],
+            "compatible_formats": ["serum", "cream", "mask", "oil", "face_wash"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 17
+          }
+        ],
+  
+        "ayurvedic_moisturizing": [
+          {
+            "id": "honey",
+            "common_name": "Honey / Madhu",
+            "inci_names": ["Mel", "Honey Extract", "Manuka Honey"],
+            "search_terms": ["Honey", "Honey face pack", "Honey for skin", "Honey face wash", "Manuka honey skin", "Shahad face pack"],
+            "hindi_terms": ["शहद", "मधु"],
+            "related_benefits": ["moisturizing", "antibacterial", "healing", "glow", "natural", "humectant"],
+            "compatible_formats": ["mask", "face_wash", "cream", "lip_care", "cleanser", "body_wash"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 6
+          },
+          {
+            "id": "shea_butter",
+            "common_name": "Shea Butter",
+            "inci_names": ["Butyrospermum Parkii Butter", "Shea Butter"],
+            "search_terms": ["Shea Butter", "Shea Butter cream", "Shea Butter for skin", "Shea Butter body butter"],
+            "hindi_terms": [],
+            "related_benefits": ["moisturizing", "nourishing", "dry_skin", "barrier_repair", "body_care"],
+            "compatible_formats": ["cream", "body_lotion", "body_butter", "lip_care", "moisturizer"],
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 15
+          },
+          {
+            "id": "kokum_butter",
+            "common_name": "Kokum Butter",
+            "inci_names": ["Garcinia Indica Seed Butter"],
+            "search_terms": ["Kokum Butter", "Kokum Butter for skin", "Kokum Butter cream"],
+            "hindi_terms": ["कोकम"],
+            "related_benefits": ["moisturizing", "nourishing", "dry_skin", "non_comedogenic", "indian_native"],
+            "compatible_formats": ["cream", "body_butter", "lip_care", "moisturizer", "balm"],
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 28
+          },
+          {
+            "id": "sesame_oil_skin",
+            "common_name": "Sesame Oil (Skincare)",
+            "inci_names": ["Sesamum Indicum Seed Oil", "Sesame Oil"],
+            "search_terms": ["Sesame oil for skin", "Til oil for face", "Sesame oil massage", "Til ka tel skin"],
+            "hindi_terms": ["तिल का तेल"],
+            "related_benefits": ["moisturizing", "warming", "ayurvedic_massage", "nourishing", "anti_aging"],
+            "compatible_formats": ["oil", "cream", "body_oil", "massage_oil"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 22
+          },
+          {
+            "id": "hemp_seed_oil",
+            "common_name": "Hemp Seed Oil",
+            "inci_names": ["Cannabis Sativa Seed Oil"],
+            "search_terms": ["Hemp seed oil", "Hemp oil for skin", "Hemp oil India", "Cannabis Sativa seed oil skin"],
+            "hindi_terms": ["भांग बीज तेल"],
+            "related_benefits": ["moisturizing", "barrier_repair", "anti_inflammatory", "non_comedogenic", "eczema"],
+            "compatible_formats": ["oil", "serum", "cream", "moisturizer"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 20
+          },
+          {
+            "id": "tamanu_oil",
+            "common_name": "Tamanu Oil",
+            "inci_names": ["Calophyllum Inophyllum Seed Oil"],
+            "search_terms": ["Tamanu oil", "Tamanu oil for skin", "Tamanu oil acne scars"],
+            "hindi_terms": [],
+            "related_benefits": ["healing", "scar_reduction", "anti_inflammatory", "moisturizing", "acne_scars"],
+            "compatible_formats": ["oil", "serum", "cream", "spot_treatment"],
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 26
+          },
+          {
+            "id": "marula_oil",
+            "common_name": "Marula Oil",
+            "inci_names": ["Sclerocarya Birrea Seed Oil"],
+            "search_terms": ["Marula oil", "Marula oil for skin", "Marula oil face"],
+            "hindi_terms": [],
+            "related_benefits": ["moisturizing", "anti_aging", "lightweight_oil", "antioxidant", "dry_skin"],
+            "compatible_formats": ["oil", "serum", "cream", "moisturizer"],
+            "trending_tier": "emerging",
+            "price_segment": "premium",
+            "popularity_rank": 30
+          },
+          {
+            "id": "jojoba_oil",
+            "common_name": "Jojoba Oil",
+            "inci_names": ["Simmondsia Chinensis Seed Oil"],
+            "search_terms": ["Jojoba oil", "Jojoba oil for face", "Jojoba oil skin", "Jojoba oil for acne"],
+            "hindi_terms": [],
+            "related_benefits": ["moisturizing", "oil_balancing", "non_comedogenic", "lightweight", "all_skin_types"],
+            "compatible_formats": ["oil", "serum", "cleanser", "moisturizer"],
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 13
+          }
+        ],
+  
+        "traditional_formulations": [
+          {
+            "id": "kumkumadi_tailam",
+            "common_name": "Kumkumadi Tailam",
+            "inci_names": ["Kumkumadi Tailam"],
+            "search_terms": ["Kumkumadi Tailam", "Kumkumadi oil original", "Kumkumadi Tailam benefits", "Kumkumadi Tailam for face"],
+            "hindi_terms": ["कुमकुमादी तैलम"],
+            "related_benefits": ["brightening", "glow", "luxury_ayurvedic", "radiance", "night_treatment"],
+            "compatible_formats": ["oil", "serum"],
+            "is_traditional_formulation": true,
+            "trending_tier": "rising",
+            "price_segment": "premium",
+            "popularity_rank": 8
+          },
+          {
+            "id": "nalpamaradi_tailam",
+            "common_name": "Nalpamaradi Tailam",
+            "inci_names": ["Nalpamaradi Tailam"],
+            "search_terms": ["Nalpamaradi Tailam", "Nalpamaradi oil", "Nalpamaradi for tan removal", "Nalpamaradi vs Kumkumadi"],
+            "hindi_terms": ["नालपामरादि तैलम"],
+            "related_benefits": ["brightening", "tan_removal", "turmeric_based", "traditional", "body_brightening"],
+            "compatible_formats": ["oil"],
+            "is_traditional_formulation": true,
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 18
+          },
+          {
+            "id": "eladi_coconut_oil",
+            "common_name": "Eladi Coconut Oil",
+            "inci_names": ["Eladi Kera Tailam"],
+            "search_terms": ["Eladi oil", "Eladi coconut oil", "Eladi Kera Tailam", "Eladi oil for skin"],
+            "hindi_terms": ["इलादि तैलम"],
+            "related_benefits": ["complexion", "brightening", "cooling", "traditional", "baby_skin"],
+            "compatible_formats": ["oil"],
+            "is_traditional_formulation": true,
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 25
+          },
+          {
+            "id": "dasapushpam",
+            "common_name": "Dasapushpam",
+            "inci_names": ["Dasapushpam Blend"],
+            "search_terms": ["Dasapushpam", "Dasapushpam oil", "Dasapushpam hair oil", "10 flowers Kerala"],
+            "hindi_terms": ["दशपुष्पम"],
+            "related_benefits": ["traditional", "kerala", "hair_growth", "skin_health", "holistic"],
+            "compatible_formats": ["oil", "hair_oil"],
+            "is_traditional_formulation": true,
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 32
+          },
+          {
+            "id": "ubtan_traditional",
+            "common_name": "Traditional Ubtan Blend",
+            "inci_names": ["Ubtan Blend"],
+            "search_terms": ["Traditional Ubtan", "Ubtan recipe", "Desi Ubtan", "Ubtan for bride", "Haldi Ubtan ceremony"],
+            "hindi_terms": ["उबटन", "हल्दी उबटन"],
+            "related_benefits": ["brightening", "wedding_prep", "traditional", "tan_removal", "glow"],
+            "compatible_formats": ["mask", "powder", "scrub"],
+            "is_traditional_formulation": true,
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 6
+          }
+        ]
+      },
+     
+      "haircare": {
+        "hair_growth": [
+          {
+            "id": "onion_oil",
+            "common_name": "Onion Oil",
+            "inci_names": ["Allium Cepa Bulb Extract"],
+            "search_terms": ["Onion oil", "Onion hair oil", "Onion shampoo"],
+            "related_benefits": ["hair_growth", "hair_fall", "scalp_health", "strengthening"],
+            "compatible_formats": ["hair_oil", "shampoo", "conditioner", "hair_mask", "serum"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 1
+          },
+          {
+            "id": "biotin",
+            "common_name": "Biotin",
+            "inci_names": ["Biotin", "Vitamin B7"],
+            "search_terms": ["Biotin", "Biotin shampoo", "Biotin hair"],
+            "related_benefits": ["hair_growth", "hair_fall", "strengthening", "thickness"],
+            "compatible_formats": ["shampoo", "supplement", "serum", "hair_oil", "conditioner"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 2
+          },
+          {
+            "id": "rosemary",
+            "common_name": "Rosemary",
+            "inci_names": ["Rosmarinus Officinalis Leaf Oil", "Rosemary Extract"],
+            "search_terms": ["Rosemary oil", "Rosemary hair", "Rosemary water hair"],
+            "related_benefits": ["hair_growth", "scalp_stimulation", "hair_fall", "thickness"],
+            "compatible_formats": ["hair_oil", "shampoo", "serum", "mist"],
+            "trending_tier": "rising_fast",
+            "price_segment": "budget",
+            "popularity_rank": 3
+          },
+          {
+            "id": "bhringraj",
+            "common_name": "Bhringraj",
+            "inci_names": ["Eclipta Prostrata Extract", "Bhringraj Oil"],
+            "search_terms": ["Bhringraj", "Bhringraj oil", "Bhringraj hair"],
+            "related_benefits": ["hair_growth", "premature_greying", "ayurvedic", "scalp_health"],
+            "compatible_formats": ["hair_oil", "shampoo", "hair_mask"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 7
+          },
+          {
+            "id": "rice_water",
+            "common_name": "Rice Water",
+            "inci_names": ["Oryza Sativa Water", "Rice Ferment Filtrate"],
+            "search_terms": ["Rice water", "Rice water hair", "Fermented rice water"],
+            "related_benefits": ["hair_growth", "strengthening", "shine", "smoothening"],
+            "compatible_formats": ["shampoo", "conditioner", "hair_mask", "rinse", "serum"],
+            "trending_tier": "rising",
+            "price_segment": "budget",
+            "popularity_rank": 5
+          },
+          {
+            "id": "redensyl",
+            "common_name": "Redensyl",
+            "inci_names": ["Redensyl"],
+            "search_terms": ["Redensyl", "Redensyl hair serum"],
+            "related_benefits": ["hair_growth", "hair_fall", "stem_cell", "regrowth"],
+            "compatible_formats": ["serum", "hair_oil"],
+            "trending_tier": "rising_fast",
+            "price_segment": "premium",
+            "popularity_rank": 6
+          },
+          {
+            "id": "minoxidil",
+            "common_name": "Minoxidil",
+            "inci_names": ["Minoxidil"],
+            "search_terms": ["Minoxidil", "Minoxidil 5%", "Minoxidil hair"],
+            "related_benefits": ["hair_growth", "hair_loss", "regrowth", "male_pattern_baldness"],
+            "compatible_formats": ["serum", "solution", "foam"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 4
+          }
+        ],
+       
+        "hair_repair": [
+          {
+            "id": "keratin",
+            "common_name": "Keratin",
+            "inci_names": ["Hydrolyzed Keratin", "Keratin"],
+            "search_terms": ["Keratin", "Keratin shampoo", "Keratin treatment"],
+            "related_benefits": ["repair", "smoothening", "frizz_control", "strengthening", "damage_repair"],
+            "compatible_formats": ["shampoo", "conditioner", "hair_mask", "serum", "treatment"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 3
+          },
+          {
+            "id": "argan_oil",
+            "common_name": "Argan Oil",
+            "inci_names": ["Argania Spinosa Kernel Oil"],
+            "search_terms": ["Argan oil", "Argan oil hair", "Moroccan oil"],
+            "related_benefits": ["repair", "moisture", "frizz_control", "shine", "smoothening"],
+            "compatible_formats": ["hair_oil", "serum", "shampoo", "conditioner", "hair_mask"],
+            "trending_tier": "stable",
+            "price_segment": "mid",
+            "popularity_rank": 5
+          },
+          {
+            "id": "coconut_oil",
+            "common_name": "Coconut Oil",
+            "inci_names": ["Cocos Nucifera Oil", "Coconut Oil"],
+            "search_terms": ["Coconut oil hair", "Nariyal tel", "Coconut oil shampoo"],
+            "related_benefits": ["moisturizing", "strengthening", "natural", "traditional", "deep_conditioning"],
+            "compatible_formats": ["hair_oil", "shampoo", "conditioner", "hair_mask"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 1
+          }
+        ],
+       
+        "dandruff": [
+          {
+            "id": "ketoconazole",
+            "common_name": "Ketoconazole",
+            "inci_names": ["Ketoconazole"],
+            "search_terms": ["Ketoconazole shampoo", "Anti dandruff shampoo"],
+            "related_benefits": ["dandruff", "anti_fungal", "scalp_health", "itching"],
+            "compatible_formats": ["shampoo"],
+            "trending_tier": "evergreen",
+            "price_segment": "mid",
+            "popularity_rank": 4
+          },
+          {
+            "id": "zinc_pyrithione",
+            "common_name": "Zinc Pyrithione",
+            "inci_names": ["Zinc Pyrithione", "Pyrithione Zinc"],
+            "search_terms": ["Zinc Pyrithione shampoo", "ZPT shampoo"],
+            "related_benefits": ["dandruff", "anti_fungal", "scalp_health"],
+            "compatible_formats": ["shampoo"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 8
+          },
+          {
+            "id": "salicylic_acid_hair",
+            "common_name": "Salicylic Acid (Hair)",
+            "inci_names": ["Salicylic Acid"],
+            "search_terms": ["Salicylic Acid shampoo", "Scalp exfoliating shampoo"],
+            "related_benefits": ["dandruff", "scalp_exfoliation", "oil_control", "buildup_removal"],
+            "compatible_formats": ["shampoo", "scalp_scrub", "scalp_serum"],
+            "trending_tier": "rising",
+            "price_segment": "mid",
+            "popularity_rank": 10
+          }
+        ],
+  
+        "ayurvedic_haircare": [
+          {
+            "id": "amla_hair",
+            "common_name": "Amla (Haircare)",
+            "inci_names": ["Emblica Officinalis Fruit Extract", "Phyllanthus Emblica Extract", "Indian Gooseberry Extract"],
+            "search_terms": ["Amla hair oil", "Amla for hair", "Amla shampoo", "Amla hair pack", "Amla reetha shikakai", "Indian Gooseberry hair"],
+            "hindi_terms": ["आंवला", "आंवला तेल"],
+            "related_benefits": ["hair_growth", "premature_greying", "strengthening", "shine", "ayurvedic", "vitamin_c"],
+            "compatible_formats": ["hair_oil", "shampoo", "conditioner", "hair_mask", "powder"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 2
+          },
+          {
+            "id": "shikakai",
+            "common_name": "Shikakai",
+            "inci_names": ["Acacia Concinna Fruit Extract", "Shikakai Extract"],
+            "search_terms": ["Shikakai", "Shikakai shampoo", "Shikakai for hair", "Shikakai powder hair", "Shikakai hair wash"],
+            "hindi_terms": ["शिकाकाई"],
+            "related_benefits": ["natural_cleanser", "hair_growth", "dandruff", "gentle_washing", "ayurvedic", "sulfate_free_alternative"],
+            "compatible_formats": ["shampoo", "powder", "hair_mask", "hair_wash"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 5
+          },
+          {
+            "id": "reetha",
+            "common_name": "Reetha / Soapnut",
+            "inci_names": ["Sapindus Mukorossi Fruit Extract", "Soapnut Extract"],
+            "search_terms": ["Reetha", "Reetha shampoo", "Soapnut hair", "Reetha for hair", "Reetha Amla Shikakai"],
+            "hindi_terms": ["रीठा"],
+            "related_benefits": ["natural_surfactant", "gentle_cleanser", "hair_growth", "ayurvedic", "chemical_free"],
+            "compatible_formats": ["shampoo", "powder", "hair_wash"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 8
+          },
+          {
+            "id": "hibiscus",
+            "common_name": "Hibiscus / Gudhal",
+            "inci_names": ["Hibiscus Rosa-Sinensis Flower Extract", "Hibiscus Sabdariffa Flower Extract"],
+            "search_terms": ["Hibiscus hair", "Gudhal for hair", "Hibiscus hair oil", "Hibiscus shampoo", "Hibiscus hair pack", "Gudhal phool hair"],
+            "hindi_terms": ["गुड़हल", "जासवंत"],
+            "related_benefits": ["hair_growth", "conditioning", "premature_greying", "natural_dye", "strengthening", "ayurvedic"],
+            "compatible_formats": ["hair_oil", "shampoo", "conditioner", "hair_mask", "powder"],
+            "trending_tier": "rising",
+            "price_segment": "budget",
+            "popularity_rank": 4
+          },
+          {
+            "id": "methi",
+            "common_name": "Methi / Fenugreek",
+            "inci_names": ["Trigonella Foenum-Graecum Seed Extract", "Fenugreek Extract"],
+            "search_terms": ["Methi", "Methi for hair", "Fenugreek hair", "Methi dana hair mask", "Methi seed hair oil", "Fenugreek hair pack"],
+            "hindi_terms": ["मेथी", "मेथी दाना"],
+            "related_benefits": ["hair_fall", "dandruff", "conditioning", "hair_growth", "thickness", "ayurvedic"],
+            "compatible_formats": ["hair_oil", "hair_mask", "shampoo", "conditioner", "powder"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 6
+          },
+          {
+            "id": "brahmi_hair",
+            "common_name": "Brahmi (Haircare)",
+            "inci_names": ["Bacopa Monnieri Extract", "Brahmi Extract"],
+            "search_terms": ["Brahmi hair oil", "Brahmi for hair", "Brahmi oil", "Brahmi hair growth", "Brahmi Amla oil"],
+            "hindi_terms": ["ब्राह्मी", "ब्राह्मी तेल"],
+            "related_benefits": ["hair_growth", "scalp_nourishing", "stress_related_hair_loss", "cooling", "ayurvedic"],
+            "compatible_formats": ["hair_oil", "shampoo", "hair_mask", "scalp_serum"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 7
+          },
+          {
+            "id": "curry_leaves",
+            "common_name": "Curry Leaves / Kadi Patta",
+            "inci_names": ["Murraya Koenigii Leaf Extract", "Curry Leaf Extract"],
+            "search_terms": ["Curry leaves hair", "Kadi Patta hair oil", "Curry leaves for hair growth", "Curry leaves hair oil", "Kadi Patta for hair fall"],
+            "hindi_terms": ["कढ़ी पत्ता", "करी पत्ता"],
+            "related_benefits": ["hair_growth", "premature_greying", "hair_fall", "strengthening", "south_indian_tradition"],
+            "compatible_formats": ["hair_oil", "shampoo", "hair_mask", "powder"],
+            "trending_tier": "rising",
+            "price_segment": "budget",
+            "popularity_rank": 5
+          },
+          {
+            "id": "castor_oil",
+            "common_name": "Castor Oil",
+            "inci_names": ["Ricinus Communis Seed Oil", "Castor Oil"],
+            "search_terms": ["Castor oil", "Castor oil for hair", "Arandi ka tel", "Castor oil hair growth", "Castor oil for eyebrows"],
+            "hindi_terms": ["अरंडी का तेल"],
+            "related_benefits": ["hair_growth", "thickness", "eyebrow_growth", "eyelash_growth", "nourishing"],
+            "compatible_formats": ["hair_oil", "serum", "eyebrow_serum"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 3
+          },
+          {
+            "id": "sesame_oil_hair",
+            "common_name": "Sesame Oil (Haircare)",
+            "inci_names": ["Sesamum Indicum Seed Oil", "Sesame Oil"],
+            "search_terms": ["Sesame oil hair", "Til oil for hair", "Sesame oil hot oil treatment", "Til ka tel baal"],
+            "hindi_terms": ["तिल का तेल"],
+            "related_benefits": ["warming", "ayurvedic_base_oil", "nourishing", "premature_greying", "scalp_health"],
+            "compatible_formats": ["hair_oil"],
+            "trending_tier": "stable",
+            "price_segment": "budget",
+            "popularity_rank": 12
+          },
+          {
+            "id": "henna",
+            "common_name": "Henna / Mehndi",
+            "inci_names": ["Lawsonia Inermis Leaf Extract", "Henna Extract"],
+            "search_terms": ["Henna hair", "Mehndi for hair", "Henna hair pack", "Henna for grey hair", "Mehndi baalon ke liye"],
+            "hindi_terms": ["मेहंदी"],
+            "related_benefits": ["natural_color", "conditioning", "strengthening", "grey_coverage", "ayurvedic"],
+            "compatible_formats": ["hair_mask", "powder", "hair_color"],
+            "trending_tier": "evergreen",
+            "price_segment": "budget",
+            "popularity_rank": 4
+          },
+          {
+            "id": "bringadi",
+            "common_name": "Bringadi Oil",
+            "inci_names": ["Bringadi Tailam"],
+            "search_terms": ["Bringadi oil", "Bringadi hair oil", "Bringadi tailam", "Kama Bringadi"],
+            "hindi_terms": ["भृंगादि तैलम"],
+            "related_benefits": ["hair_growth", "premature_greying", "traditional_formulation", "luxury_ayurvedic"],
+            "compatible_formats": ["hair_oil"],
+            "is_traditional_formulation": true,
+            "trending_tier": "stable",
+            "price_segment": "premium",
+            "popularity_rank": 10
+          },
+          {
+            "id": "neelibhringadi",
+            "common_name": "Neelibhringadi Oil",
+            "inci_names": ["Neelibhringadi Tailam", "Neelibhringadi Kera Tailam"],
+            "search_terms": ["Neelibhringadi", "Neelibhringadi oil", "Neelibhringadi tailam", "Kerala hair oil traditional"],
+            "hindi_terms": ["नीलीभृंगादि"],
+            "related_benefits": ["hair_growth", "premature_greying", "kerala_tradition", "scalp_health"],
+            "compatible_formats": ["hair_oil"],
+            "is_traditional_formulation": true,
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 20
+          },
+          {
+            "id": "jatamansi",
+            "common_name": "Jatamansi / Spikenard",
+            "inci_names": ["Nardostachys Jatamansi Root Extract"],
+            "search_terms": ["Jatamansi hair oil", "Jatamansi for hair", "Spikenard hair"],
+            "hindi_terms": ["जटामांसी"],
+            "related_benefits": ["hair_growth", "stress_relief", "premature_greying", "scalp_calming", "ayurvedic"],
+            "compatible_formats": ["hair_oil", "scalp_serum"],
+            "trending_tier": "emerging",
+            "price_segment": "mid",
+            "popularity_rank": 22
+          }
+        ]
+      }
+    },
+  
+    "product_formats": {
+      "_description": "All product formats with their search terms and applicable categories",
+      "skincare": [
+        { "id": "serum", "search_terms": ["serum", "face serum"], "popularity": 1 },
+        { "id": "cream", "search_terms": ["cream", "face cream"], "popularity": 2 },
+        { "id": "moisturizer", "search_terms": ["moisturizer", "moisturiser"], "popularity": 3 },
+        { "id": "face_wash", "search_terms": ["face wash", "cleanser", "facial cleanser"], "popularity": 4 },
+        { "id": "toner", "search_terms": ["toner", "face toner"], "popularity": 5 },
+        { "id": "sunscreen", "search_terms": ["sunscreen", "SPF", "sun protection"], "popularity": 6 },
+        { "id": "mask", "search_terms": ["face mask", "face pack", "sheet mask"], "popularity": 7 },
+        { "id": "oil", "search_terms": ["face oil", "facial oil"], "popularity": 8 },
+        { "id": "eye_cream", "search_terms": ["eye cream", "under eye cream"], "popularity": 9 },
+        { "id": "gel", "search_terms": ["face gel", "gel cream"], "popularity": 10 },
+        { "id": "mist", "search_terms": ["face mist", "face spray"], "popularity": 11 },
+        { "id": "peel", "search_terms": ["face peel", "chemical peel"], "popularity": 12 },
+        { "id": "lip_care", "search_terms": ["lip balm", "lip serum", "lip mask"], "popularity": 13 },
+        { "id": "body_lotion", "search_terms": ["body lotion", "body cream", "body butter"], "popularity": 14 },
+        { "id": "body_wash", "search_terms": ["body wash", "shower gel"], "popularity": 15 },
+        { "id": "soap", "search_terms": ["soap", "bathing bar", "handmade soap"], "popularity": 16 },
+        { "id": "powder", "search_terms": ["face powder", "herbal powder", "skin powder"], "popularity": 17 },
+        { "id": "scrub", "search_terms": ["face scrub", "body scrub", "exfoliating scrub"], "popularity": 18 },
+        { "id": "ubtan", "search_terms": ["ubtan", "face ubtan", "body ubtan"], "popularity": 19 },
+        { "id": "massage_oil", "search_terms": ["face massage oil", "body massage oil", "abhyanga oil"], "popularity": 20 }
+      ],
+      "haircare": [
+        { "id": "shampoo", "search_terms": ["shampoo"], "popularity": 1 },
+        { "id": "conditioner", "search_terms": ["conditioner", "hair conditioner"], "popularity": 2 },
+        { "id": "hair_oil", "search_terms": ["hair oil"], "popularity": 3 },
+        { "id": "hair_mask", "search_terms": ["hair mask", "hair pack"], "popularity": 4 },
+        { "id": "hair_serum", "search_terms": ["hair serum"], "popularity": 5 },
+        { "id": "leave_in", "search_terms": ["leave in conditioner", "leave in cream"], "popularity": 6 },
+        { "id": "scalp_serum", "search_terms": ["scalp serum", "scalp treatment"], "popularity": 7 },
+        { "id": "hair_spray", "search_terms": ["hair spray", "heat protectant"], "popularity": 8 }
+      ]
+    },
+  
+    "benefits": {
+      "_description": "Benefit/claim terms for Level 2 (Competing Approaches) trend queries",
+      "skincare": [
+        { "id": "brightening", "search_terms": ["brightening", "skin brightening", "glow", "radiance", "luminous skin"], "related_ingredient_categories": ["brightening"] },
+        { "id": "anti_aging", "search_terms": ["anti aging", "anti wrinkle", "fine lines", "firming", "lifting"], "related_ingredient_categories": ["anti_aging"] },
+        { "id": "acne", "search_terms": ["acne", "pimple", "breakout", "acne treatment", "acne scar"], "related_ingredient_categories": ["acne"] },
+        { "id": "hydration", "search_terms": ["hydrating", "moisturizing", "dry skin", "dewy skin", "glass skin"], "related_ingredient_categories": ["hydration"] },
+        { "id": "pigmentation", "search_terms": ["pigmentation", "dark spots", "melasma", "hyperpigmentation", "uneven skin tone", "dark spot removal"], "related_ingredient_categories": ["brightening"] },
+        { "id": "pore_minimizing", "search_terms": ["pore minimizing", "open pores", "large pores"], "related_ingredient_categories": ["acne", "exfoliation"] },
+        { "id": "tan_removal", "search_terms": ["tan removal", "de tan", "sun tan"], "related_ingredient_categories": ["brightening", "exfoliation"] },
+        { "id": "dark_circles", "search_terms": ["dark circles", "under eye dark circles", "puffy eyes"], "related_ingredient_categories": ["brightening", "hydration"] },
+        { "id": "sensitive_skin", "search_terms": ["sensitive skin", "redness", "irritation", "calming"], "related_ingredient_categories": ["sensitive_skin", "hydration"] },
+        { "id": "oily_skin", "search_terms": ["oily skin", "oil control", "mattifying", "sebum control"], "related_ingredient_categories": ["acne"] },
+        { "id": "dry_skin", "search_terms": ["dry skin", "very dry skin", "flaky skin", "winter skincare"], "related_ingredient_categories": ["hydration"] },
+        { "id": "skin_whitening", "search_terms": ["skin whitening", "fair skin", "skin lightening"], "related_ingredient_categories": ["brightening"] },
+        { "id": "barrier_repair", "search_terms": ["skin barrier", "barrier repair", "damaged skin barrier"], "related_ingredient_categories": ["hydration", "sensitive_skin"] },
+        { "id": "exfoliation", "search_terms": ["exfoliation", "dead skin removal", "skin texture", "smooth skin"], "related_ingredient_categories": ["exfoliation"] },
+        { "id": "ayurvedic_skincare", "search_terms": ["ayurvedic skincare", "ayurvedic face cream", "ayurvedic beauty", "ayurvedic skin products India"], "related_ingredient_categories": ["ayurvedic_brightening", "ayurvedic_healing_soothing", "ayurvedic_anti_aging"] },
+        { "id": "natural_skincare", "search_terms": ["natural skincare", "chemical free skincare", "organic skincare India", "herbal skin care"], "related_ingredient_categories": ["ayurvedic_brightening", "ayurvedic_healing_soothing"] },
+        { "id": "glow_radiance", "search_terms": ["glowing skin", "glass skin", "skin glow tips", "natural glow", "radiant skin", "chamakti twacha"], "related_ingredient_categories": ["ayurvedic_brightening", "brightening"] },
+        { "id": "wedding_beauty", "search_terms": ["bridal skincare", "wedding glow", "dulhan skin care", "bridal ubtan", "shaadi glow"], "related_ingredient_categories": ["ayurvedic_brightening", "traditional_formulations"] }
+      ],
+      "haircare": [
+        { "id": "hair_fall", "search_terms": ["hair fall", "hair loss", "hair thinning", "hair fall control"], "related_ingredient_categories": ["hair_growth"] },
+        { "id": "hair_growth", "search_terms": ["hair growth", "hair regrowth", "grow hair faster", "thick hair"], "related_ingredient_categories": ["hair_growth"] },
+        { "id": "dandruff", "search_terms": ["dandruff", "anti dandruff", "flaky scalp", "itchy scalp"], "related_ingredient_categories": ["dandruff"] },
+        { "id": "frizz_control", "search_terms": ["frizz control", "frizzy hair", "smooth hair", "anti frizz"], "related_ingredient_categories": ["hair_repair"] },
+        { "id": "damage_repair", "search_terms": ["damage repair", "damaged hair", "dry damaged hair", "hair repair"], "related_ingredient_categories": ["hair_repair"] },
+        { "id": "hair_color_care", "search_terms": ["colored hair", "color protect shampoo", "hair color care"], "related_ingredient_categories": ["hair_repair"] },
+        { "id": "curly_hair", "search_terms": ["curly hair", "curl defining", "curly hair products India"], "related_ingredient_categories": ["hair_repair"] },
+        { "id": "grey_hair", "search_terms": ["grey hair", "premature greying", "white hair"], "related_ingredient_categories": ["hair_growth", "ayurvedic_haircare"] },
+        { "id": "ayurvedic_haircare", "search_terms": ["ayurvedic hair oil", "ayurvedic shampoo", "herbal hair oil India", "desi nuskhe hair"], "related_ingredient_categories": ["ayurvedic_haircare"] },
+        { "id": "natural_hair_wash", "search_terms": ["natural hair wash", "chemical free shampoo", "herbal hair wash", "sulfate free shampoo India"], "related_ingredient_categories": ["ayurvedic_haircare"] },
+        { "id": "scalp_health", "search_terms": ["scalp health", "itchy scalp", "dry scalp treatment", "scalp care routine"], "related_ingredient_categories": ["dandruff", "ayurvedic_haircare"] }
+      ]
+    },
+  
+    "brands": {
+      "_description": "Indian market brands for Level 3 (Market Players) trend queries. Organized by market segment.",
+     
+      "d2c_skincare": [
+        {
+          "id": "minimalist",
+          "name": "Minimalist",
+          "search_prefix": "Minimalist",
+          "hero_products": ["Vitamin C", "Niacinamide 10%", "Salicylic Acid", "Retinol", "AHA BHA", "Alpha Arbutin", "SPF 50", "Hyaluronic Acid", "Tranexamic Acid"],
+          "price_segment": "mid",
+          "market_position": "science_backed_affordable"
+        },
+        {
+          "id": "the_derma_co",
+          "name": "The Derma Co",
+          "search_prefix": "Derma Co",
+          "hero_products": ["Salicylic Acid", "Niacinamide", "Hyaluronic Acid", "Vitamin C", "Retinol", "Ceramide", "AHA BHA PHA"],
+          "price_segment": "mid",
+          "market_position": "dermatologist_formulated"
+        },
+        {
+          "id": "dot_and_key",
+          "name": "Dot & Key",
+          "search_prefix": "Dot and Key",
+          "hero_products": ["Vitamin C", "Retinol", "Cica", "Watermelon", "Barrier Repair", "SPF"],
+          "price_segment": "mid_premium",
+          "market_position": "trendy_millennial"
+        },
+        {
+          "id": "plum",
+          "name": "Plum",
+          "search_prefix": "Plum",
+          "hero_products": ["Green Tea", "Vitamin C", "Niacinamide", "Retinol", "Ceramide"],
+          "price_segment": "mid",
+          "market_position": "vegan_natural"
+        },
+        {
+          "id": "deconstruct",
+          "name": "Deconstruct",
+          "search_prefix": "Deconstruct",
+          "hero_products": ["Niacinamide", "Retinol", "AHA", "Vitamin C", "Peptides"],
+          "price_segment": "mid",
+          "market_position": "science_forward"
+        },
+        {
+          "id": "fixderma",
+          "name": "Fixderma",
+          "search_prefix": "Fixderma",
+          "hero_products": ["Nigrifix", "Shadow SPF", "Salicylic Acid", "Reticuram"],
+          "price_segment": "mid",
+          "market_position": "derma_clinical"
+        },
+        {
+          "id": "reequil",
+          "name": "Re'equil",
+          "search_prefix": "Reequil",
+          "hero_products": ["Sunscreen", "Ceramide", "Pitta Mask", "Shampoo"],
+          "price_segment": "mid",
+          "market_position": "clean_effective"
+        },
+        {
+          "id": "foxtale",
+          "name": "Foxtale",
+          "search_prefix": "Foxtale",
+          "hero_products": ["Vitamin C", "Niacinamide", "Retinol", "Sunscreen"],
+          "price_segment": "mid",
+          "market_position": "new_gen_d2c"
+        },
+        {
+          "id": "conscious_chemist",
+          "name": "Conscious Chemist",
+          "search_prefix": "Conscious Chemist",
+          "hero_products": ["Vitamin C", "Sunscreen", "Ceramide"],
+          "price_segment": "mid",
+          "market_position": "clean_science"
+        },
+        {
+          "id": "suganda",
+          "name": "Suganda",
+          "search_prefix": "Suganda",
+          "hero_products": ["Niacinamide", "Centella", "White Lotus"],
+          "price_segment": "budget_mid",
+          "market_position": "gentle_effective"
+        }
+      ],
+     
+      "mass_market_skincare": [
+        {
+          "id": "mamaearth",
+          "name": "Mamaearth",
+          "search_prefix": "Mamaearth",
+          "hero_products": ["Vitamin C", "Ubtan", "Tea Tree", "Onion", "Rice Water", "Niacinamide", "Retinol", "Aloe Vera"],
+          "price_segment": "budget_mid",
+          "market_position": "natural_mass"
+        },
+        {
+          "id": "mcaffeine",
+          "name": "mCaffeine",
+          "search_prefix": "mCaffeine",
+          "hero_products": ["Coffee Face Wash", "Coffee Scrub", "Coffee Body Wash", "Caffeine"],
+          "price_segment": "mid",
+          "market_position": "caffeine_specialist"
+        },
+        {
+          "id": "garnier",
+          "name": "Garnier",
+          "search_prefix": "Garnier",
+          "hero_products": ["Vitamin C", "Micellar Water", "Bright Complete", "Sunscreen"],
+          "price_segment": "budget",
+          "market_position": "mass_accessible"
+        },
+        {
+          "id": "loreal",
+          "name": "L'Oreal Paris",
+          "search_prefix": "Loreal",
+          "hero_products": ["Revitalift", "Glycolic Acid", "Hyaluronic Acid", "SPF", "Serum"],
+          "price_segment": "mid",
+          "market_position": "global_mass_premium"
+        },
+        {
+          "id": "neutrogena",
+          "name": "Neutrogena",
+          "search_prefix": "Neutrogena",
+          "hero_products": ["Sunscreen", "Hydro Boost", "Retinol", "Salicylic Acid"],
+          "price_segment": "mid",
+          "market_position": "dermatologist_recommended"
+        },
+        {
+          "id": "cetaphil",
+          "name": "Cetaphil",
+          "search_prefix": "Cetaphil",
+          "hero_products": ["Gentle Cleanser", "Moisturizer", "Sunscreen", "Bright"],
+          "price_segment": "mid",
+          "market_position": "sensitive_skin_specialist"
+        },
+        {
+          "id": "simple",
+          "name": "Simple",
+          "search_prefix": "Simple skincare",
+          "hero_products": ["Face Wash", "Moisturizer", "Micellar Water"],
+          "price_segment": "budget_mid",
+          "market_position": "gentle_basic"
+        },
+        {
+          "id": "lakme",
+          "name": "Lakme",
+          "search_prefix": "Lakme",
+          "hero_products": ["Vitamin C", "9to5", "Sun Expert", "Peach Milk"],
+          "price_segment": "budget",
+          "market_position": "heritage_mass"
+        },
+        {
+          "id": "pond_s",
+          "name": "Pond's",
+          "search_prefix": "Ponds",
+          "hero_products": ["Bright Beauty", "Super Light Gel", "Age Miracle"],
+          "price_segment": "budget",
+          "market_position": "legacy_mass"
+        },
+        {
+          "id": "nivea",
+          "name": "Nivea",
+          "search_prefix": "Nivea",
+          "hero_products": ["Body Lotion", "Sun Protect", "Milk Delights", "Creme"],
+          "price_segment": "budget",
+          "market_position": "global_mass"
+        }
+      ],
+     
+      "premium_skincare": [
+        {
+          "id": "skinceuticals",
+          "name": "SkinCeuticals",
+          "search_prefix": "SkinCeuticals",
+          "hero_products": ["CE Ferulic", "HA Intensifier", "Retinol"],
+          "price_segment": "luxury",
+          "market_position": "clinical_luxury"
+        },
+        {
+          "id": "the_ordinary",
+          "name": "The Ordinary",
+          "search_prefix": "The Ordinary",
+          "hero_products": ["Niacinamide", "AHA BHA Peel", "Retinol", "Hyaluronic Acid", "Vitamin C", "Alpha Arbutin"],
+          "price_segment": "budget_mid",
+          "market_position": "global_science_affordable"
+        },
+        {
+          "id": "cerave",
+          "name": "CeraVe",
+          "search_prefix": "CeraVe",
+          "hero_products": ["Moisturizing Cream", "Cleanser", "SA Cleanser", "Sunscreen"],
+          "price_segment": "mid",
+          "market_position": "derm_essential"
+        },
+        {
+          "id": "olay",
+          "name": "Olay",
+          "search_prefix": "Olay",
+          "hero_products": ["Retinol 24", "Vitamin C", "Niacinamide", "Regenerist"],
+          "price_segment": "mid_premium",
+          "market_position": "anti_aging_specialist"
+        }
+      ],
+     
+      "ayurvedic_natural_brands": [
+        {
+          "id": "biotique",
+          "name": "Biotique",
+          "search_prefix": "Biotique",
+          "hero_products": ["Bio Neem", "Bio Papaya", "Bio Kelp Shampoo", "Morning Nectar", "Bio Sandalwood"],
+          "price_segment": "budget",
+          "market_position": "ayurvedic_mass"
+        },
+        {
+          "id": "himalaya",
+          "name": "Himalaya",
+          "search_prefix": "Himalaya",
+          "hero_products": ["Neem Face Wash", "Purifying Mud Pack", "Gentle Exfoliating Walnut Scrub", "Anti Hair Fall Oil", "Anti Dandruff Shampoo"],
+          "price_segment": "budget",
+          "market_position": "herbal_heritage"
+        },
+        {
+          "id": "juicy_chemistry",
+          "name": "Juicy Chemistry",
+          "search_prefix": "Juicy Chemistry",
+          "hero_products": ["Rosehip Oil", "Face Mask", "Cold Pressed Oil", "Lip Balm"],
+          "price_segment": "mid_premium",
+          "market_position": "organic_artisanal"
+        },
+        {
+          "id": "earth_rhythm",
+          "name": "Earth Rhythm",
+          "search_prefix": "Earth Rhythm",
+          "hero_products": ["Phyto Ceramide", "Sunscreen", "Shampoo Bar", "Lip Butter"],
+          "price_segment": "mid",
+          "market_position": "sustainable_clean"
+        },
+        {
+          "id": "kama_ayurveda",
+          "name": "Kama Ayurveda",
+          "search_prefix": "Kama Ayurveda",
+          "hero_products": ["Kumkumadi", "Bringadi Oil", "Rose Water", "Night Cream", "Eladi Hydrating Cream"],
+          "price_segment": "premium",
+          "market_position": "premium_ayurveda"
+        },
+        {
+          "id": "forest_essentials",
+          "name": "Forest Essentials",
+          "search_prefix": "Forest Essentials",
+          "hero_products": ["Kumkumadi", "Night Cream", "Soundarya Serum", "Face Wash", "Nalpamaradi", "Ubtan"],
+          "price_segment": "premium",
+          "market_position": "luxury_ayurveda"
+        },
+        {
+          "id": "just_herbs",
+          "name": "Just Herbs",
+          "search_prefix": "Just Herbs",
+          "hero_products": ["Kumkumadi", "Lip and Cheek Tint", "Face Wash", "Rejuvenating Beauty Elixir"],
+          "price_segment": "mid",
+          "market_position": "accessible_ayurveda"
+        },
+        {
+          "id": "vilvah",
+          "name": "Vilvah",
+          "search_prefix": "Vilvah",
+          "hero_products": ["Goatmilk Shampoo", "Face Wash", "Hair Oil", "Lip Balm"],
+          "price_segment": "mid",
+          "market_position": "artisanal_natural"
+        },
+        {
+          "id": "shesha_naturals",
+          "name": "Shesha Naturals",
+          "search_prefix": "Shesha Naturals",
+          "hero_products": ["Face Oil", "Body Oil", "Hair Oil"],
+          "price_segment": "mid_premium",
+          "market_position": "heritage_formulations"
+        },
+        {
+          "id": "aavrani",
+          "name": "Aavrani",
+          "search_prefix": "Aavrani",
+          "hero_products": ["Glow Activating Exfoliator", "Turmeric Mask"],
+          "price_segment": "premium",
+          "market_position": "indian_heritage_global"
+        },
+        {
+          "id": "ras_luxury",
+          "name": "RAS Luxury Oils",
+          "search_prefix": "RAS Luxury Oils",
+          "hero_products": ["Face Elixir", "Body Oil", "Kumkumadi"],
+          "price_segment": "luxury",
+          "market_position": "luxury_oils"
+        },
+        {
+          "id": "khadi_natural",
+          "name": "Khadi Natural",
+          "search_prefix": "Khadi Natural",
+          "hero_products": ["Amla Reetha Shikakai Shampoo", "Henna", "Hair Oil", "Neem Face Wash"],
+          "price_segment": "budget",
+          "market_position": "government_backed_ayurveda"
+        },
+        {
+          "id": "patanjali",
+          "name": "Patanjali",
+          "search_prefix": "Patanjali",
+          "hero_products": ["Saundarya Face Wash", "Aloe Vera Gel", "Kesh Kanti Shampoo", "Dant Kanti", "Saundarya Cream"],
+          "price_segment": "budget",
+          "market_position": "mass_ayurveda"
+        },
+        {
+          "id": "dabur",
+          "name": "Dabur",
+          "search_prefix": "Dabur",
+          "hero_products": ["Amla Hair Oil", "Vatika Hair Oil", "Gulabari Rose Water", "Honey"],
+          "price_segment": "budget",
+          "market_position": "heritage_ayurveda_mass"
+        },
+        {
+          "id": "tvakh",
+          "name": "Tvakh",
+          "search_prefix": "Tvakh",
+          "hero_products": ["Brightening Peel", "Sunscreen", "Vitamin C"],
+          "price_segment": "mid_premium",
+          "market_position": "clinical_ayurveda_fusion"
+        },
+        {
+          "id": "tribe_concepts",
+          "name": "Tribe Concepts",
+          "search_prefix": "Tribe Concepts",
+          "hero_products": ["Kumkumadi Oil", "Rose Glow Mask", "Ubtan", "Face Serum"],
+          "price_segment": "mid",
+          "market_position": "traditional_d2c"
+        },
+        {
+          "id": "ohria_ayurveda",
+          "name": "Ohria Ayurveda",
+          "search_prefix": "Ohria Ayurveda",
+          "hero_products": ["Night Serum", "Face Wash", "Hair Oil"],
+          "price_segment": "premium",
+          "market_position": "boutique_ayurveda"
+        }
+      ],
+     
+      "haircare_brands": [
+        {
+          "id": "tresemme",
+          "name": "TRESemmé",
+          "search_prefix": "TRESemme",
+          "hero_products": ["Keratin Shampoo", "Conditioner", "Hair Serum"],
+          "price_segment": "budget_mid",
+          "market_position": "salon_inspired"
+        },
+        {
+          "id": "loreal_hair",
+          "name": "L'Oreal Professionnel",
+          "search_prefix": "Loreal hair",
+          "hero_products": ["Serie Expert", "Hair Spa", "Serum"],
+          "price_segment": "mid_premium",
+          "market_position": "professional_salon"
+        },
+        {
+          "id": "wow",
+          "name": "WOW Skin Science",
+          "search_prefix": "WOW",
+          "hero_products": ["Apple Cider Vinegar Shampoo", "Onion Shampoo", "Red Onion Oil"],
+          "price_segment": "mid",
+          "market_position": "natural_d2c"
+        },
+        {
+          "id": "indulekha",
+          "name": "Indulekha",
+          "search_prefix": "Indulekha",
+          "hero_products": ["Bringha Oil", "Hair Oil", "Shampoo"],
+          "price_segment": "mid",
+          "market_position": "ayurvedic_hair_specialist"
+        },
+        {
+          "id": "dove_hair",
+          "name": "Dove",
+          "search_prefix": "Dove",
+          "hero_products": ["Shampoo", "Conditioner", "Hair Mask", "Intense Repair"],
+          "price_segment": "budget",
+          "market_position": "gentle_mass"
+        },
+        {
+          "id": "head_shoulders",
+          "name": "Head & Shoulders",
+          "search_prefix": "Head and Shoulders",
+          "hero_products": ["Anti Dandruff Shampoo", "2 in 1"],
+          "price_segment": "budget",
+          "market_position": "dandruff_specialist"
+        },
+        {
+          "id": "matrix",
+          "name": "Matrix",
+          "search_prefix": "Matrix",
+          "hero_products": ["Oil Wonders", "Biolage", "Shampoo", "Serum"],
+          "price_segment": "mid_premium",
+          "market_position": "professional_salon"
+        },
+        {
+          "id": "bare_anatomy",
+          "name": "Bare Anatomy",
+          "search_prefix": "Bare Anatomy",
+          "hero_products": ["Custom Shampoo", "Hair Serum", "Conditioner"],
+          "price_segment": "mid",
+          "market_position": "personalized_d2c"
+        }
+      ]
+    },
+  
+    "query_generation_rules": {
+      "_description": "Rules for generating SerpAPI batch queries from the master data above",
+  
+      "level_1_ingredient_queries": {
+        "description": "Ingredient × Format combinations. Generate '{ingredient_search_term} {format_search_term}' for compatible formats only.",
+        "template": "{ingredient_common_name} {format_search_term}",
+        "additional_templates": [
+          "{ingredient_common_name} for {benefit_search_term}",
+          "{ingredient_common_name} India",
+          "{ingredient_inci_primary} {format_search_term}",
+          "best {ingredient_common_name} {format_search_term}"
+        ],
+        "hindi_templates": [
+          "{hindi_term} for face",
+          "{hindi_term} face pack",
+          "{hindi_term} ke fayde skin",
+          "{hindi_term} hair oil"
+        ],
+        "hindi_template_note": "Only generate Hindi queries for ingredients that have hindi_terms defined. These capture significant Tier 2/3 city search volume.",
+        "max_queries_per_ingredient": 8,
+        "filter": "Only generate if ingredient.compatible_formats includes the format",
+        "priority": "Generate for popularity_rank <= 20 first, then remaining",
+        "estimated_queries": 650
+      },
+  
+      "level_2_benefit_queries": {
+        "description": "Benefit/claim × Format combinations. These capture category-level demand.",
+        "template": "{benefit_search_term} {format_search_term}",
+        "additional_templates": [
+          "best {benefit_search_term} {format_search_term} India",
+          "{benefit_search_term} {format_search_term} for {skin_type}",
+          "{benefit_search_term} products India"
+        ],
+        "skin_types_to_cross": ["oily skin", "dry skin", "sensitive skin", "combination skin"],
+        "max_queries_per_benefit": 6,
+        "estimated_queries": 120
+      },
+  
+      "level_3_brand_queries": {
+        "description": "Brand × Hero Product combinations. Tracks brand-level market presence.",
+        "template": "{brand_search_prefix} {hero_product}",
+        "additional_templates": [
+          "{brand_search_prefix} {hero_product} review",
+          "{brand_search_prefix} {hero_product} price"
+        ],
+        "max_queries_per_brand": 5,
+        "filter": "Only top 5 hero products per brand by relevance",
+        "estimated_queries": 250
+      },
+  
+      "comparison_queries": {
+        "description": "Head-to-head comparisons for Google Trends comparison mode",
+        "templates": [
+          "{ingredient_A} vs {ingredient_B}",
+          "{ingredient_A} {format} vs {ingredient_B} {format}",
+          "{brand_A} vs {brand_B}"
+        ],
+        "comparison_groups": {
+          "brightening_ingredients": ["Vitamin C", "Niacinamide", "Alpha Arbutin", "Tranexamic Acid", "Kojic Acid"],
+          "ayurvedic_brightening": ["Kumkumadi", "Saffron serum", "Turmeric cream", "Sandalwood cream", "Ubtan face pack"],
+          "brightening_modern_vs_ayurvedic": ["Vitamin C serum", "Kumkumadi oil", "Niacinamide serum", "Nalpamaradi tailam", "Alpha Arbutin serum"],
+          "anti_aging_ingredients": ["Retinol", "Peptides", "Vitamin C", "Bakuchiol", "Collagen"],
+          "hydration_ingredients": ["Hyaluronic Acid", "Ceramides", "Squalane", "Centella Asiatica", "Snail Mucin"],
+          "acne_ingredients": ["Salicylic Acid", "Niacinamide", "Tea Tree", "Benzoyl Peroxide", "Azelaic Acid"],
+          "hair_growth": ["Onion Oil", "Rosemary Oil", "Biotin", "Redensyl", "Minoxidil"],
+          "ayurvedic_hair": ["Bhringraj oil", "Amla hair oil", "Brahmi oil", "Hibiscus hair oil", "Castor oil hair"],
+          "hair_growth_modern_vs_ayurvedic": ["Minoxidil", "Redensyl", "Onion oil", "Bhringraj oil", "Rosemary oil"],
+          "natural_hair_wash": ["Shikakai shampoo", "Reetha shampoo", "Herbal shampoo", "Sulfate free shampoo", "Natural hair wash"],
+          "ayurvedic_oil_brands": ["Kama Ayurveda Bringadi", "Forest Essentials Kumkumadi", "Indulekha Bringha", "Dabur Amla Oil", "Khadi Natural Hair Oil"],
+          "d2c_brands": ["Minimalist", "The Derma Co", "Plum", "Dot and Key", "Mamaearth"],
+          "ayurvedic_brands": ["Forest Essentials", "Kama Ayurveda", "Just Herbs", "Biotique", "Tribe Concepts"],
+          "hair_brands": ["WOW", "Mamaearth", "Indulekha", "TRESemme", "Dove"]
+        },
+        "max_comparisons_per_group": 3,
+        "estimated_queries": 30
+      }
+    },
+  
+    "serpapi_request_templates": {
+      "_description": "Actual SerpAPI request structures for each query type",
+  
+      "google_trends_interest_over_time": {
+        "engine": "google_trends",
+        "data_type": "TIMESERIES",
+        "geo": "IN",
+        "date": "today 12-m",
+        "hl": "en",
+        "example_q": "Vitamin C serum"
+      },
+  
+      "google_trends_related_queries": {
+        "engine": "google_trends",
+        "data_type": "RELATED_QUERIES",
+        "geo": "IN",
+        "date": "today 12-m",
+        "hl": "en",
+        "example_q": "Vitamin C serum"
+      },
+  
+      "google_trends_related_topics": {
+        "engine": "google_trends",
+        "data_type": "RELATED_TOPICS",
+        "geo": "IN",
+        "date": "today 12-m",
+        "hl": "en",
+        "example_q": "Vitamin C serum"
+      },
+  
+      "google_trends_geo_interest": {
+        "engine": "google_trends",
+        "data_type": "GEO_MAP",
+        "geo": "IN",
+        "date": "today 12-m",
+        "hl": "en",
+        "example_q": "Vitamin C serum"
+      },
+  
+      "google_trends_comparison": {
+        "engine": "google_trends",
+        "data_type": "TIMESERIES",
+        "geo": "IN",
+        "date": "today 12-m",
+        "hl": "en",
+        "example_q": "Vitamin C serum,Niacinamide serum,Alpha Arbutin serum",
+        "note": "Comma-separated queries for comparison. Max 5 terms."
+      },
+  
+      "google_shopping": {
+        "engine": "google_shopping",
+        "gl": "in",
+        "hl": "en",
+        "location": "India",
+        "example_q": "Vitamin C serum",
+        "note": "Returns product listings with prices — use for Level 3 brand discovery and price range data"
+      }
+    },
+  
+    "data_storage_schema": {
+      "_description": "How fetched data should be stored in PostgreSQL",
+  
+      "table_market_trends": {
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "query_text": "VARCHAR(200) NOT NULL",
+          "query_level": "VARCHAR(20) NOT NULL CHECK (query_level IN ('ingredient', 'benefit', 'brand', 'comparison'))",
+          "category": "VARCHAR(20) CHECK (category IN ('skincare', 'haircare'))",
+          "ingredient_tag": "VARCHAR(100)",
+          "product_format": "VARCHAR(50)",
+          "benefit_tag": "VARCHAR(100)",
+          "brand_tag": "VARCHAR(100)",
+          "interest_over_time": "JSONB",
+          "related_queries_rising": "JSONB",
+          "related_queries_top": "JSONB",
+          "related_topics": "JSONB",
+          "regional_interest": "JSONB",
+          "current_score": "INTEGER",
+          "peak_score": "INTEGER",
+          "peak_month": "VARCHAR(20)",
+          "growth_pct_3m": "FLOAT",
+          "growth_pct_6m": "FLOAT",
+          "growth_pct_12m": "FLOAT",
+          "trend_direction": "VARCHAR(15) CHECK (trend_direction IN ('rising_fast', 'rising', 'stable', 'declining', 'declining_fast'))",
+          "comparison_group": "VARCHAR(100)",
+          "fetched_at": "TIMESTAMP NOT NULL DEFAULT NOW()",
+          "fetch_source": "VARCHAR(20) DEFAULT 'batch' CHECK (fetch_source IN ('batch', 'on_demand'))",
+          "is_active": "BOOLEAN DEFAULT true"
+        },
+        "indexes": [
+          "CREATE INDEX idx_mt_ingredient ON market_trends(ingredient_tag, product_format)",
+          "CREATE INDEX idx_mt_benefit ON market_trends(benefit_tag, product_format)",
+          "CREATE INDEX idx_mt_brand ON market_trends(brand_tag)",
+          "CREATE INDEX idx_mt_level ON market_trends(query_level)",
+          "CREATE INDEX idx_mt_category ON market_trends(category)",
+          "CREATE INDEX idx_mt_fetched ON market_trends(fetched_at)",
+          "CREATE UNIQUE INDEX idx_mt_unique ON market_trends(query_text, DATE(fetched_at))"
+        ]
+      },
+  
+      "table_shopping_data": {
+        "description": "Google Shopping results for price range and competitor data",
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "query_text": "VARCHAR(200) NOT NULL",
+          "category": "VARCHAR(20)",
+          "ingredient_tag": "VARCHAR(100)",
+          "product_format": "VARCHAR(50)",
+          "results": "JSONB",
+          "price_min": "FLOAT",
+          "price_max": "FLOAT",
+          "price_avg": "FLOAT",
+          "price_median": "FLOAT",
+          "top_brands_found": "JSONB",
+          "total_results": "INTEGER",
+          "fetched_at": "TIMESTAMP NOT NULL DEFAULT NOW()"
+        },
+        "indexes": [
+          "CREATE INDEX idx_sd_ingredient ON shopping_data(ingredient_tag, product_format)",
+          "CREATE UNIQUE INDEX idx_sd_unique ON shopping_data(query_text, DATE(fetched_at))"
+        ]
+      },
+  
+      "table_on_demand_log": {
+        "description": "Tracks on-demand fetches to auto-promote to batch list",
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "query_text": "VARCHAR(200) NOT NULL",
+          "query_level": "VARCHAR(20)",
+          "triggered_by_wish": "TEXT",
+          "triggered_at": "TIMESTAMP DEFAULT NOW()",
+          "auto_added_to_batch": "BOOLEAN DEFAULT false",
+          "auto_added_at": "TIMESTAMP"
+        },
+        "indexes": [
+          "CREATE INDEX idx_od_query ON on_demand_log(query_text)",
+          "CREATE INDEX idx_od_month ON on_demand_log(DATE_TRUNC('month', triggered_at))"
+        ]
+      }
+    },
+  
+    "matching_algorithm": {
+      "_description": "How to match a user's parsed wish to stored trend data",
+  
+      "step_1_parse_wish": {
+        "input": "Vitamin C serum for skin brightening",
+        "output": {
+          "hero_ingredient": "vitamin_c",
+          "product_format": "serum",
+          "primary_benefit": "brightening",
+          "secondary_benefits": ["pigmentation", "glow", "dark_spots"],
+          "category": "skincare"
+        }
+      },
+  
+      "step_2_level_1_lookup": {
+        "description": "Find ingredient-level trends",
+        "query": "SELECT * FROM market_trends WHERE ingredient_tag = '{hero_ingredient}' AND query_level = 'ingredient' AND is_active = true AND fetched_at > NOW() - INTERVAL '35 days' ORDER BY current_score DESC LIMIT 5",
+        "fallback": "If < 3 results, trigger on_demand fetch for ingredient × format queries"
+      },
+  
+      "step_3_level_2_lookup": {
+        "description": "Find competing approaches for the same benefit",
+        "query": "SELECT * FROM market_trends WHERE benefit_tag = '{primary_benefit}' AND query_level IN ('ingredient', 'benefit') AND ingredient_tag != '{hero_ingredient}' AND is_active = true AND fetched_at > NOW() - INTERVAL '35 days' ORDER BY current_score DESC LIMIT 5",
+        "include_user_ingredient": "Also fetch user's own ingredient trend to position it in the comparison"
+      },
+  
+      "step_4_level_3_lookup": {
+        "description": "Find brand-level market players",
+        "query_trends": "SELECT * FROM market_trends WHERE ingredient_tag = '{hero_ingredient}' AND query_level = 'brand' AND is_active = true AND fetched_at > NOW() - INTERVAL '35 days' ORDER BY current_score DESC LIMIT 5",
+        "query_shopping": "SELECT * FROM shopping_data WHERE ingredient_tag = '{hero_ingredient}' AND product_format = '{product_format}' AND fetched_at > NOW() - INTERVAL '35 days' LIMIT 1",
+        "combine": "Merge Google Trends brand data with Google Shopping price data"
+      },
+  
+      "step_5_assemble_response": {
+        "output_structure": {
+          "level_1_ingredient_trends": "Top 5 queries with scores and growth %",
+          "level_2_competing_approaches": "Top 5 alternative approaches with user's ingredient highlighted",
+          "level_3_market_players": "Top 5 brands with price range",
+          "insights": "AI-generated insights based on the data",
+          "regional_hotspots": "Top 3-5 states",
+          "rising_queries": "Top 3 rising search queries"
+        }
+      }
+    },
+  
+    "batch_job_pseudocode": {
+      "_description": "High-level pseudocode for the monthly batch job",
+     
+      "steps": [
+        {
+          "step": 1,
+          "name": "Load Config",
+          "action": "Read this JSON config file"
+        },
+        {
+          "step": 2,
+          "name": "Generate Query List",
+          "action": "For each ingredient in config: generate Level 1 queries (ingredient × compatible formats). For each benefit: generate Level 2 queries. For each brand: generate Level 3 queries (brand × hero products). Add comparison group queries."
+        },
+        {
+          "step": 3,
+          "name": "Deduplicate",
+          "action": "Remove duplicate queries (e.g., 'Niacinamide serum' might appear in both brightening and acne categories)"
+        },
+        {
+          "step": 4,
+          "name": "Check Auto-Add from On-Demand",
+          "action": "SELECT query_text, COUNT(*) FROM on_demand_log WHERE triggered_at > NOW() - INTERVAL '30 days' AND auto_added_to_batch = false GROUP BY query_text HAVING COUNT(*) >= 3. Add these to the batch list."
+        },
+        {
+          "step": 5,
+          "name": "Batch Fetch — Trends",
+          "action": "For each query: call SerpAPI Google Trends (interest_over_time + related_queries + geo_map). Rate limit: 5 requests/second. Retry failed queries up to 3 times."
+        },
+        {
+          "step": 6,
+          "name": "Batch Fetch — Shopping",
+          "action": "For top 100 ingredient × format queries: call SerpAPI Google Shopping. Extract price ranges, top brands."
+        },
+        {
+          "step": 7,
+          "name": "Calculate Derived Metrics",
+          "action": "For each trend: calculate growth_pct_3m, growth_pct_6m, growth_pct_12m, trend_direction, peak_month, current_score."
+        },
+        {
+          "step": 8,
+          "name": "Store Results",
+          "action": "Insert into market_trends and shopping_data tables with fetch_source = 'batch'."
+        },
+        {
+          "step": 9,
+          "name": "Mark Auto-Added Queries",
+          "action": "UPDATE on_demand_log SET auto_added_to_batch = true, auto_added_at = NOW() WHERE query_text IN (newly added queries)"
+        },
+        {
+          "step": 10,
+          "name": "Generate Report",
+          "action": "Log: total queries fetched, new queries added from on-demand, API calls used, errors, total cost estimate. Biggest movers (top 10 rising, top 10 declining)."
+        }
+      ]
+    },
+  
+    "trend_direction_rules": {
+      "_description": "How to calculate trend_direction from interest_over_time data",
+      "rising_fast": "growth_pct_6m > 100%",
+      "rising": "growth_pct_6m between 20% and 100%",
+      "stable": "growth_pct_6m between -20% and 20%",
+      "declining": "growth_pct_6m between -20% and -50%",
+      "declining_fast": "growth_pct_6m < -50%"
+    },
+  
+    "query_budget_summary": {
+      "level_1_ingredient_format": {
+        "formula": "~105 active ingredients × ~5 avg compatible formats = ~525 queries",
+        "serpapi_calls": "525 (trends) + 120 (shopping) = 645"
+      },
+      "level_2_benefit_format": {
+        "formula": "~27 benefits (including 5 new Ayurvedic) × ~4 format variations = ~108 queries",
+        "serpapi_calls": 108
+      },
+      "level_3_brand_product": {
+        "formula": "~51 brands × ~5 hero products = ~255 queries",
+        "serpapi_calls": 255
+      },
+      "comparisons": {
+        "formula": "14 comparison groups (including 7 new Ayurvedic) × ~3 comparison queries = ~42 queries",
+        "serpapi_calls": 42
+      },
+      "hindi_regional_terms": {
+        "formula": "~40 ingredients with Hindi terms × ~2 Hindi queries each = ~80 queries",
+        "serpapi_calls": 80,
+        "note": "Hindi search terms capture significant Indian search volume not covered by English queries"
+      },
+      "total": {
+        "estimated_queries": "~1010-1130 unique queries (after deduplication)",
+        "estimated_serpapi_calls": "~1130 (including shopping + Hindi)",
+        "estimated_cost_usd": "$11.30 at $50/5000 searches",
+        "buffer_for_on_demand": "~3870 remaining calls/month for on-demand fetches",
+        "headroom_note": "Generous buffer allows for aggressive on-demand fetching without hitting limits"
+      }
+    }
+  }

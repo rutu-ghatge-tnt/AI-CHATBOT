@@ -613,6 +613,7 @@ async def call_ai_with_claude(
     # Claude's ephemeral cache automatically caches system prompts when cache_control is used
     # This reduces costs by ~90% on system prompt tokens after the first call
     # Cached tokens are charged at only 20% of normal input token rate
+    # Note: cache_control may not be supported in all Anthropic SDK versions
     if cache_control:
         api_params["cache_control"] = cache_control
         if cache_manager.should_use_cache(prompt_type, system_prompt):
@@ -625,7 +626,18 @@ async def call_ai_with_claude(
     for attempt in range(max_retries):
         try:
             # Call Claude API with caching support
-            response = claude_client.messages.create(**api_params)
+            # If cache_control is not supported, catch the error and retry without it
+            try:
+                response = claude_client.messages.create(**api_params)
+            except TypeError as e:
+                if "cache_control" in str(e) or "unexpected keyword argument" in str(e).lower():
+                    # Remove cache_control and retry
+                    print(f"⚠️ Cache control not supported in this SDK version, retrying without it...")
+                    api_params_without_cache = api_params.copy()
+                    api_params_without_cache.pop("cache_control", None)
+                    response = claude_client.messages.create(**api_params_without_cache)
+                else:
+                    raise  # Re-raise if it's a different TypeError
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:
