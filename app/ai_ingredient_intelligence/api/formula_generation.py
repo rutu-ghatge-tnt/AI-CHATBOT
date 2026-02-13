@@ -857,7 +857,8 @@ async def save_wish_history(
 async def get_wish_history(
     search: Optional[str] = None,
     limit: int = 50,
-    skip: int = 0,
+    offset: Optional[int] = None,
+    skip: Optional[int] = None,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
@@ -866,7 +867,7 @@ async def get_wish_history(
     HISTORY FUNCTIONALITY:
     - Returns all formula generation history items for the authenticated user
     - Each item contains the original wish data and the generated formula result
-    - Supports pagination with limit and skip parameters
+    - Supports pagination with limit and offset/skip parameters
     - Search works across name and notes fields
     - History items are sorted by creation date (newest first)
     - Users can access previously generated formulas and their original requirements
@@ -874,16 +875,20 @@ async def get_wish_history(
     Query params:
     - search: Optional search term (searches name and notes)
     - limit: Number of results (default 50)
-    - skip: Number of results to skip (default 0)
+    - offset: Number of results to skip (default 0) - preferred parameter
+    - skip: Number of results to skip (default 0) - kept for backward compatibility
     
     Authentication:
     - Requires JWT token in Authorization header
     - User ID is automatically extracted from the JWT token
     """
+    # Use offset if provided, otherwise use skip, default to 0
+    skip_value = offset if offset is not None else (skip if skip is not None else 0)
+    
     print(f"\n{'='*80}")
     print(f"[DEBUG] 🚀 API CALL: /api/formula/wish-history")
     print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
-    print(f"[DEBUG] Query params - search: {search}, limit: {limit}, skip: {skip}")
+    print(f"[DEBUG] Query params - search: {search}, limit: {limit}, offset: {offset}, skip: {skip}, using skip_value: {skip_value}")
     print(f"{'='*80}\n")
     
     try:
@@ -920,7 +925,7 @@ async def get_wish_history(
                 "status": 1,
                 "wish_text": 1,
             }
-        ).sort("created_at", -1).skip(skip).limit(limit)
+        ).sort("created_at", -1).skip(skip_value).limit(limit)
         
         items = []
         async for doc in cursor:
