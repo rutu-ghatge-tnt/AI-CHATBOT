@@ -767,6 +767,7 @@ class MakeWishResponse(BaseModel):
     compliance: Dict[str, Any] = Field(..., description="Stage 5: Regulatory compliance check")
     metadata: Dict[str, Any] = Field(..., description="Metadata about the generation process")
     history_id: Optional[str] = Field(None, description="History item ID (MongoDB ObjectId) - returned when history is auto-saved")
+    market_trends: Optional[Dict[str, Any]] = Field(None, description="Market trends data for ingredients, benefits, and product type - ready for frontend visualization")
 
 
 class UpdateWishHistoryRequest(BaseModel):

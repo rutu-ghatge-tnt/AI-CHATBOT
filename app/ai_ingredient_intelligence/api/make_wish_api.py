@@ -20,7 +20,7 @@ STAGES:
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks, Body
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import time
@@ -54,6 +54,7 @@ from app.ai_ingredient_intelligence.logic.claude_prompt_generator import (
     generate_business_strategy_prompt,
     get_default_business_strategy_prompt
 )
+from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish"])
 
@@ -1095,6 +1096,78 @@ async def export_make_wish_to_board(
 
 
 # ============================================================================
+# MARKET TRENDS ENDPOINT
+# ============================================================================
+
+class MarketTrendsRequest(BaseModel):
+    """Request schema for market trends fetching"""
+    hero_ingredients: Optional[List[str]] = Field(default_factory=list, description="List of hero ingredient names")
+    benefits: Optional[List[str]] = Field(default_factory=list, description="List of benefits")
+    product_type: Optional[str] = Field(None, description="Product type (serum, cream, etc.)")
+    category: str = Field("skincare", description="Category: skincare or haircare")
+    max_age_days: int = Field(35, description="Maximum age of cached data in days")
+    use_fallback: bool = Field(True, description="Whether to use SerpAPI if MongoDB has no data")
+
+
+@router.post("/market-trends", response_model=None)
+async def fetch_market_trends(
+    request: MarketTrendsRequest,
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Fetch market trends data for ingredients, benefits, and product type.
+    
+    This endpoint provides market intelligence data from MongoDB (batch data)
+    with SerpAPI fallback if needed.
+    
+    REQUEST BODY:
+    {
+        "hero_ingredients": ["Vitamin C", "Niacinamide"],
+        "benefits": ["brightening", "anti-aging"],
+        "product_type": "serum",
+        "category": "skincare",
+        "max_age_days": 35,
+        "use_fallback": true
+    }
+    
+    RESPONSE:
+    Formatted market trends data ready for frontend visualization:
+    - ingredient_trends: Timeseries data, growth rates, related queries
+    - benefit_trends: Competing approaches
+    - competitive_landscape: Brand trends
+    - regional_insights: Regional distribution
+    - shopping_insights: Price ranges
+    - key_insights: Generated insights
+    """
+    try:
+        trends_service = MarketTrendsService()
+        
+        trends_data = await trends_service.fetch_trends_for_wish(
+            hero_ingredients=request.hero_ingredients,
+            benefits=request.benefits,
+            product_type=request.product_type,
+            category=request.category,
+            max_age_days=request.max_age_days,
+            use_fallback=request.use_fallback
+        )
+        
+        return {
+            "success": True,
+            "data": trends_data,
+            "timestamp": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+        }
+    
+    except Exception as e:
+        print(f"❌ Error fetching market trends: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching market trends: {str(e)}"
+        )
+
+
+# ============================================================================
 # MAIN ENDPOINTS
 # ============================================================================
 
@@ -1347,6 +1420,49 @@ async def generate_make_wish_formula(
         print(f"   Formula Cost: ₹{cost_analysis.get('raw_material_cost', {}).get('total_per_100g', 0)}/unit")
         print(f"   Compliance: {compliance.get('overall_status', 'UNKNOWN')}")
         print(f"   Ingredients: {len(optimized.get('ingredients', []))}")
+        
+        # Fetch market trends data
+        market_trends = None
+        try:
+            print(f"📊 Fetching market trends data...")
+            trends_service = MarketTrendsService()
+            
+            # Extract hero ingredients from ingredient_selection
+            hero_ingredients = wish_data.get("heroIngredients", [])
+            if not hero_ingredients and result.get("ingredient_selection", {}).get("ingredients"):
+                # Extract from selected ingredients
+                selected_ingredients = result.get("ingredient_selection", {}).get("ingredients", [])
+                hero_ingredients = [
+                    ing.get("ingredient_name") or ing.get("name", "")
+                    for ing in selected_ingredients[:5]  # Top 5
+                    if ing.get("is_hero", False) or ing.get("is_active", False)
+                ]
+                # If no hero ingredients found, use top ingredients
+                if not hero_ingredients:
+                    hero_ingredients = [
+                        ing.get("ingredient_name") or ing.get("name", "")
+                        for ing in selected_ingredients[:3]
+                    ]
+            
+            market_trends = await trends_service.fetch_trends_for_wish(
+                hero_ingredients=hero_ingredients,
+                benefits=wish_data.get("benefits", []),
+                product_type=wish_data.get("productType"),
+                category=wish_data.get("category", "skincare"),
+                max_age_days=35,
+                use_fallback=True
+            )
+            print(f"✅ Market trends fetched successfully")
+        except Exception as e:
+            print(f"⚠️ Error fetching market trends: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the request if trends fail
+            market_trends = None
+        
+        # Add market trends to result
+        if market_trends:
+            result["market_trends"] = market_trends
         
         # 🔹 Auto-save: Update history with "completed" status and formula_result
         if user_id_value and history_id:
