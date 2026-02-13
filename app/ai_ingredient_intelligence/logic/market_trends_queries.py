@@ -272,38 +272,69 @@ async def get_level_1_ingredient_trends(
         doc = await market_trends_storage_col.find_one(query, sort=[("fetched_at", -1)])
         
         if not doc and normalized_ingredient:
-            # Fallback: try without format
+            # Fallback: try without format (find ANY product type for this ingredient)
             query_fallback = {
                 "query_level": "ingredient",
                 "category": category,
                 "ingredient_tag": normalized_ingredient,
-                "fetch_source": "batch",
                 "is_active": True,
                 "fetched_at": {"$gte": cutoff_date}
             }
-            doc = await market_trends_storage_col.find_one(query_fallback, sort=[("fetched_at", -1)])
+            # Get ALL product types for this ingredient, not just one
+            cursor = market_trends_storage_col.find(query_fallback).sort("fetched_at", -1).limit(5)
+            all_docs = await cursor.to_list(length=5)
+            if all_docs:
+                # Prefer the one matching product_type if available
+                matching_doc = next((d for d in all_docs if d.get("product_format") == normalized_format), None)
+                doc = matching_doc or all_docs[0]
+                if len(all_docs) > 1:
+                    doc["related_product_types"] = [d.get("product_format") for d in all_docs[1:] if d.get("product_format")]
         
         if not doc:
-            # Last resort: fuzzy match on query_text
+            # Last resort: fuzzy match on query_text - find ALL related queries
             fuzzy_query = {
                 "query_level": "ingredient",
                 "category": category,
                 "query_text": {"$regex": re.escape(ingredient_name.lower()), "$options": "i"},
-                "fetch_source": "batch",
                 "is_active": True,
                 "fetched_at": {"$gte": cutoff_date}
             }
-            doc = await market_trends_storage_col.find_one(fuzzy_query, sort=[("fetched_at", -1)])
+            # Get ALL related documents, not just one
+            cursor = market_trends_storage_col.find(fuzzy_query).sort("fetched_at", -1).limit(5)
+            related_docs = await cursor.to_list(length=5)
+            if related_docs:
+                doc = related_docs[0]  # Use most recent
+                # Store all related docs for comprehensive coverage
+                if len(related_docs) > 1:
+                    doc["related_variations"] = related_docs[1:]
+        
+        # Also check for related queries that contain this ingredient
+        if not doc or doc.get("current_score", 0) == 0:
+            # Search in related_queries_list and query_variations
+            related_query_search = {
+                "$or": [
+                    {"related_queries_list": {"$regex": re.escape(ingredient_name.lower()), "$options": "i"}},
+                    {"query_variations": {"$regex": re.escape(ingredient_name.lower()), "$options": "i"}},
+                    {"query_text": {"$regex": re.escape(ingredient_name.lower()), "$options": "i"}}
+                ],
+                "category": category,
+                "is_active": True,
+                "fetched_at": {"$gte": cutoff_date}
+            }
+            related_doc = await market_trends_storage_col.find_one(related_query_search, sort=[("fetched_at", -1)])
+            if related_doc and (not doc or related_doc.get("current_score", 0) > doc.get("current_score", 0)):
+                doc = related_doc
         
         if doc:
             match_type = "exact" if normalized_ingredient and normalized_format else "fuzzy"
-            confidence = "high" if normalized_ingredient else "low"
+            confidence = "high" if normalized_ingredient else "medium"
             
             results[ingredient_name] = {
                 "trend_data": doc,
                 "query_text": doc.get("query_text", ""),
                 "match_type": match_type,
-                "confidence": confidence
+                "confidence": confidence,
+                "related_variations": doc.get("related_variations", [])
             }
         else:
             results[ingredient_name] = None
@@ -349,20 +380,43 @@ async def get_level_2_competing_approaches(
     if not benefit_tags:
         return []
     
-    # Build query
+    # Build comprehensive query to find ALL related benefit data
+    # Search by benefit_tag, query_text, related_queries, and variations
+    benefit_patterns = [re.escape(ben.lower()) for ben in benefits]
+    benefit_regex = "|".join(benefit_patterns)
+    
     query = {
         "$or": [
             {"benefit_tag": {"$in": benefit_tags}},
-            {"query_level": "benefit", "category": category}
+            {"query_level": "benefit", "category": category},
+            {"query_text": {"$regex": benefit_regex, "$options": "i"}},  # Find in query text
+            {"related_queries_list": {"$regex": benefit_regex, "$options": "i"}},  # Find in related queries
+            {"query_variations": {"$regex": benefit_regex, "$options": "i"}}  # Find in variations
         ],
         "category": category,
-        "fetch_source": "batch",
         "is_active": True,
         "fetched_at": {"$gte": cutoff_date}
     }
     
-    if normalized_format:
-        query["product_format"] = normalized_format
+    # Product type matching - find ALL product types related to the benefit
+    # Don't restrict to exact format match, find variations too
+    product_type_pattern = None
+    if product_type:
+        # Create regex pattern for product type variations
+        product_type_variations = [
+            product_type.lower(),
+            product_type.lower() + "s",  # plural
+            product_type.lower().replace(" ", ""),  # no spaces
+        ]
+        product_type_pattern = "|".join([re.escape(v) for v in product_type_variations])
+    
+    if product_type_pattern:
+        # Add product type search to $or clause
+        query["$or"].extend([
+            {"product_format": normalized_format},
+            {"query_text": {"$regex": product_type_pattern, "$options": "i"}},
+            {"query_variations": {"$regex": product_type_pattern, "$options": "i"}}
+        ])
     
     # Exclude user's ingredients
     if exclude_ingredients:
@@ -370,8 +424,8 @@ async def get_level_2_competing_approaches(
         if exclude_tags:
             query["ingredient_tag"] = {"$nin": exclude_tags}
     
-    # Also get ingredient-level queries for the same benefits
-    cursor = market_trends_storage_col.find(query).sort("current_score", -1).limit(max_results * 2)
+    # Get ALL related benefit data (not just exact matches) - find everything related
+    cursor = market_trends_storage_col.find(query).sort("current_score", -1).limit(max_results * 5)
     
     results = []
     seen_ingredients = set()
