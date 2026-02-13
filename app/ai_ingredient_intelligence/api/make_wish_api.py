@@ -55,8 +55,98 @@ from app.ai_ingredient_intelligence.logic.claude_prompt_generator import (
     get_default_business_strategy_prompt
 )
 from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
+from app.ai_ingredient_intelligence.logic.packaging_data import (
+    get_all_packaging_options,
+    get_packaging_options_by_category,
+    get_packaging_by_size
+)
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish"])
+
+
+# ============================================================================
+# HELPER ENDPOINT: Get Packaging Options
+# ============================================================================
+
+@router.get("/packaging-options")
+async def get_packaging_options(
+    category: Optional[str] = Query(None, description="Filter by category: 'liquid' or 'solid'"),
+    size: Optional[str] = Query(None, description="Filter by size: e.g., '30ml', '50g'"),
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Get all available packaging options for cost calculation.
+    
+    This endpoint provides packaging data including:
+    - Bottle/jar cost
+    - Carton box cost
+    - Labeling cost
+    - Total packaging cost
+    
+    QUERY PARAMETERS:
+    - category: Optional filter by "liquid" or "solid"
+    - size: Optional filter by size (e.g., "30ml", "50g")
+    
+    RESPONSE:
+    {
+        "packaging_options": {
+            "dropper_bottle_30ml": {
+                "type": "Dropper bottle 30ml",
+                "category": "liquid",
+                "size": "30ml",
+                "bottle_cost": 15.0,
+                "carton_box_cost": 7.0,
+                "labeling_cost": 4.0,
+                "total": 26.0
+            },
+            ...
+        }
+    }
+    """
+    try:
+        if category and size:
+            # Get options for specific category and size
+            options = get_packaging_by_size(size, category)
+            result = {}
+            for opt in options:
+                result[opt["key"]] = {
+                    "type": opt["type"],
+                    "category": opt["category"],
+                    "size": opt["size"],
+                    "bottle_cost": opt["bottle_cost"],
+                    "carton_box_cost": opt["carton_box_cost"],
+                    "labeling_cost": opt["labeling_cost"],
+                    "total": opt["total"]
+                }
+        elif category:
+            # Get options for category
+            options = get_packaging_options_by_category(category)
+            result = {}
+            for opt in options:
+                result[opt["key"]] = {
+                    "type": opt["type"],
+                    "category": opt["category"],
+                    "size": opt["size"],
+                    "bottle_cost": opt["bottle_cost"],
+                    "carton_box_cost": opt["carton_box_cost"],
+                    "labeling_cost": opt["labeling_cost"],
+                    "total": opt["total"]
+                }
+        else:
+            # Get all options
+            result = get_all_packaging_options()
+        
+        return {
+            "success": True,
+            "packaging_options": result,
+            "count": len(result)
+        }
+    except Exception as e:
+        print(f"❌ Error fetching packaging options: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching packaging options: {str(e)}"
+        )
 
 
 # ============================================================================

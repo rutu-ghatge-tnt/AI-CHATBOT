@@ -42,6 +42,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_rules_engine import (
 # Import unit helper
 from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
 
+# Import cost calculation post-processor
+from app.ai_ingredient_intelligence.logic.cost_calculation_postprocessor import post_process_cost_analysis
+
 # Claude API setup
 try:
     import anthropic
@@ -890,7 +893,11 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         # Clean up any /100g or /100ml that might have slipped through
         result = clean_cost_analysis_units(result, unit)
         
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/{unit}")
+        # Apply new cost calculation rules (post-processing)
+        print("   Applying new cost calculation rules (20% formula margin, wastage, manufacturer margin)...")
+        result = post_process_cost_analysis(result)
+        
+        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('adjusted_per_100g', result.get('raw_material_cost', {}).get('total_per_100g', 0))}/{unit}")
         return result
     
     async def run_stage_5():
