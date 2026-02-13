@@ -85,10 +85,11 @@ async def create_query_from_commercialization(
             "experience_level": experience_level,
             "timeline": timeline,
             "quantity_interest": quantity_interest,
-            "additional_notes": additional_notes,
+            "additional_notes": additional_notes if isinstance(additional_notes, str) else (", ".join(additional_notes) if isinstance(additional_notes, list) else str(additional_notes) if additional_notes else None),
             "status": QueryStatus.NEW.value,
             "queue_number": int(queue_number) if queue_number else None,  # Store as integer for easy sorting
-            "payment_id": payment_id,  # Store payment_id if provided
+            # Store payment_id only if provided (MongoDB doesn't store None fields)
+            **({"payment_id": payment_id} if payment_id else {}),
             # Store user info from form as fallback (in case users collection doesn't have it)
             "user_name": user_name,  # From get-this-made form
             "user_phone": user_phone,  # From get-this-made form
@@ -109,8 +110,7 @@ async def create_query_from_commercialization(
         if queue_number:
             print(f"   Queue Number: {queue_number}")
         print(f"   Status: {QueryStatus.NEW.value}")
-        if payment_id:
-            print(f"   Payment ID: {payment_id}")
+        print(f"   Payment ID: {payment_id} (stored: {query_doc.get('payment_id')})")
         
         return query_id
     

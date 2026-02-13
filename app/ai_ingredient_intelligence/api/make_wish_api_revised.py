@@ -28,17 +28,14 @@ from app.ai_ingredient_intelligence.auth import verify_jwt_token
 # Import revised schemas
 from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     ParseWishRequest, ParseWishResponse,
-    MakeWishRequestRevised, MakeWishResponseRevised, MakeWishBasicResponseRevised,
+    MakeWishRequestRevised, MakeWishResponseRevised,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
     GetThisMadeRequest, GetThisMadeResponse
 )
 
-# Import original schemas for backward compatibility
-from app.ai_ingredient_intelligence.models.schemas import (
-    MakeWishRequest, MakeWishResponse
-)
+# Legacy imports removed - using revised schemas only
 
 # Import configuration
 from app.ai_ingredient_intelligence.logic.make_wish_config import (
@@ -404,8 +401,8 @@ async def parse_natural_language_wish(
                 detail="Invalid parsing result from AI"
             )
         
-        # Set mode from request (basic or advanced, default advanced)
-        parsed_result["mode"] = request.mode
+        # Always use basic mode (advanced mode removed)
+        parsed_result["mode"] = "basic"
 
         # Auto-detect texture if not provided
         product_type_id = parsed_result.get("product_type", {}).get("id", "serum")
@@ -510,23 +507,19 @@ async def parse_natural_language_wish(
 # STAGE 2: REVISED GENERATE ENDPOINT
 # ============================================================================
 
-@router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
+@router.post("/generate-revised", response_model=None)  # Return full data, not just history_id
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
-    Generate formula using revised flow with complexity selection.
-    
-    Mode is request.mode (or parsed_data.mode fallback): 
-    - "basic": Simplified flow for layman users (active options, business context).
-    - "advanced" (default): Full multi-stage pipeline with complexity.
+    Generate formula using basic mode flow.
     
     This endpoint creates a formula based on:
     - Parsed natural language wish
     - Selected complexity level (minimalist/classic/luxe)
     - Auto-detected texture
-    - Enhanced insights generation (advanced mode only)
+    - Active ingredient options with business context
     """
     start_time = time.time()
     
@@ -548,16 +541,8 @@ async def generate_formula_revised(
             detail="complexity must be one of: minimalist, classic, luxe"
         )
     
-    mode = request.mode or request.parsed_data.mode
-    if mode not in ["basic", "advanced"]:
-        raise HTTPException(
-            status_code=400,
-            detail="mode must be either 'basic' or 'advanced'"
-        )
-    
     try:
-        # --- BASIC MODE: simplified flow for layman users ---
-        if mode == "basic":
+        # Always use basic mode
             # Cost range from complexity: minimalist 30-40, classic 40-60, luxe 60-100
             cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
             cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
@@ -612,7 +597,7 @@ async def generate_formula_revised(
                         "user_id": user_id,
                         "name": name,
                         "tag": request.tag,
-                        "notes": request.notes,
+                        "additional_notes": request.additional_notes,  # Store as additional_notes
                         "wish_text": request.wish_text,
                         "parsed_data": request.parsed_data.model_dump(),
                         "complexity": request.complexity,
@@ -629,287 +614,30 @@ async def generate_formula_revised(
                     print(f"[AUTO-SAVE] Created history record (basic mode): {history_id}")
                 except Exception as e:
                     print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
-            return MakeWishBasicResponseRevised(
-                success=True,
-                formula_id=formula_id,
-                history_id=history_id or formula_id
-            )
-        
-        # --- ADVANCED MODE: full multi-stage pipeline ---
-        print(f"🚀 Generating revised formula (ADVANCED MODE)...")
-        print(f"   Complexity: {request.complexity}")
-        print(f"   Product Type: {request.parsed_data.product_type.name}")
-        
-        # Get complexity configuration
-        complexity_config = get_complexity_config(request.complexity)
-        if not complexity_config:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid complexity level: {request.complexity}"
-            )
-        
-        # Stage 1: Ingredient Selection with Complexity
-        print("📋 Stage 1: Ingredient Selection with Complexity...")
-        
-        # Prepare ingredients list for prompt
-        detected_ingredients = request.parsed_data.detected_ingredients
-        
-        # Generate ingredient selection prompt
-        selection_prompt = INGREDIENT_SELECTION_COMPLEXITY_PROMPT.format(
-            wish_text=request.wish_text,
-            category=request.parsed_data.category,
-            product_type=request.parsed_data.product_type.name,
-            benefits=", ".join(request.parsed_data.detected_benefits),
-            exclusions=", ".join(request.parsed_data.detected_exclusions),
-            skin_type=", ".join(request.parsed_data.detected_skin_types),
-            detected_ingredients=[ing.name for ing in detected_ingredients],
-            texture=request.parsed_data.auto_texture.label,
-            complexity=request.complexity,
-            max_ingredients=complexity_config["max_ingredients"],
-            active_slots=complexity_config["active_slots"],
-            include_sensorials=complexity_config["include_sensorials"],
-            base_ingredients=", ".join(complexity_config["base_ingredients"]),
-            cost_multiplier=complexity_config["cost_target_multiplier"]
-        )
-        
-        # Call AI for ingredient selection
-        selected_ingredients = await call_ai_with_claude(
-            system_prompt="You are a cosmetic formulation expert. Select ingredients based on user requirements and complexity constraints.",
-            user_prompt=selection_prompt,
-            prompt_type="ingredient_selection_complexity"
-        )
-        
-        if not selected_ingredients or "selected_ingredients" not in selected_ingredients:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to select ingredients"
-            )
-        
-        print(f"✅ Selected {len(selected_ingredients['selected_ingredients'])} ingredients")
-        
-        # Stage 2: Formula Optimization
-        print("🔧 Stage 2: Formula Optimization...")
-        
-        # Simplified optimization prompt
-        optimization_prompt = f"""You are a cosmetic formulation expert. Optimize ingredient percentages for a balanced formula.
-
-## FORMULA REQUIREMENTS
-- Product: {request.parsed_data.product_type.name} ({request.parsed_data.category})
-- Texture Target: {request.parsed_data.auto_texture.label}
-- Complexity: {request.complexity}
-- Total Must Equal: 100.00%
-
-## SELECTED INGREDIENTS
-{format_ingredients_list(selected_ingredients['selected_ingredients'])}
-
-## OPTIMIZATION RULES
-
-1. **PERCENTAGE ALLOCATION**
-   - Total MUST equal exactly 100.00%
-   - Water/Aqua typically makes up 60-80% for water-based products
-   - Round all percentages to 2 decimal places
-
-2. **ACTIVE OPTIMIZATION**
-   - Hero ingredients at efficacious levels within their ranges
-   - Consider synergy between multiple actives
-   - Stay within safe usage limits
-
-3. **TEXTURE ACHIEVEMENT**
-   - "{request.parsed_data.auto_texture.label}" texture requires appropriate thickener levels
-   - Adjust emollients for cream vs gel textures
-   - Consider sensory modifiers for luxe products
-
-4. **STABILITY & SAFETY**
-   - Preservative at effective level (usually 0.8-1.2%)
-   - pH adjusters as needed (usually 0.1-0.5%)
-   - Antioxidants for oxidation protection
-
-5. **COST BALANCING**
-   - Higher percentages of expensive ingredients increase cost
-   - Balance efficacy with cost targets for {request.complexity} complexity
-
-## PHASE ORGANIZATION
-- Phase A: Water phase (water-soluble ingredients)
-- Phase B: Oil phase (oil-soluble ingredients)  
-- Phase C: Cool down phase (heat-sensitive ingredients)
-
-## RESPONSE FORMAT (JSON):
-{{
-    "optimized_formula": {{
-        "name": "Formula Name",
-        "complexity": "{request.complexity}",
-        "total_percentage": 100.0,
-        "target_ph": {{"min": 5.0, "max": 6.0}},
-        "texture_achieved": "texture_description"
-    }},
-    "ingredients": [
-        {{
-            "id": "ingredient_id",
-            "name": "Ingredient Name",
-            "inci": "INCI Name",
-            "percentage": "X.XX%",
-            "phase": "A|B|C",
-            "function": "Purpose",
-            "is_hero": true|false,
-            "is_base": true|false,
-            "cost_contribution": "₹X.XX per 100g"
-        }}
-    ],
-    "phase_summary": [
-        {{
-            "phase": "A",
-            "name": "Water Phase",
-            "total_percent": X.XX,
-            "temperature": "70-75°C"
-        }}
-    ],
-    "optimization_notes": [
-        "Key decisions made during optimization"
-    ],
-    "cost_estimate": {{
-        "raw_material_cost_per_100g": ₹XXX,
-        "cost_category": "low|medium|high",
-        "meets_complexity_target": true|false
-    }}
-}}
-
-Ensure percentages are realistic and formula is manufacturable. Return ONLY the JSON object above, no markdown formatting."""
-        
-        optimized_formula = await call_ai_with_claude(
-            system_prompt="You are a cosmetic formulation expert. Optimize ingredient percentages for balanced, stable formulas.",
-            user_prompt=optimization_prompt,
-            prompt_type="formula_optimization_revised"
-        )
-        
-        # Debug: Log the actual structure returned
-        print(f"🔍 Optimized formula structure: {type(optimized_formula)}")
-        if isinstance(optimized_formula, dict):
-            print(f"   Keys: {list(optimized_formula.keys())}")
-        
-        if not optimized_formula:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to optimize formula - empty response"
-            )
-        
-        # Check for multiple possible response formats
-        has_ingredients = "ingredients" in optimized_formula
-        has_optimized_formula = "optimized_formula" in optimized_formula
-        has_formula = "formula" in optimized_formula
-        
-        if not has_ingredients and not has_optimized_formula and not has_formula:
-            print(f"❌ Missing expected keys. Available keys: {list(optimized_formula.keys())}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to optimize formula - unexpected response format. Expected 'ingredients', 'optimized_formula', or 'formula' keys"
-            )
-        
-        print(f"✅ Optimized formula: {optimized_formula['optimized_formula']['total_percentage']}%")
-        
-        # Stage 3: Manufacturing Process (reuse existing) - COMMENTED FOR NOW
-        # print("🏭 Stage 3: Manufacturing Process...")
-        # from app.ai_ingredient_intelligence.logic.make_wish_generator import generate_manufacturing_prompt
-        # manufacturing_prompt = generate_manufacturing_prompt(optimized_formula)
-        # manufacturing = await call_ai_with_claude(
-        #     system_prompt="Generate detailed manufacturing instructions for cosmetic formulations.",
-        #     user_prompt=manufacturing_prompt,
-        #     prompt_type="manufacturing_process"
-        # )
-        manufacturing = {}  # Placeholder for future use
-        
-        # Stage 4: Compliance Check (reuse existing)
-        print("✅ Stage 4: Compliance Check...")
-        from app.ai_ingredient_intelligence.logic.make_wish_generator import generate_compliance_prompt
-        compliance_prompt = generate_compliance_prompt(optimized_formula)
-        compliance = await call_ai_with_claude(
-            system_prompt="Check regulatory compliance for cosmetic formulations.",
-            user_prompt=compliance_prompt,
-            prompt_type="compliance_check"
-        )
-        
-        # Stage 5: Insights Generation (NEW)
-        print("💡 Stage 5: Insights Generation...")
-        
-        # Get ingredients from the correct nested structure
-        ingredients_list = []
-        if "ingredients" in optimized_formula:
-            ingredients_list = optimized_formula["ingredients"]
-        elif "formula" in optimized_formula and "ingredients" in optimized_formula["formula"]:
-            ingredients_list = optimized_formula["formula"]["ingredients"]
-        
-        key_ingredients = [ing for ing in ingredients_list if ing.get("is_hero", False)]
-        
-        insights_prompt = INSIGHTS_GENERATION_PROMPT.format(
-            formula_name=optimized_formula["optimized_formula"]["name"],
-            product_type=request.parsed_data.product_type.name,
-            complexity=request.complexity,
-            key_ingredients=", ".join([ing["name"] for ing in key_ingredients]),
-            benefits=", ".join(request.parsed_data.detected_benefits),
-            target_audience=", ".join(request.parsed_data.detected_skin_types) or "General"
-        )
-        
-        insights = await call_ai_with_claude(
-            system_prompt="You are a cosmetic formulation expert and marketing strategist. Generate comprehensive insights for cosmetic formulas.",
-            user_prompt=insights_prompt,
-            prompt_type="insights_generation"
-        )
-        
-        # Extract hero ingredients for trend analysis
-        hero_ingredients = [ing.get("name", "") or ing.get("inci", "") for ing in key_ingredients if ing.get("is_hero", False)]
-        if not hero_ingredients:
-            # Fallback to detected ingredients
-            hero_ingredients = [ing.name for ing in request.parsed_data.detected_ingredients]
-        
-        # Fetch trend data for hero ingredients
-        trend_data = {}
-        if hero_ingredients:
-            try:
-                trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
-            except Exception as e:
-                print(f"⚠️ Error fetching trend data: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Generate unique IDs
-        formula_id = str(uuid.uuid4())
-        if not history_id:
-            optimized_formula["insights"] = insights
-            optimized_formula["manufacturing"] = manufacturing
-            optimized_formula["compliance"] = compliance
-            # optimized_formula["complexity_config"] = complexity_config
-
-            # Create new history record
-            try:
-                history_doc = {
-                    "mode": "advanced",
-                    "user_id": user_id,
-                    "name": name,
-                    "tag": request.tag,
-                    "notes": request.notes,
-                    "wish_text": request.wish_text,
-                    "parsed_data": request.parsed_data.model_dump(),
-                    "complexity": request.complexity,
-                    "formula_id": formula_id,
-                    "formula_data": optimized_formula,
-                    "basic_mode_result": None,
-                    "trend_data": trend_data,  # Store trend analysis data
-                    "status": "completed",
-                    "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-                }
-                result = await wish_history_col.insert_one(history_doc)
-                history_id = str(result.inserted_id)
-                print(f"[AUTO-SAVE] Created history record: {history_id}")
-            except Exception as e:
-                print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
-        
-        processing_time = time.time() - start_time
-        print(f"✅ Revised formula generated in {processing_time:.2f}s")
-        return MakeWishBasicResponseRevised(
-            success=True,
-            formula_id=formula_id,
-            history_id=history_id or formula_id
-        )
+            # Return full data, not just history_id
+            return {
+                "success": True,
+                "formula_id": formula_id,
+                "history_id": history_id or formula_id,
+                "mode": "basic",
+                "basic_mode_result": basic_result,
+                "formula": {
+                    "name": basic_result.get("formula", {}).get("formulaName", name),
+                    "ingredients": basic_result.get("formula", {}).get("technicalFormula", {}).get("ingredients", []),
+                    "phases": basic_result.get("formula", {}).get("technicalFormula", {}).get("phases", [])
+                },
+                "cost_analysis": {
+                    "packaging_options": basic_result.get("formula", {}).get("businessNumbers", {}).get("packagingOptions", {}),
+                    "packaging_by_size": basic_result.get("formula", {}).get("businessNumbers", {}).get("packagingBySize", {}),
+                    "cost_calculation_summary": basic_result.get("formula", {}).get("businessNumbers", {}).get("costCalculationSummary", {}),
+                    "raw_material_cost": {
+                        "total_per_100g": basic_result.get("formula", {}).get("technicalFormula", {}).get("totalCostPer100g", 0)
+                    }
+                },
+                "manufacturing": basic_result.get("formula", {}).get("manufacturing", {}),
+                "compliance": basic_result.get("formula", {}).get("compliance", {}),
+                "trend_data": trend_data
+            }
     
     except HTTPException:
         raise
@@ -1027,12 +755,12 @@ async def edit_formula_metadata(
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
-    Edit formula metadata (name, tag, notes) without changing formula itself.
+    Edit formula metadata (name, tag, additional_notes) without changing formula itself.
     
     This endpoint allows users to:
     - Update formula name
     - Update tag for categorization  
-    - Update notes
+    - Update additional_notes
     - Preserve all formula data unchanged
     """
     try:
@@ -1043,7 +771,7 @@ async def edit_formula_metadata(
         user_id = current_user.get("user_id") or current_user.get("_id")
         
        # Allowed fields whitelist (defense-in-depth)
-        ALLOWED_FIELDS = {"name", "tag", "notes"}
+        ALLOWED_FIELDS = {"name", "tag", "additional_notes"}
 
           # Filter allowed fields only
         data = {k: v for k, v in request.items() if k in ALLOWED_FIELDS and v is not None}
@@ -1389,11 +1117,28 @@ async def submit_commercialization_request(
     try:
         print(f"🚀 Submitting commercialization request...")
         
+        # Validate history_id format (MongoDB ObjectId must be 24 hex characters)
+        if not request.history_id or len(request.history_id) != 24:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid history_id format. Expected 24-character MongoDB ObjectId, got: '{request.history_id}' (length: {len(request.history_id) if request.history_id else 0})"
+            )
+        
         # Validate formula exists
         user_id = current_user.get("user_id") or current_user.get("_id")
+        
+        # Try to convert to ObjectId with better error handling
+        try:
+            history_obj_id = ObjectId(request.history_id)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid history_id format: '{request.history_id}'. Must be a valid MongoDB ObjectId (24 hex characters). Error: {str(e)}"
+            )
+        
         # First, find the history item by _id and user_id
         history_item = await wish_history_col.find_one({
-            "_id": ObjectId(request.history_id),
+            "_id": history_obj_id,
             "user_id": user_id
         })
         
@@ -1539,6 +1284,42 @@ async def submit_commercialization_request(
             # Get formula name from wish_history
             formula_name = history_item.get("name") or history_item.get("formula_name") or "Custom Formula"
             
+            # Ensure additional_notes is a string (not array)
+            additional_notes_str = None
+            if request.additional_notes:
+                if isinstance(request.additional_notes, list):
+                    additional_notes_str = ", ".join(str(note) for note in request.additional_notes)
+                else:
+                    additional_notes_str = str(request.additional_notes)
+            
+            # Handle payment_id - create payment document if it's a valid ObjectId and doesn't exist
+            payment_id_to_store = None
+            if request.payment_id:
+                # Check if payment_id is a valid ObjectId
+                try:
+                    payment_obj_id = ObjectId(request.payment_id)
+                    # Check if payment document exists
+                    from app.ai_ingredient_intelligence.db.collections import qms_payments_col
+                    existing_payment = await qms_payments_col.find_one({"_id": payment_obj_id})
+                    if not existing_payment:
+                        print(f"⚠️ Payment document not found for ID: {request.payment_id}, creating placeholder...")
+                        # Create a placeholder payment document
+                        payment_doc = {
+                            "_id": payment_obj_id,
+                            "user_id": user_id,
+                            "amount": 0,  # Will be updated when actual payment is processed
+                            "currency": "INR",
+                            "status": "created",
+                            "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30)))
+                        }
+                        await qms_payments_col.insert_one(payment_doc)
+                        print(f"✅ Created placeholder payment document: {request.payment_id}")
+                    payment_id_to_store = request.payment_id
+                except Exception as e:
+                    # payment_id is not a valid ObjectId, store it as-is (might be a reference ID)
+                    print(f"⚠️ payment_id '{request.payment_id}' is not a valid ObjectId, storing as string: {e}")
+                    payment_id_to_store = request.payment_id
+            
             # Create query with all form fields
             query_id = await create_query_from_commercialization(
                 user_id=user_id,
@@ -1548,8 +1329,8 @@ async def submit_commercialization_request(
                 experience_level=request.experience_level,
                 timeline=request.timeline,
                 quantity_interest=request.quantity_interest,
-                additional_notes=request.additional_notes,  # Fixed: was notes=, should be additional_notes=
-                payment_id=request.payment_id,  # Optional - None if not provided
+                additional_notes=additional_notes_str,  # Ensure it's a string
+                payment_id=payment_id_to_store,  # Pass payment_id (validated/created above)
                 queue_number=queue_number,  # Pass queue number to store in query
                 user_name=request.name,  # Store user name from form
                 user_phone=request.phone,  # Store user phone from form
@@ -1565,18 +1346,24 @@ async def submit_commercialization_request(
                     query_display_id = query_obj.get("display_id")
                     print(f"✅ Created QMS query: {query_display_id} (Queue: {queue_number})")
                     
-                    # Update wish_history to mark it as converted to query (store only query_id)
+                    # Update wish_history to mark it as converted to query (store query_id and payment_id)
                     try:
+                        update_fields = {
+                            "query_id": query_id,
+                            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                        }
+                        # Add payment_id if provided
+                        if request.payment_id:
+                            update_fields["payment_id"] = request.payment_id
+                        # Add additional_notes if provided (as string)
+                        if additional_notes_str:
+                            update_fields["additional_notes"] = additional_notes_str
+                        
                         await wish_history_col.update_one(
                             {"_id": ObjectId(request.history_id), "user_id": user_id},
-                            {
-                                "$set": {
-                                    "query_id": query_id,
-                                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-                                }
-                            }
+                            {"$set": update_fields}
                         )
-                        print(f"✅ Updated wish_history with query_id: {query_id}")
+                        print(f"✅ Updated wish_history with query_id: {query_id}" + (f" and payment_id: {request.payment_id}" if request.payment_id else ""))
                     except Exception as history_update_error:
                         print(f"⚠️ Warning: Failed to update wish_history: {history_update_error}")
                         # Don't fail the request if history update fails
@@ -1674,87 +1461,4 @@ async def export_make_wish_revised_to_board(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============================================================================
-# BACKWARD COMPATIBILITY: ORIGINAL GENERATE ENDPOINT
-# ============================================================================
-
-@router.post("/generate", response_model=MakeWishResponse)
-async def generate_make_wish_formula_legacy(
-    request: MakeWishRequest,
-    current_user: dict = Depends(verify_jwt_token)
-):
-    """
-    Legacy Make a Wish endpoint for backward compatibility.
-    
-    This endpoint maintains the original API structure while 
-    internally using the revised system. Maps old request format
-    to new flow.
-    """
-    try:
-        print(f"🔄 Converting legacy request to revised flow...")
-        
-        # Convert legacy request to natural language
-        legacy_wish_text = f"""
-        I want to create a {request.category} {request.productType} with the following benefits: {', '.join(request.benefits)}.
-        """
-        
-        if request.heroIngredients:
-            legacy_wish_text += f" Please include these ingredients: {', '.join(request.heroIngredients)}."
-        
-        if request.exclusions:
-            legacy_wish_text += f" Make it {', '.join(request.exclusions)}."
-        
-        if request.additionalNotes:
-            legacy_wish_text += f" Additional notes: {request.additionalNotes}"
-        
-        # Create ParseWishRequest
-        from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import ParseWishRequest
-        parse_request = ParseWishRequest(wish_text=legacy_wish_text.strip())
-        
-        # Parse the wish
-        parse_response = await parse_natural_language_wish(parse_request, current_user)
-        
-        # Default to classic complexity for legacy requests
-        complexity = "classic"
-        
-        # Create revised request
-        from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import MakeWishRequestRevised
-        revised_request = MakeWishRequestRevised(
-            wish_text=legacy_wish_text.strip(),
-            parsed_data=parse_response.parsed_data,
-            complexity=complexity,
-            claims=request.claims,
-            additional_notes=request.additionalNotes,
-            name=request.name or "Legacy Formula",
-            tag=request.tag,
-            notes=request.notes,
-            history_id=request.history_id
-        )
-        
-        # Generate using revised flow
-        revised_response = await generate_formula_revised(revised_request, current_user)
-        
-        # Convert back to legacy format
-        legacy_response = {
-            "wish_data": request.model_dump(),
-            "ingredient_selection": {"status": "completed"},
-            "optimized_formula": revised_response.formula.model_dump(),
-            "manufacturing": revised_response.manufacturing,
-            "cost_analysis": {"status": "moved_to_separate_endpoint"},
-            "compliance": revised_response.compliance,
-            "metadata": {
-                "generated_at": datetime.now().isoformat(),
-                "formula_version": "2.0 (revised)",
-                "legacy_mode": True
-            },
-            "history_id": revised_response.history_id
-        }
-        
-        return MakeWishResponse(**legacy_response)
-    
-    except Exception as e:
-        print(f"❌ Error in legacy conversion: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error in legacy endpoint: {str(e)}"
-        )
+# Legacy /generate endpoint removed - use parse-wish -> generate-revised flow instead

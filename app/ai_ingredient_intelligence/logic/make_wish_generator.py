@@ -42,6 +42,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_rules_engine import (
 # Import unit helper
 from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
 
+# Import cost calculation post-processor
+from app.ai_ingredient_intelligence.logic.cost_calculation_postprocessor import post_process_cost_analysis
+
 # Claude API setup
 try:
     import anthropic
@@ -613,9 +616,20 @@ async def call_ai_with_claude(
     # Claude's ephemeral cache automatically caches system prompts when cache_control is used
     # This reduces costs by ~90% on system prompt tokens after the first call
     # Cached tokens are charged at only 20% of normal input token rate
-    # Note: cache_control may not be supported in all Anthropic SDK versions
+    # Note: SDK 0.75.0 may not support cache_control - we'll try extra_body as fallback
+    use_cache = False
     if cache_control:
-        api_params["cache_control"] = cache_control
+        use_cache = True
+        # Try to add cache_control - SDK version determines how to pass it
+        try:
+            # First try as top-level parameter (newer SDK versions)
+            api_params["cache_control"] = cache_control
+        except:
+            # If that fails, try via extra_body (SDK 0.75.0 workaround)
+            if "extra_body" not in api_params:
+                api_params["extra_body"] = {}
+            api_params["extra_body"]["cache_control"] = cache_control
+        
         if cache_manager.should_use_cache(prompt_type, system_prompt):
             print(f"💾 Using cached system prompt for {prompt_type} (saving ~90% on system prompt tokens)")
         else:
@@ -626,18 +640,23 @@ async def call_ai_with_claude(
     for attempt in range(max_retries):
         try:
             # Call Claude API with caching support
-            # If cache_control is not supported, catch the error and retry without it
+            # If cache_control fails, retry without it
             try:
                 response = claude_client.messages.create(**api_params)
-            except TypeError as e:
-                if "cache_control" in str(e) or "unexpected keyword argument" in str(e).lower():
+            except (TypeError, AttributeError) as cache_error:
+                error_str = str(cache_error).lower()
+                if "cache_control" in error_str or "unexpected keyword" in error_str:
                     # Remove cache_control and retry
                     print(f"⚠️ Cache control not supported in this SDK version, retrying without it...")
-                    api_params_without_cache = api_params.copy()
-                    api_params_without_cache.pop("cache_control", None)
-                    response = claude_client.messages.create(**api_params_without_cache)
+                    api_params_clean = {k: v for k, v in api_params.items() if k != "cache_control"}
+                    if "extra_body" in api_params_clean:
+                        api_params_clean["extra_body"] = {k: v for k, v in api_params_clean["extra_body"].items() if k != "cache_control"}
+                        if not api_params_clean["extra_body"]:
+                            del api_params_clean["extra_body"]
+                    response = claude_client.messages.create(**api_params_clean)
+                    use_cache = False  # Mark that caching didn't work
                 else:
-                    raise  # Re-raise if it's a different TypeError
+                    raise  # Re-raise if it's a different error
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:
@@ -890,7 +909,11 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         # Clean up any /100g or /100ml that might have slipped through
         result = clean_cost_analysis_units(result, unit)
         
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/{unit}")
+        # Apply new cost calculation rules (post-processing)
+        print("   Applying new cost calculation rules (20% formula margin, wastage, manufacturer margin)...")
+        result = post_process_cost_analysis(result, product_type)
+        
+        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('adjusted_per_100g', result.get('raw_material_cost', {}).get('total_per_100g', 0))}/{unit}")
         return result
     
     async def run_stage_5():

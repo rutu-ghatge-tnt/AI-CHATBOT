@@ -274,7 +274,17 @@ async def get_query_detail(
         query = await qms_queries_col.find_one({"_id": query_obj_id})
         
         if not query:
-            raise HTTPException(status_code=404, detail="Query not found")
+            print(f"❌ Query not found: {query_id}")
+            print(f"   User ID from token: {user_id_from_token}")
+            raise HTTPException(status_code=404, detail=f"Query not found: {query_id}")
+        
+        print(f"✅ Query found: {query_id}")
+        print(f"   Query user_id: {query.get('user_id')}")
+        print(f"   Token user_id: {user_id_from_token}")
+        print(f"   User role: {user_role}")
+        print(f"   Query document keys: {list(query.keys())}")
+        print(f"   payment_id in query: {query.get('payment_id')} (type: {type(query.get('payment_id'))})")
+        print(f"   Payment ID in query: {query.get('payment_id')} (type: {type(query.get('payment_id'))})")
         
         # Role-based access control
         if user_role == "partner":
@@ -282,28 +292,61 @@ async def get_query_detail(
             if not partner or str(partner["_id"]) != query.get("partner_id"):
                 raise HTTPException(status_code=403, detail="Access denied")
         elif user_role == "user":
-            if str(query.get("user_id")) != user_id_from_token:
-                raise HTTPException(status_code=403, detail="Access denied")
+            query_user_id = str(query.get("user_id", ""))
+            if query_user_id != user_id_from_token:
+                print(f"⚠️ Access denied: Query user_id ({query_user_id}) != Token user_id ({user_id_from_token})")
+                raise HTTPException(status_code=403, detail="Access denied - Query belongs to different user")
         
-            # Get user from main users collection (only if admin or owner)
+        # Get user from main users collection (only if admin or owner)
         user = None
-        if user_role == "admin" or (user_role == "user" and str(query.get("user_id")) == user_id_from_token):
-            user_doc = await users_col.find_one({"_id": ObjectId(query["user_id"])})
-            if user_doc:
-                # Use stored form data as fallback if user collection doesn't have the field
-                fullname = user_doc.get("fullname") or user_doc.get("name") or query.get("user_name", "")
-                phone = user_doc.get("phone") or query.get("user_phone", "")
-                city = user_doc.get("city") or query.get("user_city")
-                email = user_doc.get("email") or query.get("user_email")
-                pincode = user_doc.get("pincode") or query.get("user_pincode")
-                user = UserInfo(
-                    fullname=fullname,
-                    phone=phone,
-                    city=city,
-                    pincode=pincode
-                )
-            else:
-                # If user not found in users collection, use stored form data
+        query_user_id_str = str(query.get("user_id", ""))
+        print(f"🔍 Fetching user info...")
+        print(f"   Query user_id: {query_user_id_str}")
+        print(f"   Token user_id: {user_id_from_token}")
+        print(f"   User role: {user_role}")
+        print(f"   Stored form data - name: {query.get('user_name')}, phone: {query.get('user_phone')}")
+        
+        if user_role == "admin" or (user_role == "user" and query_user_id_str == user_id_from_token):
+            try:
+                if query_user_id_str and len(query_user_id_str) == 24:
+                    user_doc = await users_col.find_one({"_id": ObjectId(query["user_id"])})
+                    if user_doc:
+                        print(f"✅ Found user in users collection")
+                        # Use stored form data as fallback if user collection doesn't have the field
+                        fullname = user_doc.get("fullname") or user_doc.get("name") or query.get("user_name", "")
+                        phone = user_doc.get("phone") or query.get("user_phone", "")
+                        city = user_doc.get("city") or query.get("user_city")
+                        email = user_doc.get("email") or query.get("user_email")
+                        pincode = user_doc.get("pincode") or query.get("user_pincode")
+                        user = UserInfo(
+                            fullname=fullname,
+                            phone=phone,
+                            city=city,
+                            pincode=pincode
+                        )
+                    else:
+                        print(f"⚠️ User not found in users collection, using stored form data")
+                        # If user not found in users collection, use stored form data
+                        if query.get("user_name") or query.get("user_phone"):
+                            user = UserInfo(
+                                fullname=query.get("user_name", ""),
+                                phone=query.get("user_phone", ""),
+                                city=query.get("user_city"),
+                                pincode=query.get("user_pincode")
+                            )
+                else:
+                    print(f"⚠️ Invalid user_id format, using stored form data")
+                    # Invalid user_id format, use stored form data
+                    if query.get("user_name") or query.get("user_phone"):
+                        user = UserInfo(
+                            fullname=query.get("user_name", ""),
+                            phone=query.get("user_phone", ""),
+                            city=query.get("user_city"),
+                            pincode=query.get("user_pincode")
+                        )
+            except Exception as e:
+                print(f"⚠️ Error fetching user from users collection: {e}")
+                # Fallback to stored form data on error
                 if query.get("user_name") or query.get("user_phone"):
                     user = UserInfo(
                         fullname=query.get("user_name", ""),
@@ -311,6 +354,18 @@ async def get_query_detail(
                         city=query.get("user_city"),
                         pincode=query.get("user_pincode")
                     )
+        
+        # Always use stored form data if available, even if user_doc lookup failed
+        if not user and (query.get("user_name") or query.get("user_phone")):
+            print(f"✅ Using stored form data for user info")
+            user = UserInfo(
+                fullname=query.get("user_name", ""),
+                phone=query.get("user_phone", ""),
+                city=query.get("user_city"),
+                pincode=query.get("user_pincode")
+            )
+        
+        print(f"   Final user object: {user}")
         
         # Get partner
         partner = None
@@ -335,31 +390,100 @@ async def get_query_detail(
                     updated_at=partner_doc.get("updated_at", datetime.now())
                 )
         
-        # Get payment - always include if payment_id exists
+        # Get payment: fetch payment_id from qms_queries, then get payment data from qms_payments
         payment = None
-        if query.get("payment_id"):
+        payment_id_from_query = query.get("payment_id")
+        query_id_str = str(query["_id"])
+        
+        print(f"🔍 Fetching payment for query {query_id_str}")
+        print(f"   Step 1: payment_id from qms_queries: {payment_id_from_query} (type: {type(payment_id_from_query)})")
+        
+        if payment_id_from_query:
             try:
-                payment_doc = await qms_payments_col.find_one({"_id": ObjectId(query["payment_id"])})
+                # Convert payment_id to ObjectId (handles both string and ObjectId)
+                if isinstance(payment_id_from_query, ObjectId):
+                    payment_obj_id = payment_id_from_query
+                else:
+                    payment_obj_id = ObjectId(str(payment_id_from_query))
+                
+                print(f"   Step 2: Looking up payment in qms_payments_col with _id: {payment_obj_id}")
+                
+                # Fetch payment document from qms_payments collection
+                payment_doc = await qms_payments_col.find_one({"_id": payment_obj_id})
+                
                 if payment_doc:
-                    from app.ai_ingredient_intelligence.models.qms_schemas import PaymentResponse, PaymentStatus
-                    payment = PaymentResponse(
-                        id=str(payment_doc["_id"]),
-                        user_id=str(payment_doc.get("user_id", "")),
-                        razorpay_order_id=payment_doc.get("razorpay_order_id"),
-                        razorpay_payment_id=payment_doc.get("razorpay_payment_id"),
-                        razorpay_signature=payment_doc.get("razorpay_signature"),
-                        amount=payment_doc.get("amount", 0),
-                        currency=payment_doc.get("currency", "INR"),
-                        status=PaymentStatus(payment_doc.get("status", "created")),
-                        method=payment_doc.get("method"),
-                        refund_id=payment_doc.get("refund_id"),
-                        refund_reason=payment_doc.get("refund_reason"),
-                        created_at=payment_doc.get("created_at", datetime.now())
-                    )
+                    print(f"✅ Found payment document in qms_payments_col")
+                else:
+                    print(f"❌ Payment document NOT FOUND in qms_payments_col for _id: {payment_obj_id}")
+                    print(f"   payment_id exists in qms_queries but payment document doesn't exist in qms_payments_col!")
+                    payment_doc = None
+            except (InvalidId, ValueError) as e:
+                print(f"⚠️ payment_id '{payment_id_from_query}' is not a valid MongoDB ObjectId: {e}")
+                payment_doc = None
             except Exception as e:
-                # If payment lookup fails, just set payment to None
-                print(f"Warning: Could not fetch payment details: {e}")
+                print(f"⚠️ Error fetching payment from qms_payments_col: {e}")
+                import traceback
+                traceback.print_exc()
+                payment_doc = None
+        else:
+            print(f"ℹ️ No payment_id found in qms_queries document - query has no payment associated")
+            payment_doc = None
+        
+        # If payment document found, map it to PaymentResponse
+        if payment_doc:
+            try:
+                from app.ai_ingredient_intelligence.models.qms_schemas import PaymentResponse, PaymentStatus
+                
+                # Map actual payment document fields to PaymentResponse schema
+                # Payment doc has: userId, transactionId, providerOrderId, status, etc.
+                # PaymentResponse expects: user_id, razorpay_payment_id, razorpay_order_id, etc.
+                
+                # Map status - convert "paid" to "captured", etc.
+                payment_status = payment_doc.get("status", "created").lower()
+                if payment_status == "paid":
+                    status_enum = PaymentStatus.CAPTURED
+                elif payment_status == "refunded":
+                    status_enum = PaymentStatus.REFUNDED
+                elif payment_status == "failed":
+                    status_enum = PaymentStatus.FAILED
+                else:
+                    status_enum = PaymentStatus.CREATED
+                
+                # Get amount - prefer razorpayPayment amount (in paise), otherwise use root amount
+                # If root amount looks like rupees (small number), convert to paise
+                razorpay_payment = payment_doc.get("paymentDetails", {}).get("razorpayPayment", {})
+                amount_in_paise = razorpay_payment.get("amount")  # This is definitely in paise
+                if not amount_in_paise:
+                    root_amount = payment_doc.get("amount", 0)
+                    # If amount is less than 10000, assume it's in rupees and convert to paise
+                    if root_amount < 10000:
+                        amount_in_paise = root_amount * 100
+                    else:
+                        amount_in_paise = root_amount
+                
+                payment = PaymentResponse(
+                    id=str(payment_doc["_id"]),
+                    user_id=str(payment_doc.get("userId") or payment_doc.get("user_id", "")),
+                    razorpay_order_id=payment_doc.get("providerOrderId") or payment_doc.get("razorpay_order_id") or payment_doc.get("paymentDetails", {}).get("razorpayOrderId"),
+                    razorpay_payment_id=payment_doc.get("transactionId") or payment_doc.get("providerPaymentId") or payment_doc.get("razorpay_payment_id") or razorpay_payment.get("id"),
+                    razorpay_signature=payment_doc.get("razorpay_signature") or payment_doc.get("paymentDetails", {}).get("razorpaySignature"),
+                    amount=amount_in_paise,  # Amount in paise
+                    currency=payment_doc.get("currency", "INR"),
+                    status=status_enum,
+                    method=payment_doc.get("paymentMethod") or payment_doc.get("method") or razorpay_payment.get("method"),
+                    refund_id=payment_doc.get("refund_id") or payment_doc.get("refundId"),
+                    refund_reason=payment_doc.get("refund_reason") or payment_doc.get("refundReason"),
+                    created_at=payment_doc.get("createdAt") or payment_doc.get("created_at", datetime.now())
+                )
+                print(f"✅ Successfully mapped payment document to PaymentResponse")
+            except Exception as e:
+                print(f"⚠️ Error mapping payment document to PaymentResponse: {e}")
+                import traceback
+                traceback.print_exc()
                 payment = None
+        else:
+            print(f"⚠️ No payment document found for query {query_id_str}")
+            print(f"ℹ️ No payment_id found in query document")
         
         # Get notes (filtered by role)
         notes_filter = {"query_id": query_id, "deleted_at": None}
@@ -384,25 +508,6 @@ async def get_query_detail(
                 deleted_at=note_doc.get("deleted_at")
             ))
         
-        # Fetch wish_brief from wish_history if needed
-        wish_brief = None
-        wish_id = query.get("wish_id") or query.get("history_id")
-        if wish_id:
-            from app.ai_ingredient_intelligence.db.collections import wish_history_col
-            wish_history = await wish_history_col.find_one({"_id": ObjectId(wish_id)})
-            if wish_history:
-                # Return the full wish_history as wish_brief
-                wish_brief = {
-                    "formula_id": query.get("formula_id"),
-                    "history_id": wish_id,
-                    "formula_name": query.get("formula_name") or wish_history.get("name") or wish_history.get("formula_name"),
-                    "product_type": wish_history.get("parsed_data", {}).get("product_type", {}).get("name") or wish_history.get("product_type"),
-                    "category": wish_history.get("parsed_data", {}).get("category") or wish_history.get("wish_data", {}).get("category"),
-                    "wish_data": wish_history.get("wish_data", {}),
-                    "formula_data": wish_history.get("formula_data", {}),
-                    "optimized_formula": wish_history.get("formula_data", {}) or wish_history.get("basic_mode_result", {})
-                }
-        
         return QueryDetailResponse(
             id=str(query["_id"]),
             display_id=query.get("display_id", ""),
@@ -413,9 +518,8 @@ async def get_query_detail(
             experience_level=query.get("experience_level", ""),
             timeline=query.get("timeline", ""),
             quantity_interest=query.get("quantity_interest"),
-            additional_notes=query.get("additional_notes"),
+            additional_notes=query.get("additional_notes") if isinstance(query.get("additional_notes"), str) else (", ".join(query.get("additional_notes")) if isinstance(query.get("additional_notes"), list) else str(query.get("additional_notes")) if query.get("additional_notes") else None),
             status=QueryStatus(query.get("status", "new")),
-            wish_brief=wish_brief,
             created_at=query.get("created_at", datetime.now()),
             updated_at=query.get("updated_at", datetime.now()),
             user=user,

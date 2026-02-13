@@ -26,6 +26,9 @@ from app.ai_ingredient_intelligence.logic.make_wish_rules_engine import (
     ValidationSeverity
 )
 
+# Import cost calculation post-processor
+from app.ai_ingredient_intelligence.logic.cost_calculation_postprocessor import post_process_cost_analysis
+
 
 # ============================================================================
 # BASIC MODE SYSTEM PROMPT
@@ -682,6 +685,48 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
                 competitor["yourAdvantage"] = advantage  # Also add for frontend compatibility
         
         # Update the result with fixed data
+        basic_result["formula"] = formula_data
+        
+        # ========================================================================
+        # APPLY NEW COST CALCULATION RULES (Post-processing)
+        # ========================================================================
+        print("💰 Applying new cost calculation rules (20% formula margin, wastage, manufacturer margin)...")
+        
+        # Extract cost from technical formula
+        technical_formula = formula_data.get("technicalFormula", {})
+        base_cost_per_100g = technical_formula.get("totalCostPer100g", 0)
+        
+        if base_cost_per_100g > 0:
+            # Create cost_analysis structure for post-processor
+            cost_analysis = {
+                "raw_material_cost": {
+                    "total_per_100g": base_cost_per_100g
+                }
+            }
+            
+            # Apply post-processor
+            product_type = wish_data.get('productType', 'serum')
+            cost_analysis = post_process_cost_analysis(cost_analysis, product_type)
+            
+            # Add packaging options to businessNumbers
+            if "packaging_options" in cost_analysis:
+                if "businessNumbers" not in formula_data:
+                    formula_data["businessNumbers"] = {}
+                formula_data["businessNumbers"]["packagingOptions"] = cost_analysis["packaging_options"]
+                formula_data["businessNumbers"]["packagingBySize"] = cost_analysis.get("packaging_by_size", {})
+                formula_data["businessNumbers"]["costCalculationSummary"] = cost_analysis.get("cost_calculation_summary", {})
+            
+            # Update technical formula with adjusted cost
+            technical_formula["totalCostPer100g"] = cost_analysis["raw_material_cost"].get("adjusted_per_100g", base_cost_per_100g)
+            technical_formula["baseCostPer100g"] = base_cost_per_100g
+            technical_formula["costMarginPercent"] = 20.0
+            formula_data["technicalFormula"] = technical_formula
+            
+            print(f"   ✅ Cost post-processing complete: Base ₹{base_cost_per_100g}/100g → Adjusted ₹{cost_analysis['raw_material_cost'].get('adjusted_per_100g', base_cost_per_100g)}/100g")
+        else:
+            print("   ⚠️ Warning: No cost data found in technical formula, skipping post-processing")
+        
+        # Update the result with cost-processed data
         basic_result["formula"] = formula_data
         
         print("🎉 Make a Wish pipeline complete (BASIC MODE)!")
