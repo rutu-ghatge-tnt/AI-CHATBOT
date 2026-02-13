@@ -26,9 +26,10 @@ from app.ai_ingredient_intelligence.models.qms_schemas import (
     NoteRole,
     PaymentStatus,
     RefundRequest,
+    UserInfo,
 )
 from app.ai_ingredient_intelligence.db.collections import (
-    qms_users_col,
+    users_col,
     qms_partners_col,
     qms_queries_col,
     qms_query_notes_col,
@@ -165,26 +166,26 @@ async def list_queries(
         queries_cursor = qms_queries_col.find(filter_dict).sort("created_at", -1).skip(skip).limit(limit)
         queries = await queries_cursor.to_list(length=limit)
         
-        # Enrich with user names and fetch formula details from wish_history
+        # Enrich with user names and fetch formula details
         from app.ai_ingredient_intelligence.db.collections import wish_history_col
         query_responses = []
         for query in queries:
-            # Get user name
+            # Get user name from main users collection
             user_name = None
             user_city = None
             if query.get("user_id"):
-                user = await qms_users_col.find_one({"_id": ObjectId(query["user_id"])})
+                user = await users_col.find_one({"_id": ObjectId(query["user_id"])})
                 if user:
-                    user_name = user.get("name")
+                    user_name = user.get("fullname") or user.get("name")
                     user_city = user.get("city")
             
-            # Fetch formula details from wish_history
-            formula_name = "Custom Formula"
+            # Get formula name from query (stored directly) or fallback to wish_history
+            formula_name = query.get("formula_name") or "Custom Formula"
             product_type = "Product"
             category = "skincare"
-            history_id = query.get("history_id")
-            if history_id:
-                wish_history = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+            wish_id = query.get("wish_id") or query.get("history_id")
+            if wish_id and not query.get("formula_name"):
+                wish_history = await wish_history_col.find_one({"_id": ObjectId(wish_id)})
                 if wish_history:
                     formula_name = (
                         wish_history.get("name") 
@@ -274,23 +275,16 @@ async def get_query_detail(
             if str(query.get("user_id")) != user_id_from_token:
                 raise HTTPException(status_code=403, detail="Access denied")
         
-        # Get user (only if admin or owner)
+        # Get user from main users collection (only if admin or owner)
         user = None
         if user_role == "admin" or (user_role == "user" and str(query.get("user_id")) == user_id_from_token):
-            user_doc = await qms_users_col.find_one({"_id": ObjectId(query["user_id"])})
+            user_doc = await users_col.find_one({"_id": ObjectId(query["user_id"])})
             if user_doc:
-                from app.ai_ingredient_intelligence.models.qms_schemas import UserResponse
-                user = UserResponse(
-                    id=str(user_doc["_id"]),
-                    name=user_doc.get("name", ""),
-                    email=user_doc.get("email", ""),
+                user = UserInfo(
+                    fullname=user_doc.get("fullname") or user_doc.get("name", ""),
                     phone=user_doc.get("phone", ""),
                     city=user_doc.get("city"),
-                    background=user_doc.get("background"),
-                    preferred_batch=user_doc.get("preferred_batch"),
-                    source=user_doc.get("source", "make_a_wish"),
-                    created_at=user_doc.get("created_at", datetime.now()),
-                    updated_at=user_doc.get("updated_at", datetime.now())
+                    pincode=user_doc.get("pincode")
                 )
         
         # Get partner
@@ -362,16 +356,16 @@ async def get_query_detail(
         
         # Fetch wish_brief from wish_history if needed
         wish_brief = None
-        history_id = query.get("history_id")
-        if history_id:
+        wish_id = query.get("wish_id") or query.get("history_id")
+        if wish_id:
             from app.ai_ingredient_intelligence.db.collections import wish_history_col
-            wish_history = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+            wish_history = await wish_history_col.find_one({"_id": ObjectId(wish_id)})
             if wish_history:
                 # Return the full wish_history as wish_brief
                 wish_brief = {
                     "formula_id": query.get("formula_id"),
-                    "history_id": history_id,
-                    "formula_name": wish_history.get("name") or wish_history.get("formula_name"),
+                    "history_id": wish_id,
+                    "formula_name": query.get("formula_name") or wish_history.get("name") or wish_history.get("formula_name"),
                     "product_type": wish_history.get("parsed_data", {}).get("product_type", {}).get("name") or wish_history.get("product_type"),
                     "category": wish_history.get("parsed_data", {}).get("category") or wish_history.get("wish_data", {}).get("category"),
                     "wish_data": wish_history.get("wish_data", {}),
@@ -379,21 +373,17 @@ async def get_query_detail(
                     "optimized_formula": wish_history.get("formula_data", {}) or wish_history.get("basic_mode_result", {})
                 }
         
-        # Extract formula_name, product_type, category from wish_brief if available, otherwise from query
-        formula_name = "Custom Formula"
-        product_type = "Product"
-        category = "skincare"
-        if wish_brief:
-            formula_name = wish_brief.get("formula_name", "Custom Formula")
-            product_type = wish_brief.get("product_type", "Product")
-            category = wish_brief.get("category", "skincare")
-        
         return QueryDetailResponse(
             id=str(query["_id"]),
             display_id=query.get("display_id", ""),
             user_id=str(query.get("user_id", "")),
             formula_id=query.get("formula_id", ""),
-            history_id=query.get("history_id", ""),
+            wish_id=query.get("wish_id") or query.get("history_id", ""),
+            formula_name=query.get("formula_name", "Custom Formula"),
+            experience_level=query.get("experience_level", ""),
+            timeline=query.get("timeline", ""),
+            quantity_interest=query.get("quantity_interest"),
+            additional_notes=query.get("additional_notes"),
             status=QueryStatus(query.get("status", "new")),
             wish_brief=wish_brief,
             created_at=query.get("created_at", datetime.now()),
@@ -628,9 +618,9 @@ async def create_note(
             if partner:
                 author_name = partner.get("name", "Unknown")
         elif user_role == "user":
-            user = await qms_users_col.find_one({"_id": ObjectId(user_id)})
+            user = await users_col.find_one({"_id": ObjectId(user_id)})
             if user:
-                author_name = user.get("name", "Unknown")
+                author_name = user.get("fullname") or user.get("name", "Unknown")
         
         # Create note
         note_doc = {

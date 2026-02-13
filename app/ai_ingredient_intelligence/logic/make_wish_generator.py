@@ -21,7 +21,9 @@ from datetime import datetime
 
 # Import prompts
 from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
-    INGREDIENT_SELECTION_SYSTEM_PROMPT,
+    get_ingredient_selection_system_prompt,
+    get_ingredient_selection_system_prompt_async,
+    USE_MONGODB_FOR_COSTS,
     FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
     MANUFACTURING_PROCESS_SYSTEM_PROMPT,
     COST_ANALYSIS_SYSTEM_PROMPT,
@@ -611,6 +613,7 @@ async def call_ai_with_claude(
     # Claude's ephemeral cache automatically caches system prompts when cache_control is used
     # This reduces costs by ~90% on system prompt tokens after the first call
     # Cached tokens are charged at only 20% of normal input token rate
+    # Note: cache_control may not be supported in all Anthropic SDK versions
     if cache_control:
         api_params["cache_control"] = cache_control
         if cache_manager.should_use_cache(prompt_type, system_prompt):
@@ -623,7 +626,18 @@ async def call_ai_with_claude(
     for attempt in range(max_retries):
         try:
             # Call Claude API with caching support
-            response = claude_client.messages.create(**api_params)
+            # If cache_control is not supported, catch the error and retry without it
+            try:
+                response = claude_client.messages.create(**api_params)
+            except TypeError as e:
+                if "cache_control" in str(e) or "unexpected keyword argument" in str(e).lower():
+                    # Remove cache_control and retry
+                    print(f"⚠️ Cache control not supported in this SDK version, retrying without it...")
+                    api_params_without_cache = api_params.copy()
+                    api_params_without_cache.pop("cache_control", None)
+                    response = claude_client.messages.create(**api_params_without_cache)
+                else:
+                    raise  # Re-raise if it's a different TypeError
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:
@@ -787,8 +801,15 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     # Stage 1: Ingredient Selection
     print("📋 Stage 1: Ingredient Selection...")
     selection_prompt = generate_ingredient_selection_prompt(wish_data)
+    
+    # Use async version if MongoDB, sync version if Excel
+    if USE_MONGODB_FOR_COSTS:
+        system_prompt = await get_ingredient_selection_system_prompt_async()
+    else:
+        system_prompt = get_ingredient_selection_system_prompt()
+    
     selected_ingredients = await call_ai_with_claude(
-        system_prompt=INGREDIENT_SELECTION_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         user_prompt=selection_prompt,
         prompt_type="ingredient_selection"
     )

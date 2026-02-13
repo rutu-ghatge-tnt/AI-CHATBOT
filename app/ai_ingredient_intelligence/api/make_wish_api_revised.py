@@ -1518,19 +1518,19 @@ async def submit_commercialization_request(
         try:
             from app.ai_ingredient_intelligence.api.qms_utils import create_query_from_commercialization
             
-            # Create query (payment_id is optional - can be None for now)
-            # No need to pass wish_brief - we only store formula_id and history_id
+            # Get formula name from wish_history
+            formula_name = history_item.get("name") or history_item.get("formula_name") or "Custom Formula"
+            
+            # Create query with all form fields
             query_id = await create_query_from_commercialization(
                 user_id=user_id,
                 wish_history_id=request.history_id,
                 formula_id=request.formula_id,
-                user_info={
-                    "name": request.name,
-                    "phone": request.phone,
-                    "city": request.city,
-                    "preferred_batch": request.quantity_interest,
-                    "background": None,  # Not in request
-                },
+                formula_name=formula_name,
+                experience_level=request.experience_level,
+                timeline=request.timeline,
+                quantity_interest=request.quantity_interest,
+                notes=request.additional_notes,
                 payment_id=request.payment_id,  # Optional - None if not provided
                 queue_number=queue_number  # Pass queue number to store in query
             )

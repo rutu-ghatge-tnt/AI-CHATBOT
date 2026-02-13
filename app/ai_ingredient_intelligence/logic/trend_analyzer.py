@@ -103,6 +103,29 @@ class SerpAPIClient:
         search = GoogleSearch(params)
         return search.get_dict()
     
+    def get_trends_related_topics(
+        self,
+        query: str,
+        time_range: str = "today 12-m",
+        geo: str = "IN",
+        hl: str = "en",
+        tz: int = -330
+    ) -> Dict:
+        """Get related topics (rising and top)"""
+        self._check_api_key()
+        params = {
+            "engine": "google_trends",
+            "q": query,
+            "data_type": "RELATED_TOPICS",
+            "date": time_range,
+            "geo": geo,
+            "hl": hl,
+            "tz": str(tz),
+            "api_key": self.api_key
+        }
+        search = GoogleSearch(params)
+        return search.get_dict()
+    
     def get_people_also_ask(
         self,
         query: str,

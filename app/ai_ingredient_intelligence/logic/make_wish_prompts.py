@@ -10,6 +10,36 @@ This module contains all system prompts for the 5-stage "Make a Wish" AI pipelin
 5. Compliance Check
 """
 
+# Configuration: Use MongoDB for costs (True) or Excel file (False)
+USE_MONGODB_FOR_COSTS = True  # Set to False to use Excel file instead
+
+# Import cost lookup utility
+COST_LOOKUP_AVAILABLE = False
+get_cost_reference_table = None
+get_cost_reference_table_from_mongo = None
+
+if USE_MONGODB_FOR_COSTS:
+    try:
+        from app.ai_ingredient_intelligence.utils.inci_cost_lookup_mongo import (
+            get_cost_reference_table_from_mongo
+        )
+        COST_LOOKUP_AVAILABLE = True
+        get_cost_reference_table = get_cost_reference_table_from_mongo
+    except ImportError:
+        print("Warning: MongoDB cost lookup not available. Falling back to Excel.")
+        USE_MONGODB_FOR_COSTS = False
+
+if not USE_MONGODB_FOR_COSTS:
+    try:
+        from app.ai_ingredient_intelligence.utils.inci_cost_lookup import (
+            get_cost_reference_table_from_excel as get_cost_reference_table_excel
+        )
+        COST_LOOKUP_AVAILABLE = True
+        get_cost_reference_table = get_cost_reference_table_excel
+    except ImportError:
+        COST_LOOKUP_AVAILABLE = False
+        print("Warning: INCI cost lookup utility not available. Using default cost anchors only.")
+
 # ============================================================================
 # COST REFERENCE ANCHORS & REASONING INSTRUCTIONS
 # ============================================================================
@@ -127,15 +157,66 @@ DO NOT use prices outside these ranges without explicit reasoning.
 | Neem Extract | 600-1200 | — | |
 
 ### PRICING REASONING RULES:
-1. **If ingredient is in this table**: Use the range directly.
-2. **If ingredient is NOT in this table but is similar**: Reason from the closest category. 
+1. **FIRST: Check the Excel database** (see section below) - if ingredient is found, use EXACT cost from database.
+2. **If ingredient is in this reference table**: Use the range directly.
+3. **If ingredient is NOT in this table but is similar**: Reason from the closest category. 
    Example: "Ceteareth-20 is an ethoxylated fatty alcohol emulsifier similar to Polysorbate 60 → estimate ₹300-500/kg"
-3. **If ingredient is a patented/branded specialty**: Assume ₹15,000-50,000/kg unless you have specific knowledge. Flag as LOW CONFIDENCE.
-4. **Never estimate below ₹50/kg** for any cosmetic ingredient except water.
-5. **Never estimate above ₹80,000/kg** unless it's a rare peptide or precious botanical.
-6. **Generic Chinese imports** are typically 40-60% of branded prices.
-7. **Indian-manufactured commodities** (glycerin, stearic acid, SLS) are at the low end.
+4. **If ingredient is a patented/branded specialty**: Assume ₹15,000-50,000/kg unless you have specific knowledge. Flag as LOW CONFIDENCE.
+5. **Never estimate below ₹50/kg** for any cosmetic ingredient except water.
+6. **Never estimate above ₹80,000/kg** unless it's a rare peptide or precious botanical.
+7. **Generic Chinese imports** are typically 40-60% of branded prices.
+8. **Indian-manufactured commodities** (glycerin, stearic acid, SLS) are at the low end.
 """
+
+
+def get_enhanced_cost_reference_anchors() -> str:
+    """
+    Get cost reference anchors with database data included.
+    Uses MongoDB if available, otherwise falls back to Excel file.
+    """
+    base_anchors = COST_REFERENCE_ANCHORS
+    
+    if COST_LOOKUP_AVAILABLE and get_cost_reference_table:
+        try:
+            if USE_MONGODB_FOR_COSTS:
+                # MongoDB version is async, need to handle differently
+                # For now, return base anchors and let the async handler add the table
+                return base_anchors
+            else:
+                # Excel version is synchronous
+                db_table = get_cost_reference_table()
+                if db_table:
+                    return db_table + "\n\n" + base_anchors
+        except Exception as e:
+            print(f"Warning: Could not load cost data: {e}. Using default anchors only.")
+    
+    return base_anchors
+
+
+async def get_enhanced_cost_reference_anchors_async() -> str:
+    """
+    Async version that works with MongoDB.
+    Use this when calling from async functions.
+    """
+    base_anchors = COST_REFERENCE_ANCHORS
+    
+    if COST_LOOKUP_AVAILABLE and get_cost_reference_table:
+        try:
+            if USE_MONGODB_FOR_COSTS:
+                # MongoDB async version
+                db_table = await get_cost_reference_table_from_mongo()
+                if db_table:
+                    return db_table + "\n\n" + base_anchors
+            else:
+                # Excel synchronous version (can be called in async context)
+                import asyncio
+                db_table = await asyncio.to_thread(get_cost_reference_table)
+                if db_table:
+                    return db_table + "\n\n" + base_anchors
+        except Exception as e:
+            print(f"Warning: Could not load cost data: {e}. Using default anchors only.")
+    
+    return base_anchors
 
 COST_REASONING_INSTRUCTIONS = """
 ## COST ESTIMATION PROTOCOL (MANDATORY FOR EVERY INGREDIENT)
@@ -435,7 +516,27 @@ IMPORTANT NOTES:
 - Consider Indian climate (humidity, heat) in formulation
 - Suggest preservative systems effective in tropical climates
 
-""" + COST_REFERENCE_ANCHORS + COST_REASONING_INSTRUCTIONS
+"""
+
+
+def get_ingredient_selection_system_prompt() -> str:
+    """Get the ingredient selection system prompt with enhanced cost data (sync version)."""
+    # For Excel (sync), use sync version
+    if not USE_MONGODB_FOR_COSTS:
+        return INGREDIENT_SELECTION_SYSTEM_PROMPT + get_enhanced_cost_reference_anchors() + COST_REASONING_INSTRUCTIONS
+    else:
+        # For MongoDB, return base prompt (will be enhanced in async version)
+        return INGREDIENT_SELECTION_SYSTEM_PROMPT + COST_REFERENCE_ANCHORS + COST_REASONING_INSTRUCTIONS
+
+
+async def get_ingredient_selection_system_prompt_async() -> str:
+    """Get the ingredient selection system prompt with enhanced cost data (async version for MongoDB)."""
+    enhanced_anchors = await get_enhanced_cost_reference_anchors_async()
+    return INGREDIENT_SELECTION_SYSTEM_PROMPT + enhanced_anchors + COST_REASONING_INSTRUCTIONS
+
+
+# For backward compatibility, keep the original as a base
+INGREDIENT_SELECTION_SYSTEM_PROMPT_BASE = INGREDIENT_SELECTION_SYSTEM_PROMPT
 
 # ============================================================================
 # STAGE 2: FORMULA OPTIMIZATION
