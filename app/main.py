@@ -363,6 +363,15 @@ except ImportError as e:
     print(f"Warning: Could not import auth router: {e}")
     print("   Authentication API will not be available.")
 
+# ✅ Add QMS (Query Management System) API
+try:
+    from app.ai_ingredient_intelligence.api.qms_routes import router as qms_router
+    app.include_router(qms_router, prefix="/api")
+    print("✅ QMS router registered successfully")
+except ImportError as e:
+    print(f"Warning: Could not import QMS router: {e}")
+    print("   QMS API will not be available.")
+
 # ✅ Add Timing Statistics API
 try:
     from app.ai_ingredient_intelligence.api.timing_stats import router as timing_stats_router
