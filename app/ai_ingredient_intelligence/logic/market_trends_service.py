@@ -69,12 +69,28 @@ class MarketTrendsService:
             max_age_days=max_age_days
         )
         
-        # Check if we have sufficient data
-        has_ingredient_data = bool(mongo_data.get("level_1_ingredient_trends"))
-        has_benefit_data = bool(mongo_data.get("level_2_competing_approaches"))
+        # Check if we have sufficient data (not just empty dicts/lists)
+        level_1_trends = mongo_data.get("level_1_ingredient_trends", {})
+        level_2_approaches = mongo_data.get("level_2_competing_approaches", [])
         
-        # Step 2: Fallback to SerpAPI if needed
+        # Check if we have actual trend data with meaningful content
+        has_ingredient_data = False
+        if level_1_trends:
+            # Check if any ingredient has actual trend_data
+            for ing_name, ing_data in level_1_trends.items():
+                if ing_data and ing_data.get("trend_data") and ing_data["trend_data"].get("current_score", 0) > 0:
+                    has_ingredient_data = True
+                    break
+        
+        has_benefit_data = len(level_2_approaches) > 0 and any(
+            item.get("current_score", 0) > 0 for item in level_2_approaches if isinstance(item, dict)
+        )
+        
+        print(f"📊 Market trends check: ingredient_data={has_ingredient_data}, benefit_data={has_benefit_data}")
+        
+        # Step 2: Fallback to SerpAPI if needed (query on-demand and store)
         if use_fallback and (not has_ingredient_data or not has_benefit_data):
+            print(f"📡 MongoDB has insufficient data, querying SerpAPI on-demand...")
             fallback_data = await self._fetch_from_serpapi_fallback(
                 hero_ingredients=hero_ingredients,
                 benefits=benefits,
@@ -84,6 +100,12 @@ class MarketTrendsService:
             
             # Merge fallback data with MongoDB data
             mongo_data = self._merge_trends_data(mongo_data, fallback_data)
+            print(f"✅ SerpAPI fallback completed. Merged data ready for frontend.")
+        else:
+            if not use_fallback:
+                print(f"ℹ️ SerpAPI fallback disabled. Using only MongoDB data.")
+            else:
+                print(f"✅ MongoDB has sufficient data. No SerpAPI fallback needed.")
         
         # Step 3: Format for frontend
         formatted_data = self._format_for_frontend(
@@ -116,91 +138,280 @@ class MarketTrendsService:
             print("⚠️ SerpAPI key not available, skipping fallback")
             return fallback_data
         
-        # Fetch ingredient trends
+        # Fetch ingredient trends - query multiple variations to catch everything
         for ingredient in hero_ingredients[:3]:  # Limit to 3 to avoid rate limits
             try:
-                # Build query
-                if product_type:
-                    query = f"{ingredient} {product_type}"
-                else:
-                    query = f"{ingredient} {category}"
+                # Build multiple query variations to catch all related searches
+                query_variations = []
                 
-                # Fetch trends
+                # 1. Base ingredient query
+                query_variations.append(ingredient)
+                
+                # 2. Ingredient + product type variations
+                if product_type:
+                    query_variations.extend([
+                        f"{ingredient} {product_type}",
+                        f"{product_type} with {ingredient}",
+                        f"{ingredient} {product_type} benefits"
+                    ])
+                else:
+                    query_variations.extend([
+                        f"{ingredient} {category}",
+                        f"{category} {ingredient}"
+                    ])
+                
+                # 3. Ingredient + benefit combinations
+                if benefits:
+                    for benefit in benefits[:2]:  # Top 2 benefits
+                        if product_type:
+                            query_variations.append(f"{ingredient} {product_type} {benefit}")
+                        else:
+                            query_variations.append(f"{ingredient} {benefit}")
+                
+                # 4. Common variations
+                query_variations.extend([
+                    f"{ingredient} for skin",
+                    f"{ingredient} benefits",
+                    f"{ingredient} products",
+                    f"best {ingredient} {product_type}" if product_type else f"best {ingredient}"
+                ])
+                
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_variations = []
+                for q in query_variations:
+                    q_lower = q.lower()
+                    if q_lower not in seen:
+                        seen.add(q_lower)
+                        unique_variations.append(q)
+                
+                print(f"   🔍 Fetching trends for {ingredient} with {len(unique_variations)} query variations...")
+                
+                # Fetch trends for primary query (most comprehensive)
+                primary_query = unique_variations[0] if unique_variations else ingredient
+                print(f"   📊 Primary query: '{primary_query}'")
+                
+                # Fetch trends for primary query
                 trends_data = self.serpapi_client.get_trends_timeseries(
-                    query=query,
+                    query=primary_query,
                     time_range="today 12-m",
                     geo="IN"
                 )
                 
-                # Fetch related queries
+                # Fetch related queries to discover more variations
                 related_data = self.serpapi_client.get_trends_related_queries(
-                    query=query,
+                    query=primary_query,
                     time_range="today 12-m",
                     geo="IN"
                 )
                 
                 # Fetch regional data
                 regional_data = self.serpapi_client.get_trends_regional(
-                    query=query,
+                    query=primary_query,
                     time_range="today 12-m",
                     geo="IN"
                 )
                 
-                # Process and store in MongoDB
+                # Extract related queries and fetch trends for top related searches
+                related_queries_to_fetch = []
+                if related_data and "related_queries" in related_data:
+                    related_queries = related_data["related_queries"]
+                    # Get top rising queries
+                    rising = related_queries.get("rising", [])[:5]
+                    top = related_queries.get("top", [])[:5]
+                    
+                    for item in rising + top:
+                        related_query = item.get("query", "")
+                        if related_query and ingredient.lower() in related_query.lower():
+                            related_queries_to_fetch.append(related_query)
+                
+                # Process and store primary query data
                 processed_doc = await self._process_and_store_serpapi_data(
-                    query_text=query,
+                    query_text=primary_query,
                     ingredient=ingredient,
                     product_type=product_type,
                     category=category,
                     trends_data=trends_data,
                     related_data=related_data,
-                    regional_data=regional_data
+                    regional_data=regional_data,
+                    related_queries_list=related_queries_to_fetch
                 )
                 
                 if processed_doc:
                     fallback_data["level_1_ingredient_trends"][ingredient] = {
                         "trend_data": processed_doc,
-                        "query_text": query,
-                        "match_type": "serpapi_fallback",
-                        "confidence": "medium"
+                        "query_text": primary_query,
+                        "query_variations": unique_variations[:10],  # Store top 10 variations
+                        "related_queries_found": related_queries_to_fetch[:10],
+                        "match_type": "serpapi_fallback_comprehensive",
+                        "confidence": "high"
                     }
+                    
+                    # Also fetch and store trends for top related queries (if they contain the ingredient)
+                    for related_query in related_queries_to_fetch[:3]:  # Limit to 3 to avoid rate limits
+                        try:
+                            print(f"   🔗 Fetching related query: '{related_query}'")
+                            related_trends = self.serpapi_client.get_trends_timeseries(
+                                query=related_query,
+                                time_range="today 12-m",
+                                geo="IN"
+                            )
+                            
+                            # Store related query data
+                            await self._process_and_store_serpapi_data(
+                                query_text=related_query,
+                                ingredient=ingredient,  # Tag with original ingredient
+                                product_type=product_type,
+                                category=category,
+                                trends_data=related_trends,
+                                related_data={},
+                                regional_data={}
+                            )
+                        except Exception as e:
+                            print(f"   ⚠️ Error fetching related query '{related_query}': {e}")
+                            continue
             
             except Exception as e:
                 print(f"⚠️ Error fetching SerpAPI data for {ingredient}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
         
-        # Fetch benefit trends if needed
+        # Fetch benefit trends - query multiple variations to catch everything
         if benefits:
             for benefit in benefits[:2]:  # Limit to 2
                 try:
-                    if product_type:
-                        query = f"{benefit} {product_type}"
-                    else:
-                        query = f"{benefit} {category}"
+                    # Build multiple query variations for benefit
+                    benefit_variations = []
                     
+                    # 1. Base benefit query
+                    benefit_variations.append(benefit)
+                    
+                    # 2. Benefit + product type variations
+                    if product_type:
+                        benefit_variations.extend([
+                            f"{benefit} {product_type}",
+                            f"{product_type} for {benefit}",
+                            f"{product_type} {benefit}",
+                            f"best {benefit} {product_type}"
+                        ])
+                    else:
+                        benefit_variations.extend([
+                            f"{benefit} {category}",
+                            f"{category} for {benefit}"
+                        ])
+                    
+                    # 3. Benefit + ingredient combinations
+                    if hero_ingredients:
+                        for ing in hero_ingredients[:2]:  # Top 2 ingredients
+                            if product_type:
+                                benefit_variations.append(f"{benefit} {product_type} {ing}")
+                            else:
+                                benefit_variations.append(f"{benefit} {ing}")
+                    
+                    # 4. Common benefit variations
+                    benefit_variations.extend([
+                        f"{benefit} treatment",
+                        f"{benefit} solution",
+                        f"how to {benefit}",
+                        f"{benefit} products"
+                    ])
+                    
+                    # Remove duplicates
+                    seen = set()
+                    unique_benefit_variations = []
+                    for q in benefit_variations:
+                        q_lower = q.lower()
+                        if q_lower not in seen:
+                            seen.add(q_lower)
+                            unique_benefit_variations.append(q)
+                    
+                    print(f"   🔍 Fetching trends for benefit '{benefit}' with {len(unique_benefit_variations)} query variations...")
+                    
+                    # Primary benefit query
+                    primary_benefit_query = unique_benefit_variations[0] if unique_benefit_variations else benefit
+                    print(f"   📊 Primary benefit query: '{primary_benefit_query}'")
+                    
+                    # Fetch trends
                     trends_data = self.serpapi_client.get_trends_timeseries(
-                        query=query,
+                        query=primary_benefit_query,
                         time_range="today 12-m",
                         geo="IN"
                     )
                     
-                    # Process benefit data
+                    # Fetch related queries to discover more variations
+                    related_data = self.serpapi_client.get_trends_related_queries(
+                        query=primary_benefit_query,
+                        time_range="today 12-m",
+                        geo="IN"
+                    )
+                    
+                    # Fetch regional data
+                    regional_data = self.serpapi_client.get_trends_regional(
+                        query=primary_benefit_query,
+                        time_range="today 12-m",
+                        geo="IN"
+                    )
+                    
+                    # Extract related queries for benefits
+                    related_benefit_queries = []
+                    if related_data and "related_queries" in related_data:
+                        related_queries = related_data["related_queries"]
+                        rising = related_queries.get("rising", [])[:5]
+                        top = related_queries.get("top", [])[:5]
+                        
+                        for item in rising + top:
+                            related_query = item.get("query", "")
+                            if related_query and benefit.lower() in related_query.lower():
+                                related_benefit_queries.append(related_query)
+                    
+                    # Process and store benefit data
                     processed_doc = await self._process_and_store_serpapi_data(
-                        query_text=query,
+                        query_text=primary_benefit_query,
                         ingredient=None,
                         product_type=product_type,
                         category=category,
                         benefit=benefit,
                         trends_data=trends_data,
-                        related_data={},
-                        regional_data={}
+                        related_data=related_data,
+                        regional_data=regional_data,
+                        related_queries_list=related_benefit_queries
                     )
                     
                     if processed_doc:
+                        # Add query variations to the document
+                        processed_doc["query_variations"] = unique_benefit_variations[:10]
+                        processed_doc["related_queries_found"] = related_benefit_queries[:10]
                         fallback_data["level_2_competing_approaches"].append(processed_doc)
+                        
+                        # Also fetch trends for top related benefit queries
+                        for related_query in related_benefit_queries[:3]:
+                            try:
+                                print(f"   🔗 Fetching related benefit query: '{related_query}'")
+                                related_trends = self.serpapi_client.get_trends_timeseries(
+                                    query=related_query,
+                                    time_range="today 12-m",
+                                    geo="IN"
+                                )
+                                
+                                await self._process_and_store_serpapi_data(
+                                    query_text=related_query,
+                                    ingredient=None,
+                                    product_type=product_type,
+                                    category=category,
+                                    benefit=benefit,  # Tag with original benefit
+                                    trends_data=related_trends,
+                                    related_data={},
+                                    regional_data={}
+                                )
+                            except Exception as e:
+                                print(f"   ⚠️ Error fetching related benefit query '{related_query}': {e}")
+                                continue
                 
                 except Exception as e:
                     print(f"⚠️ Error fetching SerpAPI data for benefit {benefit}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     continue
         
         return fallback_data
@@ -214,7 +425,8 @@ class MarketTrendsService:
         trends_data: Dict[str, Any],
         related_data: Dict[str, Any],
         regional_data: Dict[str, Any],
-        benefit: Optional[str] = None
+        benefit: Optional[str] = None,
+        related_queries_list: Optional[List[str]] = None
     ) -> Optional[Dict[str, Any]]:
         """Process SerpAPI response and store in MongoDB"""
         try:
@@ -294,7 +506,7 @@ class MarketTrendsService:
                     "extracted_value": region.get("extracted_value", 0) or region.get("value", 0)
                 })
             
-            # Build document
+            # Build document with all related queries
             doc = {
                 "query_text": query_text,
                 "query_level": "ingredient" if ingredient else "benefit",
@@ -304,6 +516,8 @@ class MarketTrendsService:
                 "benefit_tag": normalize_benefit(benefit) if benefit else None,
                 "brand_tag": None,
                 "comparison_group": None,
+                "related_queries_list": related_queries_list or [],  # Store related queries found
+                "query_variations": [],  # Will be populated by caller if needed
                 "interest_over_time": {
                     "timeline_data": timeline_data,
                     "values": values,
@@ -329,8 +543,29 @@ class MarketTrendsService:
                 "is_active": True
             }
             
-            # Store in MongoDB
-            await market_trends_storage_col.insert_one(doc)
+            # Store in MongoDB (upsert to avoid duplicates)
+            # Check if document already exists
+            existing = await market_trends_storage_col.find_one({
+                "query_text": query_text,
+                "query_level": doc["query_level"],
+                "category": category
+            })
+            
+            if existing:
+                # Update existing document with new data
+                await market_trends_storage_col.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {
+                        **doc,
+                        "fetched_at": datetime.utcnow(),
+                        "fetch_source": "serpapi_fallback"
+                    }}
+                )
+                print(f"✅ Updated existing market trends document for: {query_text}")
+            else:
+                # Insert new document
+                await market_trends_storage_col.insert_one(doc)
+                print(f"✅ Stored new market trends data in MongoDB for: {query_text}")
             
             return doc
         

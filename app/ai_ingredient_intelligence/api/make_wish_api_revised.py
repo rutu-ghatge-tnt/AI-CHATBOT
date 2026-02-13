@@ -64,6 +64,7 @@ from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_tren
 from app.ai_ingredient_intelligence.logic.market_trends_storage import (
     get_stored_trend_data_for_ingredients
 )
+from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -579,7 +580,7 @@ async def generate_formula_revised(
                 print(f"⚠️ Error extracting hero ingredients: {e}")
                 hero_ingredients = wish_data.get("heroIngredients", [])
             
-            # Fetch trend data for hero ingredients
+            # Fetch trend data for hero ingredients (detailed analysis)
             trend_data = {}
             if hero_ingredients:
                 try:
@@ -588,6 +589,33 @@ async def generate_formula_revised(
                     print(f"⚠️ Error fetching trend data: {e}")
                     import traceback
                     traceback.print_exc()
+            
+            # Fetch market trends data (formatted for frontend visualization)
+            market_trends = None
+            try:
+                print(f"📊 Fetching market trends data for frontend...")
+                trends_service = MarketTrendsService()
+                
+                # Extract benefits and product type from wish data
+                benefits = wish_data.get("benefits", [])
+                product_type = wish_data.get("productType") or wish_data.get("product_type")
+                category = wish_data.get("category", "skincare")
+                
+                market_trends = await trends_service.fetch_trends_for_wish(
+                    hero_ingredients=hero_ingredients,
+                    benefits=benefits,
+                    product_type=product_type,
+                    category=category,
+                    max_age_days=35,
+                    use_fallback=True
+                )
+                print(f"✅ Market trends fetched successfully")
+            except Exception as e:
+                print(f"⚠️ Error fetching market trends: {e}")
+                import traceback
+                traceback.print_exc()
+                # Don't fail the request if trends fail
+                market_trends = None
             
             formula_id = str(uuid.uuid4())
             if not history_id:
@@ -636,7 +664,8 @@ async def generate_formula_revised(
                 },
                 "manufacturing": basic_result.get("formula", {}).get("manufacturing", {}),
                 "compliance": basic_result.get("formula", {}).get("compliance", {}),
-                "trend_data": trend_data
+                "trend_data": trend_data,  # Detailed trend analysis per ingredient
+                "market_trends": market_trends  # Formatted market trends for frontend visualization
             }
     
     except HTTPException:
