@@ -445,18 +445,25 @@ async def update_query_status(
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
-    Update query status. Admin can override any transition.
+    Update query status. Users can update their own queries, admins can update any query.
     """
     try:
         user_role = current_user.get("role", "user")
-        if user_role != "admin":
-            raise HTTPException(status_code=403, detail="Admin access required")
+        user_id_from_token = current_user.get("user_id") or current_user.get("_id")
         
         query_obj_id = validate_object_id(query_id)
         query = await qms_queries_col.find_one({"_id": query_obj_id})
         
         if not query:
             raise HTTPException(status_code=404, detail="Query not found")
+        
+        # Access control: Users can only update their own queries, admins can update any
+        if user_role != "admin":
+            if str(query.get("user_id")) != user_id_from_token:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="You can only update your own queries"
+                )
         
         old_status = query.get("status")
         
@@ -473,8 +480,8 @@ async def update_query_status(
         
         # Log audit
         await log_audit(
-            actor_id=str(current_user.get("user_id") or current_user.get("_id")),
-            actor_role="admin",
+            actor_id=str(user_id_from_token),
+            actor_role=user_role,
             action="query.status_changed",
             resource_type="query",
             resource_id=query_id,
@@ -500,6 +507,154 @@ async def update_query_status(
 # @router.patch("/queries/{query_id}/priority")
 # async def update_query_priority(...):
 #     """Update query priority. Admin only. - Not needed for current requirements"""
+
+
+@router.patch("/queries/{query_id}")
+async def update_query(
+    query_id: str,
+    request: dict,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Update query fields (payment_id, additional_notes, etc.).
+    Users can update their own queries, admins can update any query.
+    
+    Allowed fields:
+    - payment_id: Update payment ID (e.g., after payment is processed)
+    - additional_notes: Update additional notes
+    - quantity_interest: Update quantity interest
+    - experience_level: Update experience level
+    - timeline: Update timeline
+    """
+    try:
+        user_role = current_user.get("role", "user")
+        user_id_from_token = current_user.get("user_id") or current_user.get("_id")
+        
+        query_obj_id = validate_object_id(query_id)
+        query = await qms_queries_col.find_one({"_id": query_obj_id})
+        
+        if not query:
+            raise HTTPException(status_code=404, detail="Query not found")
+        
+        # Access control: Users can only update their own queries, admins can update any
+        if user_role != "admin":
+            if str(query.get("user_id")) != user_id_from_token:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="You can only update your own queries"
+                )
+        
+        # Define allowed fields that can be updated
+        allowed_fields = {
+            "payment_id",
+            "additional_notes",
+            "quantity_interest",
+            "experience_level",
+            "timeline"
+        }
+        
+        # Filter only allowed fields
+        update_data = {}
+        for key, value in request.items():
+            if key in allowed_fields:
+                update_data[key] = value
+        
+        if not update_data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No valid fields to update. Allowed fields: {', '.join(allowed_fields)}"
+            )
+        
+        # Add updated_at timestamp
+        update_data["updated_at"] = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        
+        # Update query
+        await qms_queries_col.update_one(
+            {"_id": query_obj_id},
+            {"$set": update_data}
+        )
+        
+        # Log audit
+        await log_audit(
+            actor_id=str(user_id_from_token),
+            actor_role=user_role,
+            action="query.updated",
+            resource_type="query",
+            resource_id=query_id,
+            details={"updated_fields": list(update_data.keys())}
+        )
+        
+        return {
+            "success": True,
+            "message": "Query updated successfully",
+            "query_id": query_id,
+            "updated_fields": list(update_data.keys())
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error updating query: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update query: {str(e)}")
+
+
+# ============================================================================
+# PAYMENT ENDPOINTS
+# ============================================================================
+
+@router.get("/payments/{payment_id}", response_model=PaymentResponse)
+async def get_payment_detail(
+    payment_id: str,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Get payment details by payment ID.
+    Users can only see their own payments, admins can see any payment.
+    """
+    try:
+        user_role = current_user.get("role", "user")
+        user_id_from_token = current_user.get("user_id") or current_user.get("_id")
+        
+        payment_obj_id = validate_object_id(payment_id)
+        payment_doc = await qms_payments_col.find_one({"_id": payment_obj_id})
+        
+        if not payment_doc:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        
+        # Access control: Users can only see their own payments, admins can see any
+        if user_role != "admin":
+            if str(payment_doc.get("user_id")) != user_id_from_token:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only view your own payments"
+                )
+        
+        from app.ai_ingredient_intelligence.models.qms_schemas import PaymentResponse, PaymentStatus
+        
+        return PaymentResponse(
+            id=str(payment_doc["_id"]),
+            user_id=str(payment_doc.get("user_id", "")),
+            razorpay_order_id=payment_doc.get("razorpay_order_id"),
+            razorpay_payment_id=payment_doc.get("razorpay_payment_id"),
+            razorpay_signature=payment_doc.get("razorpay_signature"),
+            amount=payment_doc.get("amount", 0),
+            currency=payment_doc.get("currency", "INR"),
+            status=PaymentStatus(payment_doc.get("status", "created")),
+            method=payment_doc.get("method"),
+            refund_id=payment_doc.get("refund_id"),
+            refund_reason=payment_doc.get("refund_reason"),
+            created_at=payment_doc.get("created_at", datetime.now())
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting payment detail: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get payment detail: {str(e)}")
 
 
 # ============================================================================
