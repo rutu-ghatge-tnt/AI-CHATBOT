@@ -335,26 +335,31 @@ async def get_query_detail(
                     updated_at=partner_doc.get("updated_at", datetime.now())
                 )
         
-        # Get payment
+        # Get payment - always include if payment_id exists
         payment = None
-        if query.get("payment_id") and user_role == "admin":
-            payment_doc = await qms_payments_col.find_one({"_id": ObjectId(query["payment_id"])})
-            if payment_doc:
-                from app.ai_ingredient_intelligence.models.qms_schemas import PaymentResponse, PaymentStatus
-                payment = PaymentResponse(
-                    id=str(payment_doc["_id"]),
-                    user_id=str(payment_doc.get("user_id", "")),
-                    razorpay_order_id=payment_doc.get("razorpay_order_id"),
-                    razorpay_payment_id=payment_doc.get("razorpay_payment_id"),
-                    razorpay_signature=payment_doc.get("razorpay_signature"),
-                    amount=payment_doc.get("amount", 0),
-                    currency=payment_doc.get("currency", "INR"),
-                    status=PaymentStatus(payment_doc.get("status", "created")),
-                    method=payment_doc.get("method"),
-                    refund_id=payment_doc.get("refund_id"),
-                    refund_reason=payment_doc.get("refund_reason"),
-                    created_at=payment_doc.get("created_at", datetime.now())
-                )
+        if query.get("payment_id"):
+            try:
+                payment_doc = await qms_payments_col.find_one({"_id": ObjectId(query["payment_id"])})
+                if payment_doc:
+                    from app.ai_ingredient_intelligence.models.qms_schemas import PaymentResponse, PaymentStatus
+                    payment = PaymentResponse(
+                        id=str(payment_doc["_id"]),
+                        user_id=str(payment_doc.get("user_id", "")),
+                        razorpay_order_id=payment_doc.get("razorpay_order_id"),
+                        razorpay_payment_id=payment_doc.get("razorpay_payment_id"),
+                        razorpay_signature=payment_doc.get("razorpay_signature"),
+                        amount=payment_doc.get("amount", 0),
+                        currency=payment_doc.get("currency", "INR"),
+                        status=PaymentStatus(payment_doc.get("status", "created")),
+                        method=payment_doc.get("method"),
+                        refund_id=payment_doc.get("refund_id"),
+                        refund_reason=payment_doc.get("refund_reason"),
+                        created_at=payment_doc.get("created_at", datetime.now())
+                    )
+            except Exception as e:
+                # If payment lookup fails, just set payment to None
+                print(f"Warning: Could not fetch payment details: {e}")
+                payment = None
         
         # Get notes (filtered by role)
         notes_filter = {"query_id": query_id, "deleted_at": None}
@@ -516,15 +521,23 @@ async def update_query(
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
-    Update query fields (payment_id, additional_notes, etc.).
+    Update any query fields.
     Users can update their own queries, admins can update any query.
     
-    Allowed fields:
-    - payment_id: Update payment ID (e.g., after payment is processed)
-    - additional_notes: Update additional notes
-    - quantity_interest: Update quantity interest
-    - experience_level: Update experience level
-    - timeline: Update timeline
+    You can update any field except protected ones:
+    - Protected fields (cannot be updated): _id, user_id, created_at, display_id
+    
+    Common fields you can update:
+    - status: Query status (e.g., "new", "under_review", "completed")
+    - payment_id: Payment ID (e.g., after payment is processed)
+    - additional_notes: Additional notes
+    - quantity_interest: Quantity interest
+    - experience_level: Experience level
+    - timeline: Timeline
+    - formula_name: Formula name
+    - partner_id: Partner assignment
+    - queue_number: Queue number
+    - And any other custom fields
     """
     try:
         user_role = current_user.get("role", "user")
@@ -544,29 +557,56 @@ async def update_query(
                     detail="You can only update your own queries"
                 )
         
-        # Define allowed fields that can be updated
-        allowed_fields = {
-            "payment_id",
-            "additional_notes",
-            "quantity_interest",
-            "experience_level",
-            "timeline"
+        # Protected fields that cannot be updated
+        protected_fields = {
+            "_id",
+            "user_id",
+            "created_at",
+            "display_id"
         }
         
-        # Filter only allowed fields
+        # Validate status if provided
+        if "status" in request:
+            status_value = request["status"]
+            # Check if it's a valid QueryStatus enum value
+            try:
+                if isinstance(status_value, str):
+                    QueryStatus(status_value)  # Validate it's a valid status
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid status format. Expected string, got {type(status_value)}"
+                    )
+            except ValueError:
+                valid_statuses = [s.value for s in QueryStatus]
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status value: {status_value}. Valid values: {', '.join(valid_statuses)}"
+                )
+        
+        # Filter out protected fields and build update data
         update_data = {}
         for key, value in request.items():
-            if key in allowed_fields:
-                update_data[key] = value
+            if key in protected_fields:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot update protected field: {key}"
+                )
+            update_data[key] = value
         
         if not update_data:
             raise HTTPException(
                 status_code=400,
-                detail=f"No valid fields to update. Allowed fields: {', '.join(allowed_fields)}"
+                detail="No fields to update. Provide at least one field to update."
             )
         
         # Add updated_at timestamp
         update_data["updated_at"] = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        
+        # Track old status if status is being updated
+        old_status = None
+        if "status" in update_data:
+            old_status = query.get("status")
         
         # Update query
         await qms_queries_col.update_one(
@@ -574,22 +614,38 @@ async def update_query(
             {"$set": update_data}
         )
         
+        # Prepare audit details
+        audit_details = {"updated_fields": list(update_data.keys())}
+        if old_status and "status" in update_data:
+            audit_details["old_status"] = old_status
+            audit_details["new_status"] = update_data["status"]
+            action = "query.status_changed"
+        else:
+            action = "query.updated"
+        
         # Log audit
         await log_audit(
             actor_id=str(user_id_from_token),
             actor_role=user_role,
-            action="query.updated",
+            action=action,
             resource_type="query",
             resource_id=query_id,
-            details={"updated_fields": list(update_data.keys())}
+            details=audit_details
         )
         
-        return {
+        response = {
             "success": True,
             "message": "Query updated successfully",
             "query_id": query_id,
             "updated_fields": list(update_data.keys())
         }
+        
+        # Include status change info if status was updated
+        if old_status and "status" in update_data:
+            response["old_status"] = old_status
+            response["new_status"] = update_data["status"]
+        
+        return response
     
     except HTTPException:
         raise
@@ -604,57 +660,9 @@ async def update_query(
 # PAYMENT ENDPOINTS
 # ============================================================================
 
-@router.get("/payments/{payment_id}", response_model=PaymentResponse)
-async def get_payment_detail(
-    payment_id: str,
-    current_user: dict = Depends(verify_jwt_token)
-):
-    """
-    Get payment details by payment ID.
-    Users can only see their own payments, admins can see any payment.
-    """
-    try:
-        user_role = current_user.get("role", "user")
-        user_id_from_token = current_user.get("user_id") or current_user.get("_id")
-        
-        payment_obj_id = validate_object_id(payment_id)
-        payment_doc = await qms_payments_col.find_one({"_id": payment_obj_id})
-        
-        if not payment_doc:
-            raise HTTPException(status_code=404, detail="Payment not found")
-        
-        # Access control: Users can only see their own payments, admins can see any
-        if user_role != "admin":
-            if str(payment_doc.get("user_id")) != user_id_from_token:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only view your own payments"
-                )
-        
-        from app.ai_ingredient_intelligence.models.qms_schemas import PaymentResponse, PaymentStatus
-        
-        return PaymentResponse(
-            id=str(payment_doc["_id"]),
-            user_id=str(payment_doc.get("user_id", "")),
-            razorpay_order_id=payment_doc.get("razorpay_order_id"),
-            razorpay_payment_id=payment_doc.get("razorpay_payment_id"),
-            razorpay_signature=payment_doc.get("razorpay_signature"),
-            amount=payment_doc.get("amount", 0),
-            currency=payment_doc.get("currency", "INR"),
-            status=PaymentStatus(payment_doc.get("status", "created")),
-            method=payment_doc.get("method"),
-            refund_id=payment_doc.get("refund_id"),
-            refund_reason=payment_doc.get("refund_reason"),
-            created_at=payment_doc.get("created_at", datetime.now())
-        )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error getting payment detail: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to get payment detail: {str(e)}")
+# Payment details are now included in the query detail endpoint (GET /api/qms/queries/{query_id}).
+# This separate endpoint is kept for backward compatibility but is not recommended.
+# Use GET /api/qms/queries/{query_id} instead to get payment details along with query info.
 
 
 # ============================================================================
