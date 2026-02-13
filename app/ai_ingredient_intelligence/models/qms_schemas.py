@@ -264,7 +264,6 @@ class QueryListResponse(BaseModel):
 
 class QueryDetailResponse(QueryResponse):
     """Schema for detailed query response"""
-    wish_brief: Optional[Dict[str, Any]] = Field(None, description="Fetched from wish_history when needed")
     user: Optional[UserInfo] = Field(None, description="User information from main user table")
     partner: Optional[PartnerResponse] = None
     payment: Optional[PaymentResponse] = None

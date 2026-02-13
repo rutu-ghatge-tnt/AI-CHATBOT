@@ -403,7 +403,7 @@ class CommercializationProfile(BaseModel):
 
 class GetThisMadeRequest(BaseModel):
     """Request schema for commercialization"""
-    formula_id: str = Field(..., description="Formula ID")
+    formula_id: Optional[str] = Field(None, description="Formula ID (optional - will be extracted from history if not provided)")
     history_id: str = Field(..., description="History ID")
     name: str = Field(..., description="User name")
     phone: str = Field(..., description="WhatsApp phone number")

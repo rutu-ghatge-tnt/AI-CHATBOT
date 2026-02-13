@@ -1117,11 +1117,28 @@ async def submit_commercialization_request(
     try:
         print(f"🚀 Submitting commercialization request...")
         
+        # Validate history_id format (MongoDB ObjectId must be 24 hex characters)
+        if not request.history_id or len(request.history_id) != 24:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid history_id format. Expected 24-character MongoDB ObjectId, got: '{request.history_id}' (length: {len(request.history_id) if request.history_id else 0})"
+            )
+        
         # Validate formula exists
         user_id = current_user.get("user_id") or current_user.get("_id")
+        
+        # Try to convert to ObjectId with better error handling
+        try:
+            history_obj_id = ObjectId(request.history_id)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid history_id format: '{request.history_id}'. Must be a valid MongoDB ObjectId (24 hex characters). Error: {str(e)}"
+            )
+        
         # First, find the history item by _id and user_id
         history_item = await wish_history_col.find_one({
-            "_id": ObjectId(request.history_id),
+            "_id": history_obj_id,
             "user_id": user_id
         })
         
@@ -1275,6 +1292,34 @@ async def submit_commercialization_request(
                 else:
                     additional_notes_str = str(request.additional_notes)
             
+            # Handle payment_id - create payment document if it's a valid ObjectId and doesn't exist
+            payment_id_to_store = None
+            if request.payment_id:
+                # Check if payment_id is a valid ObjectId
+                try:
+                    payment_obj_id = ObjectId(request.payment_id)
+                    # Check if payment document exists
+                    from app.ai_ingredient_intelligence.db.collections import qms_payments_col
+                    existing_payment = await qms_payments_col.find_one({"_id": payment_obj_id})
+                    if not existing_payment:
+                        print(f"⚠️ Payment document not found for ID: {request.payment_id}, creating placeholder...")
+                        # Create a placeholder payment document
+                        payment_doc = {
+                            "_id": payment_obj_id,
+                            "user_id": user_id,
+                            "amount": 0,  # Will be updated when actual payment is processed
+                            "currency": "INR",
+                            "status": "created",
+                            "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30)))
+                        }
+                        await qms_payments_col.insert_one(payment_doc)
+                        print(f"✅ Created placeholder payment document: {request.payment_id}")
+                    payment_id_to_store = request.payment_id
+                except Exception as e:
+                    # payment_id is not a valid ObjectId, store it as-is (might be a reference ID)
+                    print(f"⚠️ payment_id '{request.payment_id}' is not a valid ObjectId, storing as string: {e}")
+                    payment_id_to_store = request.payment_id
+            
             # Create query with all form fields
             query_id = await create_query_from_commercialization(
                 user_id=user_id,
@@ -1285,7 +1330,7 @@ async def submit_commercialization_request(
                 timeline=request.timeline,
                 quantity_interest=request.quantity_interest,
                 additional_notes=additional_notes_str,  # Ensure it's a string
-                payment_id=request.payment_id,  # Optional - None if not provided
+                payment_id=payment_id_to_store,  # Pass payment_id (validated/created above)
                 queue_number=queue_number,  # Pass queue number to store in query
                 user_name=request.name,  # Store user name from form
                 user_phone=request.phone,  # Store user phone from form
