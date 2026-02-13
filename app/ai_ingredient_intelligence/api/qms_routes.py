@@ -170,7 +170,7 @@ async def list_queries(
         from app.ai_ingredient_intelligence.db.collections import wish_history_col
         query_responses = []
         for query in queries:
-            # Get user name from main users collection
+            # Get user name from main users collection, with fallback to stored form data
             user_name = None
             user_city = None
             if query.get("user_id"):
@@ -179,19 +179,29 @@ async def list_queries(
                     user_name = user.get("fullname") or user.get("name")
                     user_city = user.get("city")
             
+            # Fallback: Use stored form data if user collection doesn't have name
+            if not user_name:
+                user_name = query.get("user_name")  # From get-this-made form
+            if not user_city:
+                user_city = query.get("user_city")  # From get-this-made form
+            
             # Get formula name from query (stored directly) or fallback to wish_history
             formula_name = query.get("formula_name") or "Custom Formula"
             product_type = "Product"
             category = "skincare"
             wish_id = query.get("wish_id") or query.get("history_id")
-            if wish_id and not query.get("formula_name"):
+            # Always fetch wish_history to get product_type and category, even if formula_name exists
+            if wish_id:
                 wish_history = await wish_history_col.find_one({"_id": ObjectId(wish_id)})
                 if wish_history:
-                    formula_name = (
-                        wish_history.get("name") 
-                        or wish_history.get("formula_name")
-                        or "Custom Formula"
-                    )
+                    # Update formula_name if not already set in query
+                    if not query.get("formula_name"):
+                        formula_name = (
+                            wish_history.get("name") 
+                            or wish_history.get("formula_name")
+                            or "Custom Formula"
+                        )
+                    # Always fetch product_type and category from wish_history
                     product_type = (
                         wish_history.get("parsed_data", {}).get("product_type", {}).get("name")
                         or wish_history.get("wish_data", {}).get("productType")
@@ -275,17 +285,32 @@ async def get_query_detail(
             if str(query.get("user_id")) != user_id_from_token:
                 raise HTTPException(status_code=403, detail="Access denied")
         
-        # Get user from main users collection (only if admin or owner)
+            # Get user from main users collection (only if admin or owner)
         user = None
         if user_role == "admin" or (user_role == "user" and str(query.get("user_id")) == user_id_from_token):
             user_doc = await users_col.find_one({"_id": ObjectId(query["user_id"])})
             if user_doc:
+                # Use stored form data as fallback if user collection doesn't have the field
+                fullname = user_doc.get("fullname") or user_doc.get("name") or query.get("user_name", "")
+                phone = user_doc.get("phone") or query.get("user_phone", "")
+                city = user_doc.get("city") or query.get("user_city")
+                email = user_doc.get("email") or query.get("user_email")
+                pincode = user_doc.get("pincode") or query.get("user_pincode")
                 user = UserInfo(
-                    fullname=user_doc.get("fullname") or user_doc.get("name", ""),
-                    phone=user_doc.get("phone", ""),
-                    city=user_doc.get("city"),
-                    pincode=user_doc.get("pincode")
+                    fullname=fullname,
+                    phone=phone,
+                    city=city,
+                    pincode=pincode
                 )
+            else:
+                # If user not found in users collection, use stored form data
+                if query.get("user_name") or query.get("user_phone"):
+                    user = UserInfo(
+                        fullname=query.get("user_name", ""),
+                        phone=query.get("user_phone", ""),
+                        city=query.get("user_city"),
+                        pincode=query.get("user_pincode")
+                    )
         
         # Get partner
         partner = None

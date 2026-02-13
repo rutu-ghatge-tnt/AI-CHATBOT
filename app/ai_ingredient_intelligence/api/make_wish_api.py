@@ -45,26 +45,169 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from app.ai_ingredient_intelligence.db.collections import wish_history_col
 
-# Import Claude client from make_wish_generator (already initialized)
-try:
-    from app.ai_ingredient_intelligence.logic.make_wish_generator import (
-        claude_client,
-        claude_model
-    )
-    claude_api_key = os.getenv("CLAUDE_API_KEY")
-    CLAUDE_AVAILABLE = claude_client is not None and claude_api_key is not None
-except (ImportError, AttributeError):
-    claude_client = None
-    claude_model = None
-    CLAUDE_AVAILABLE = False
-    print("⚠️ Warning: Claude client not available. Using default business strategy prompt.")
+# Import modular Gamma PPT and Claude prompt generators
+from app.ai_ingredient_intelligence.logic.gamma_ppt_generator import (
+    generate_ppt_from_data,
+    is_gamma_available
+)
+from app.ai_ingredient_intelligence.logic.claude_prompt_generator import (
+    generate_business_strategy_prompt,
+    get_default_business_strategy_prompt
+)
 
 router = APIRouter(prefix="/make-wish", tags=["Make a Wish"])
 
-# Gamma API configuration
-GAMMA_API_KEY = os.getenv("GAMMA_API_KEY")
-GAMMA_API_BASE_URL = "https://public-api.gamma.app/v1.0"
-GAMMA_GENERATE_ENDPOINT = f"{GAMMA_API_BASE_URL}/generations"
+
+# ============================================================================
+# HELPER ENDPOINT: Check Gamma PPT Generation Status
+# ============================================================================
+
+@router.get("/check-ppt-status/{generation_id}", response_model=None)
+async def check_ppt_status(
+    generation_id: str,
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Check the status of a Gamma PPT generation.
+    
+    This endpoint allows you to check if a presentation generation is complete
+    and retrieve the download/edit URLs.
+    
+    PATH PARAMETER:
+    - generation_id: The Gamma generationId from the /generate-ppt response
+    
+    RESPONSE:
+    {
+        "success": true,
+        "status": "pending" | "completed" | "failed",
+        "download_url": "https://...",
+        "edit_url": "https://...",
+        "presentation_id": "...",
+        "message": "..."
+    }
+    """
+    print(f"\n{'='*80}")
+    print(f"[DEBUG] 🔍 Checking PPT status for generation_id: {generation_id}")
+    print(f"{'='*80}\n")
+    
+    try:
+        # Import Gamma API utilities
+        from app.ai_ingredient_intelligence.logic.gamma_ppt_generator import GAMMA_API_KEY, GAMMA_API_BASE_URL
+        
+        if not GAMMA_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="GAMMA_API_KEY not configured"
+            )
+        
+        # Check status via Gamma API
+        status_url = f"{GAMMA_API_BASE_URL}/generations/{generation_id}"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                status_url,
+                headers={
+                    "X-API-KEY": GAMMA_API_KEY,
+                    "accept": "application/json"
+                }
+            )
+            
+            if response.status_code == 401:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Invalid Gamma API key. Please check your GAMMA_API_KEY in .env file."
+                )
+            
+            if response.status_code != 200:
+                error_text = response.text[:200]
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Gamma API error: {error_text}"
+                )
+            
+            status_data = response.json()
+            print(f"[DEBUG] Gamma status response: {status_data}")
+            
+            status = status_data.get("status", "unknown")
+            
+            # Extract URLs if status is completed
+            download_url = None
+            edit_url = None
+            presentation_id = status_data.get("generationId") or generation_id
+            
+            if status == "completed":
+                # Per Gamma API docs, when status is "completed", response includes:
+                # - exportUrl: Direct download URL for PPTX/PDF
+                # - gammaUrl: URL to view/edit the presentation
+                # - gammaId: The presentation ID
+                
+                download_url = (
+                    status_data.get("exportUrl") or  # Primary field per Gamma API
+                    status_data.get("downloadUrl") or
+                    status_data.get("url") or
+                    status_data.get("presentationUrl") or
+                    status_data.get("file")
+                )
+                
+                edit_url = (
+                    status_data.get("gammaUrl") or  # Primary field per Gamma API
+                    status_data.get("editUrl") or
+                    status_data.get("editPath") or
+                    status_data.get("presentationUrl") or
+                    status_data.get("url")
+                )
+                
+                presentation_id = (
+                    status_data.get("gammaId") or  # Primary field per Gamma API
+                    status_data.get("id") or
+                    status_data.get("presentationId") or
+                    presentation_id
+                )
+                
+                # Check nested structures
+                if not download_url or not edit_url:
+                    for key in ["data", "presentation", "result", "gamma"]:
+                        if key in status_data and isinstance(status_data[key], dict):
+                            nested = status_data[key]
+                            download_url = download_url or nested.get("url") or nested.get("downloadUrl")
+                            edit_url = edit_url or nested.get("editUrl") or nested.get("editPath")
+                            if download_url or edit_url:
+                                break
+            
+            message = ""
+            if status == "pending":
+                message = "Presentation is still being generated. Please check again in a few moments."
+            elif status == "completed":
+                if download_url or edit_url:
+                    message = "Presentation is ready! Use the URLs above to access it."
+                else:
+                    message = "Presentation is completed but URLs not found in response. Check Gamma dashboard."
+            elif status == "failed":
+                message = "Presentation generation failed. Please try generating again."
+            else:
+                message = f"Unknown status: {status}"
+            
+            return {
+                "success": True,
+                "status": status,
+                "download_url": download_url,
+                "edit_url": edit_url,
+                "presentation_id": presentation_id,
+                "generation_id": generation_id,
+                "message": message,
+                "gamma_response": status_data
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DEBUG] ❌ Error checking PPT status: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error checking PPT status: {str(e)}"
+        )
 
 
 # ============================================================================
@@ -79,20 +222,110 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     """
     sections = []
     
-    # Executive Summary - COMPLETE wish_data
+    # Currency Note - IMPORTANT
     sections.append("=" * 80)
+    sections.append("⚠️ CURRENCY NOTE: ALL PRICES AND COSTS ARE IN INDIAN RUPEES (₹)")
+    sections.append("All monetary values in this data are in Indian Rupees (₹).")
+    sections.append("Do NOT convert to dollars ($) or any other currency.")
+    sections.append("=" * 80)
+    
+    # Executive Summary - COMPLETE wish_data
+    sections.append("\n" + "=" * 80)
     sections.append("EXECUTIVE SUMMARY - COMPLETE WISH DATA")
     sections.append("=" * 80)
     
-    wish_data = wish_response.get("wish_data", {})
-    sections.append(f"\nProduct Type: {wish_data.get('productType', 'N/A')}")
-    sections.append(f"Category: {wish_data.get('category', 'N/A').title()}")
-    sections.append(f"Benefits: {', '.join(wish_data.get('benefits', []))}")
+    # Get wish_data, fallback to parsed_data if wish_data is empty
+    wish_data = wish_response.get("wish_data") or {}
+    parsed_data = wish_response.get("parsed_data") or {}
+    
+    # Ensure both are dicts (handle None case)
+    if not isinstance(wish_data, dict):
+        wish_data = {}
+    if not isinstance(parsed_data, dict):
+        parsed_data = {}
+    
+    # If wish_data is empty but parsed_data exists, use parsed_data
+    if not wish_data and parsed_data:
+        print(f"[FORMAT] ⚠️ wish_data is empty, using parsed_data for formatting")
+        # Extract key info from parsed_data
+        if parsed_data.get("product_type"):
+            product_type = parsed_data.get("product_type", {})
+            if isinstance(product_type, dict):
+                wish_data["productType"] = product_type.get("name", "N/A")
+        if parsed_data.get("category"):
+            wish_data["category"] = parsed_data.get("category", "N/A")
+        if parsed_data.get("detected_benefits"):
+            wish_data["benefits"] = parsed_data.get("detected_benefits", [])
+        if parsed_data.get("detected_ingredients"):
+            wish_data["heroIngredients"] = parsed_data.get("detected_ingredients", [])
+        if parsed_data.get("wish_text"):
+            wish_data["wish_text"] = parsed_data.get("wish_text", "")
+        if parsed_data.get("complexity"):
+            wish_data["complexity"] = parsed_data.get("complexity", "")
+    
+    # Also include parsed_data details directly
+    if parsed_data:
+        sections.append("\n--- PARSED DATA (from natural language wish) ---")
+        if parsed_data.get("wish_text"):
+            sections.append(f"Original Wish Text: {parsed_data.get('wish_text')}")
+        if parsed_data.get("category"):
+            sections.append(f"Detected Category: {parsed_data.get('category')}")
+        if parsed_data.get("product_type"):
+            product_type = parsed_data.get("product_type", {})
+            if isinstance(product_type, dict):
+                sections.append(f"Product Type: {product_type.get('name', 'N/A')}")
+        if parsed_data.get("detected_ingredients"):
+            ingredients_list = parsed_data.get('detected_ingredients', [])
+            # Handle list of strings or list of dicts
+            if ingredients_list and isinstance(ingredients_list[0], dict):
+                ingredients_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in ingredients_list if ing])
+            else:
+                ingredients_str = ', '.join([str(ing) for ing in ingredients_list if ing])
+            sections.append(f"Detected Ingredients: {ingredients_str}")
+        if parsed_data.get("detected_benefits"):
+            benefits_list = parsed_data.get('detected_benefits', [])
+            # Handle list of strings or list of dicts
+            if benefits_list and isinstance(benefits_list[0], dict):
+                benefits_str = ', '.join([str(ben.get('name', ben.get('benefit', ben))) for ben in benefits_list if ben])
+            else:
+                benefits_str = ', '.join([str(ben) for ben in benefits_list if ben])
+            sections.append(f"Detected Benefits: {benefits_str}")
+        if parsed_data.get("complexity"):
+            sections.append(f"Complexity Level: {parsed_data.get('complexity')}")
+        if parsed_data.get("mode"):
+            sections.append(f"Mode: {parsed_data.get('mode')}")
+    
+    sections.append(f"\nProduct Type: {wish_data.get('productType', 'N/A') if isinstance(wish_data, dict) else 'N/A'}")
+    category = wish_data.get('category', 'N/A') if isinstance(wish_data, dict) else 'N/A'
+    sections.append(f"Category: {category.title() if isinstance(category, str) else 'N/A'}")
+    
+    # Handle benefits - could be list of strings or list of dicts
+    benefits = wish_data.get('benefits', []) if isinstance(wish_data, dict) else []
+    if benefits and isinstance(benefits, list):
+        if benefits and isinstance(benefits[0], dict):
+            benefits_str = ', '.join([str(b.get('name', b.get('benefit', b))) for b in benefits if b])
+        else:
+            benefits_str = ', '.join([str(b) for b in benefits if b])
+        sections.append(f"Benefits: {benefits_str}")
+    else:
+        sections.append(f"Benefits: N/A")
     
     if wish_data.get('heroIngredients'):
-        sections.append(f"Hero Ingredients: {', '.join(wish_data.get('heroIngredients', []))}")
+        hero_ingredients = wish_data.get('heroIngredients', [])
+        if hero_ingredients and isinstance(hero_ingredients, list):
+            if hero_ingredients and isinstance(hero_ingredients[0], dict):
+                hero_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in hero_ingredients if ing])
+            else:
+                hero_str = ', '.join([str(ing) for ing in hero_ingredients if ing])
+            sections.append(f"Hero Ingredients: {hero_str}")
     if wish_data.get('exclusions'):
-        sections.append(f"Exclusions: {', '.join(wish_data.get('exclusions', []))}")
+        exclusions = wish_data.get('exclusions', [])
+        if exclusions and isinstance(exclusions, list):
+            if exclusions and isinstance(exclusions[0], dict):
+                excl_str = ', '.join([str(ex.get('name', ex.get('ingredient', ex))) for ex in exclusions if ex])
+            else:
+                excl_str = ', '.join([str(ex) for ex in exclusions if ex])
+            sections.append(f"Exclusions: {excl_str}")
     if wish_data.get('texture'):
         sections.append(f"Texture: {wish_data.get('texture', 'N/A')}")
     if wish_data.get('costMin') and wish_data.get('costMax'):
@@ -100,9 +333,21 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     
     # Additional wish_data fields
     if wish_data.get('claims'):
-        sections.append(f"Claims: {', '.join(wish_data.get('claims', []))}")
+        claims = wish_data.get('claims', [])
+        if claims and isinstance(claims, list):
+            if claims and isinstance(claims[0], dict):
+                claims_str = ', '.join([str(c.get('name', c.get('claim', c))) for c in claims if c])
+            else:
+                claims_str = ', '.join([str(c) for c in claims if c])
+            sections.append(f"Claims: {claims_str}")
     if wish_data.get('targetAudience'):
-        sections.append(f"Target Audience: {', '.join(wish_data.get('targetAudience', []))}")
+        audience = wish_data.get('targetAudience', [])
+        if audience and isinstance(audience, list):
+            if audience and isinstance(audience[0], dict):
+                audience_str = ', '.join([str(a.get('name', a.get('audience', a))) for a in audience if a])
+            else:
+                audience_str = ', '.join([str(a) for a in audience if a])
+            sections.append(f"Target Audience: {audience_str}")
     if wish_data.get('additionalNotes'):
         sections.append(f"Additional Notes: {wish_data.get('additionalNotes', '')}")
     if wish_data.get('mode'):
@@ -110,18 +355,39 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     if wish_data.get('preferences'):
         prefs = wish_data.get('preferences', {})
         if prefs.get('keyIngredients'):
-            sections.append(f"Key Ingredients Preference: {', '.join(prefs.get('keyIngredients', []))}")
+            key_ings = prefs.get('keyIngredients', [])
+            if key_ings and isinstance(key_ings, list):
+                if key_ings and isinstance(key_ings[0], dict):
+                    key_ings_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in key_ings if ing])
+                else:
+                    key_ings_str = ', '.join([str(ing) for ing in key_ings if ing])
+                sections.append(f"Key Ingredients Preference: {key_ings_str}")
         if prefs.get('avoidIngredients'):
-            sections.append(f"Avoid Ingredients: {', '.join(prefs.get('avoidIngredients', []))}")
+            avoid_ings = prefs.get('avoidIngredients', [])
+            if avoid_ings and isinstance(avoid_ings, list):
+                if avoid_ings and isinstance(avoid_ings[0], dict):
+                    avoid_ings_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in avoid_ings if ing])
+                else:
+                    avoid_ings_str = ', '.join([str(ing) for ing in avoid_ings if ing])
+                sections.append(f"Avoid Ingredients: {avoid_ings_str}")
         if prefs.get('claims'):
-            sections.append(f"Preferred Claims: {', '.join(prefs.get('claims', []))}")
+            pref_claims = prefs.get('claims', [])
+            if pref_claims and isinstance(pref_claims, list):
+                if pref_claims and isinstance(pref_claims[0], dict):
+                    pref_claims_str = ', '.join([str(c.get('name', c.get('claim', c))) for c in pref_claims if c])
+                else:
+                    pref_claims_str = ', '.join([str(c) for c in pref_claims if c])
+                sections.append(f"Preferred Claims: {pref_claims_str}")
     
     # Stage 1: Ingredient Selection
     sections.append("\n" + "=" * 80)
     sections.append("STAGE 1: INGREDIENT SELECTION")
     sections.append("=" * 80)
     
-    ingredient_selection = wish_response.get("ingredient_selection", {})
+    ingredient_selection = wish_response.get("ingredient_selection") or {}
+    # Ensure ingredient_selection is a dict (handle None case)
+    if not isinstance(ingredient_selection, dict):
+        ingredient_selection = {}
     if 'ingredients' in ingredient_selection:
         sections.append(f"\nTotal Ingredients Selected: {len(ingredient_selection['ingredients'])}")
         sections.append("\nSelected Ingredients:")
@@ -165,7 +431,13 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
             sections.append(f"    Process Temp: {phase.get('process_temp', 'N/A')}")
             sections.append(f"    Instructions: {phase.get('instructions', 'N/A')}")
             if phase.get('ingredient_names'):
-                sections.append(f"    Ingredients: {', '.join(phase.get('ingredient_names', []))}")
+                ing_names = phase.get('ingredient_names', [])
+                if ing_names and isinstance(ing_names, list):
+                    if ing_names and isinstance(ing_names[0], dict):
+                        ing_names_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in ing_names if ing])
+                    else:
+                        ing_names_str = ', '.join([str(ing) for ing in ing_names if ing])
+                    sections.append(f"    Ingredients: {ing_names_str}")
     
     # Insights
     if ingredient_selection.get('insights'):
@@ -195,7 +467,14 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         for synergy in ingredient_selection.get('ingredient_synergies', []):
             ingredients = synergy.get('ingredients', [])
             benefit = synergy.get('benefit', '')
-            sections.append(f"  {', '.join(ingredients)}: {benefit}")
+            if ingredients and isinstance(ingredients, list):
+                if ingredients and isinstance(ingredients[0], dict):
+                    ing_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in ingredients if ing])
+                else:
+                    ing_str = ', '.join([str(ing) for ing in ingredients if ing])
+                sections.append(f"  {ing_str}: {benefit}")
+            else:
+                sections.append(f"  {str(ingredients)}: {benefit}")
     
     # Ingredient Conflicts
     if ingredient_selection.get('ingredient_conflicts'):
@@ -204,7 +483,14 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
             ingredients = conflict.get('ingredients', [])
             issue = conflict.get('issue', '')
             solution = conflict.get('solution', '')
-            sections.append(f"  {', '.join(ingredients)}: {issue}")
+            if ingredients and isinstance(ingredients, list):
+                if ingredients and isinstance(ingredients[0], dict):
+                    ing_str = ', '.join([str(ing.get('name', ing.get('ingredient', ing))) for ing in ingredients if ing])
+                else:
+                    ing_str = ', '.join([str(ing) for ing in ingredients if ing])
+                sections.append(f"  {ing_str}: {issue}")
+            else:
+                sections.append(f"  {str(ingredients)}: {issue}")
             if solution:
                 sections.append(f"    Solution: {solution}")
     
@@ -218,8 +504,14 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     sections.append("STAGE 2: OPTIMIZED FORMULA")
     sections.append("=" * 80)
     
-    optimized_formula = wish_response.get("optimized_formula", {})
-    formula_info = optimized_formula.get("optimized_formula", {})
+    optimized_formula = wish_response.get("optimized_formula") or {}
+    # Ensure optimized_formula is a dict (handle None case)
+    if not isinstance(optimized_formula, dict):
+        optimized_formula = {}
+    formula_info = optimized_formula.get("optimized_formula", {}) if isinstance(optimized_formula, dict) else {}
+    # Ensure formula_info is a dict
+    if not isinstance(formula_info, dict):
+        formula_info = {}
     
     if formula_info.get('name'):
         sections.append(f"\nFormula Name: {formula_info.get('name')}")
@@ -280,7 +572,14 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
             solution = warning.get('solution', '')
             sections.append(f"  [{severity}] {text}")
             if affected:
-                sections.append(f"    Affected Ingredients: {', '.join(affected)}")
+                if affected and isinstance(affected, list):
+                    if affected and isinstance(affected[0], dict):
+                        affected_str = ', '.join([str(a.get('name', a.get('ingredient', a))) for a in affected if a])
+                    else:
+                        affected_str = ', '.join([str(a) for a in affected if a])
+                    sections.append(f"    Affected Ingredients: {affected_str}")
+                else:
+                    sections.append(f"    Affected Ingredients: {str(affected)}")
             if solution:
                 sections.append(f"    Solution: {solution}")
     
@@ -304,7 +603,10 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     sections.append("STAGE 3: MANUFACTURING PROCESS")
     sections.append("=" * 80)
     
-    manufacturing = wish_response.get("manufacturing", {})
+    manufacturing = wish_response.get("manufacturing") or {}
+    # Ensure manufacturing is a dict (handle None case)
+    if not isinstance(manufacturing, dict):
+        manufacturing = {}
     if manufacturing.get('process_type'):
         sections.append(f"\nProcess Type: {manufacturing.get('process_type', '').title()}")
     if manufacturing.get('difficulty_level'):
@@ -371,9 +673,21 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         pkg = manufacturing.get('packaging_guidelines', {})
         sections.append("\nPackaging Guidelines:")
         if pkg.get('recommended_packaging'):
-            sections.append(f"  Recommended: {', '.join(pkg.get('recommended_packaging', []))}")
+            rec_pkg = pkg.get('recommended_packaging', [])
+            if rec_pkg and isinstance(rec_pkg, list):
+                if rec_pkg and isinstance(rec_pkg[0], dict):
+                    rec_pkg_str = ', '.join([str(p.get('name', p.get('packaging', p))) for p in rec_pkg if p])
+                else:
+                    rec_pkg_str = ', '.join([str(p) for p in rec_pkg if p])
+                sections.append(f"  Recommended: {rec_pkg_str}")
         if pkg.get('avoid'):
-            sections.append(f"  Avoid: {', '.join(pkg.get('avoid', []))}")
+            avoid_pkg = pkg.get('avoid', [])
+            if avoid_pkg and isinstance(avoid_pkg, list):
+                if avoid_pkg and isinstance(avoid_pkg[0], dict):
+                    avoid_pkg_str = ', '.join([str(p.get('name', p.get('packaging', p))) for p in avoid_pkg if p])
+                else:
+                    avoid_pkg_str = ', '.join([str(p) for p in avoid_pkg if p])
+                sections.append(f"  Avoid: {avoid_pkg_str}")
         if pkg.get('fill_temperature'):
             sections.append(f"  Fill Temperature: {pkg.get('fill_temperature', 'N/A')}")
         if pkg.get('storage'):
@@ -409,7 +723,10 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     sections.append("STAGE 4: COST ANALYSIS")
     sections.append("=" * 80)
     
-    cost_analysis = wish_response.get("cost_analysis", {})
+    cost_analysis = wish_response.get("cost_analysis") or {}
+    # Ensure cost_analysis is a dict (handle None case)
+    if not isinstance(cost_analysis, dict):
+        cost_analysis = {}
     
     # Raw Material Cost
     if cost_analysis.get('raw_material_cost'):
@@ -481,7 +798,15 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
                 low = conf.get('low_confidence_ingredients', {})
                 sections.append(f"  Low Confidence: {low.get('count', 0)} ingredients, ₹{low.get('cost_contribution', 0)} ({low.get('percentage_of_total', '0%')})")
                 if low.get('names'):
-                    sections.append(f"    Ingredients: {', '.join(low.get('names', []))}")
+                    low_names = low.get('names', [])
+                    if low_names and isinstance(low_names, list):
+                        if low_names and isinstance(low_names[0], dict):
+                            low_names_str = ', '.join([str(n.get('name', n.get('ingredient', n))) for n in low_names if n])
+                        else:
+                            low_names_str = ', '.join([str(n) for n in low_names if n])
+                        sections.append(f"    Ingredients: {low_names_str}")
+                    else:
+                        sections.append(f"    Ingredients: {str(low_names)}")
                 if low.get('recommendation'):
                     sections.append(f"    Recommendation: {low.get('recommendation', '')}")
         
@@ -594,8 +919,11 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     sections.append("STAGE 5: COMPLIANCE CHECK")
     sections.append("=" * 80)
     
-    compliance = wish_response.get("compliance", {})
-    sections.append(f"\nOverall Status: {compliance.get('overall_status', 'N/A')}")
+    compliance = wish_response.get("compliance") or {}
+    # Ensure compliance is a dict (handle None case)
+    if not isinstance(compliance, dict):
+        compliance = {}
+    sections.append(f"\nOverall Status: {compliance.get('overall_status', 'N/A') if isinstance(compliance, dict) else 'N/A'}")
     
     # BIS Compliance
     if compliance.get('bis_compliance'):
@@ -683,7 +1011,12 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         if metadata.get('model_used'):
             sections.append(f"Model Used: {metadata.get('model_used', 'N/A')}")
         if metadata.get('stages_completed'):
-            sections.append(f"Stages Completed: {', '.join(metadata.get('stages_completed', []))}")
+            stages = metadata.get('stages_completed', [])
+            if stages and isinstance(stages, list):
+                stages_str = ', '.join([str(s) for s in stages if s])
+                sections.append(f"Stages Completed: {stages_str}")
+            else:
+                sections.append(f"Stages Completed: N/A")
     
     # History ID
     if wish_response.get('history_id'):
@@ -1145,32 +1478,10 @@ async def generate_wish_ppt(
     print(f"[DEBUG] 🚀 API CALL: /api/make-wish/generate-ppt")
     print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
     print(f"[DEBUG] Request type: {type(request)}")
-    print(f"[DEBUG] Request keys: {list(request.keys()) if isinstance(request, dict) else 'N/A'}")
+    print(f"[DEBUG] Request data: {request.model_dump(exclude_none=True) if hasattr(request, 'model_dump') else request}")
     print(f"{'='*80}\n")
     
     try:
-        # Validate request is a dict
-        if not isinstance(request, dict):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Request body must be a JSON object. Got: {type(request).__name__}"
-            )
-        
-        # Validate request is not empty
-        if not request:
-            raise HTTPException(
-                status_code=400,
-                detail="Request body cannot be empty. Provide either 'history_id' or wish data fields."
-            )
-        
-        # Check if Gamma API key is configured
-        if not GAMMA_API_KEY:
-            print(f"[DEBUG] ❌ Error: GAMMA_API_KEY not set")
-            raise HTTPException(
-                status_code=500,
-                detail="GAMMA_API_KEY environment variable not set. Please configure it in your .env file."
-            )
-        
         # Extract user_id from JWT token
         user_id_value = current_user.get("user_id") or current_user.get("_id")
         if not user_id_value:
@@ -1181,6 +1492,13 @@ async def generate_wish_ppt(
         
         # Convert Pydantic model to dict for easier handling
         request_dict = request.model_dump(exclude_none=True)
+        
+        # Validate request is not empty
+        if not request_dict:
+            raise HTTPException(
+                status_code=400,
+                detail="Request body cannot be empty. Provide either 'history_id' or wish data fields."
+            )
         
         if request.history_id:
             # Fetch from database
@@ -1195,7 +1513,27 @@ async def generate_wish_ppt(
                 detail=f"Invalid history_id format. Expected MongoDB ObjectId, got: {history_id[:50]}"
             )
             
-            # Fetch from database
+            print(f"[DEBUG] 🔍 Looking for history_id: {history_id}")
+            print(f"[DEBUG] 🔍 Using user_id: {user_id_value}")
+            
+            # First, check if document exists (without user_id filter) for better error messages
+            doc_exists = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+            if not doc_exists:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"History item not found with id: {history_id}"
+                )
+            
+            # Check if user_id matches
+            doc_user_id = doc_exists.get("user_id")
+            if str(doc_user_id) != str(user_id_value):
+                print(f"[DEBUG] ❌ User ID mismatch! Document user_id: {doc_user_id}, Request user_id: {user_id_value}")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"History item belongs to a different user. Document user_id: {doc_user_id}, Your user_id: {user_id_value}"
+                )
+            
+            # Fetch from database with user_id filter
             history_doc = await wish_history_col.find_one({
                 "_id": ObjectId(history_id),
                 "user_id": user_id_value
@@ -1208,27 +1546,84 @@ async def generate_wish_ppt(
                 )
             
             # Extract wish response data from history
-            # Check if it's the new format (formula_data) or old format (formula_result)
+            # Check if it's the new format (formula_data), old format (formula_result), or basic mode (basic_mode_result)
             if "formula_data" in history_doc:
-                # New format (revised make wish)
+                # New format (revised make wish - advanced mode)
+                formula_data = history_doc.get("formula_data") or {}
+                # Ensure formula_data is a dict (handle None case)
+                if not isinstance(formula_data, dict):
+                    formula_data = {}
+                
                 wish_response_data = {
-                    "wish_data": history_doc.get("wish_data", {}),
-                    "ingredient_selection": history_doc.get("formula_data", {}).get("ingredient_selection", {}),
-                    "optimized_formula": history_doc.get("formula_data", {}).get("optimized_formula", {}),
-                    "manufacturing": history_doc.get("formula_data", {}).get("manufacturing", {}),
-                    "cost_analysis": history_doc.get("formula_data", {}).get("cost_analysis", {}),
-                    "compliance": history_doc.get("formula_data", {}).get("compliance", {})
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "ingredient_selection": formula_data.get("ingredient_selection", {}) if isinstance(formula_data, dict) else {},
+                    "optimized_formula": formula_data.get("optimized_formula", {}) if isinstance(formula_data, dict) else {},
+                    "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                    "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                    "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
                 }
+                # Also include parsed_data if available (for new format)
+                if "parsed_data" in history_doc:
+                    wish_response_data["parsed_data"] = history_doc.get("parsed_data")
             elif "formula_result" in history_doc:
-                # Old format (make wish)
+                # Old format (make wish) - formula_result contains the full response
                 wish_response_data = history_doc.get("formula_result", {})
+                # Ensure it has the expected structure
+                if not isinstance(wish_response_data, dict):
+                    wish_response_data = {"wish_data": wish_response_data}
+            elif "basic_mode_result" in history_doc:
+                # Basic mode format - basic_mode_result contains the simplified formula
+                basic_result = history_doc.get("basic_mode_result") or {}
+                # Ensure basic_result is a dict (handle None case)
+                if not isinstance(basic_result, dict):
+                    basic_result = {}
+                
+                wish_response_data = {
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "ingredient_selection": basic_result.get("ingredient_selection", {}) if isinstance(basic_result, dict) else {},
+                    "optimized_formula": basic_result.get("optimized_formula", basic_result) if isinstance(basic_result, dict) else basic_result,
+                    "manufacturing": basic_result.get("manufacturing", {}) if isinstance(basic_result, dict) else {},
+                    "cost_analysis": basic_result.get("cost_analysis", {}) if isinstance(basic_result, dict) else {},
+                    "compliance": basic_result.get("compliance", {}) if isinstance(basic_result, dict) else {}
+                }
+                # Include parsed_data if available
+                if "parsed_data" in history_doc:
+                    wish_response_data["parsed_data"] = history_doc.get("parsed_data")
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="History item does not contain formula data. Please generate a formula first."
-                )
+                # No formula data found - check if we can still create a presentation from parsed_data
+                if "parsed_data" in history_doc or "wish_data" in history_doc:
+                    # Use parsed_data/wish_data to create a basic presentation
+                    wish_response_data = {
+                        "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                        "ingredient_selection": {},
+                        "optimized_formula": {},
+                        "manufacturing": {},
+                        "cost_analysis": {},
+                        "compliance": {}
+                    }
+                    if "parsed_data" in history_doc:
+                        wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+                    print(f"[DEBUG] ⚠️ No formula data found, using parsed_data/wish_data only")
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="History item does not contain formula data or wish data. Please generate a formula first."
+                    )
             
             print(f"[DEBUG] ✅ Fetched wish data from history_id: {history_id}")
+            print(f"[DEBUG] History doc keys: {list(history_doc.keys())}")
+            print(f"[DEBUG] Has formula_data: {'formula_data' in history_doc}")
+            print(f"[DEBUG] Has formula_result: {'formula_result' in history_doc}")
+            print(f"[DEBUG] Has wish_data: {'wish_data' in history_doc}")
+            print(f"[DEBUG] Has parsed_data: {'parsed_data' in history_doc}")
+            if "formula_data" in history_doc:
+                formula_data = history_doc.get("formula_data", {})
+                print(f"[DEBUG] formula_data keys: {list(formula_data.keys()) if isinstance(formula_data, dict) else 'Not a dict'}")
+            print(f"[DEBUG] wish_response_data keys: {list(wish_response_data.keys()) if isinstance(wish_response_data, dict) else 'Not a dict'}")
+            print(f"[DEBUG] Data structure: wish_data={bool(wish_response_data.get('wish_data'))}, "
+                  f"ingredient_selection={bool(wish_response_data.get('ingredient_selection'))}, "
+                  f"optimized_formula={bool(wish_response_data.get('optimized_formula'))}, "
+                  f"parsed_data={bool(wish_response_data.get('parsed_data'))}")
         
         elif request.wish_data or request.ingredient_selection:
             # Use data from request body directly
@@ -1249,208 +1644,119 @@ async def generate_wish_ppt(
             )
         
         # Validate that we have at least some data
-        if not wish_response_data or not wish_response_data.get("wish_data"):
+        # Check if we have any meaningful data (wish_data, ingredient_selection, optimized_formula, etc.)
+        print(f"[DEBUG] 🔍 Validating wish_response_data...")
+        print(f"[DEBUG] wish_response_data type: {type(wish_response_data)}")
+        print(f"[DEBUG] wish_response_data is None: {wish_response_data is None}")
+        
+        if wish_response_data:
+            print(f"[DEBUG] wish_response_data keys: {list(wish_response_data.keys()) if isinstance(wish_response_data, dict) else 'Not a dict'}")
+            if isinstance(wish_response_data, dict):
+                for key, value in wish_response_data.items():
+                    if isinstance(value, dict):
+                        print(f"[DEBUG]   {key}: dict with {len(value)} keys")
+                    elif isinstance(value, list):
+                        print(f"[DEBUG]   {key}: list with {len(value)} items")
+                    else:
+                        print(f"[DEBUG]   {key}: {type(value).__name__} = {str(value)[:100]}")
+        
+        has_wish_data = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("wish_data"))
+        has_ingredient_selection = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("ingredient_selection"))
+        has_optimized_formula = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("optimized_formula"))
+        has_parsed_data = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("parsed_data"))
+        
+        # For old format, formula_result might have data directly (check if it's a non-empty dict)
+        is_non_empty_dict = wish_response_data and isinstance(wish_response_data, dict) and len(wish_response_data) > 0
+        
+        print(f"[DEBUG] Validation checks: has_wish_data={has_wish_data}, has_ingredient_selection={has_ingredient_selection}, "
+              f"has_optimized_formula={has_optimized_formula}, has_parsed_data={has_parsed_data}, is_non_empty_dict={is_non_empty_dict}")
+        
+        # For old format, check if formula_result has nested data
+        has_nested_data = False
+        if wish_response_data and isinstance(wish_response_data, dict):
+            # Check if any value is a non-empty dict or list
+            for key, value in wish_response_data.items():
+                if isinstance(value, dict) and len(value) > 0:
+                    has_nested_data = True
+                    break
+                elif isinstance(value, list) and len(value) > 0:
+                    has_nested_data = True
+                    break
+        
+        has_any_data = (
+            has_wish_data or 
+            has_ingredient_selection or 
+            has_optimized_formula or 
+            has_parsed_data or
+            has_nested_data or
+            is_non_empty_dict
+        )
+        
+        print(f"[DEBUG] Final validation: has_any_data={has_any_data}")
+        
+        if not wish_response_data or not has_any_data:
+            error_detail = "Invalid wish data. Missing required fields. "
+            if wish_response_data and isinstance(wish_response_data, dict):
+                error_detail += f"Found keys: {list(wish_response_data.keys())}. "
+            error_detail += "The history item must contain formula data (ingredient_selection, optimized_formula, wish_data, or parsed_data)."
+            print(f"[DEBUG] ❌ Validation failed: {error_detail}")
             raise HTTPException(
                 status_code=400,
-                detail="Invalid wish data. Missing required fields."
+                detail=error_detail
             )
+        
+        print(f"[DEBUG] ✅ Validation passed!")
+        
+        # ========================================================================
+        # MODULAR FLOW: Make a Wish Data → Claude → Gamma → PPT
+        # ========================================================================
         
         # Step 1: Format wish data as structured text
-        print(f"[DEBUG] 📝 Formatting wish data for Claude analysis...")
-        formatted_wish_data = format_wish_data_for_gamma(wish_response_data)
-        
-        # Step 2: Send to Claude to generate business strategy presentation prompt
-        print(f"[DEBUG] 🤖 Sending wish data to Claude to generate business strategy prompt...")
-        
-        business_strategy_prompt = None
-        if CLAUDE_AVAILABLE and claude_client:
-            try:
-                claude_system_prompt = """You are a business strategy consultant specializing in cosmetic product development and commercialization. 
-Your task is to analyze cosmetic formulation data and create a comprehensive business strategy presentation prompt for Gamma API.
-
-The presentation should be at a BUSINESS STRATEGY LEVEL, focusing on:
-- Market opportunity and positioning
-- Business model and revenue projections
-- Go-to-market strategy
-- Competitive analysis and differentiation
-- Investment requirements and ROI
-- Risk assessment and mitigation
-- Timeline and milestones
-- Success metrics and KPIs
-
-Create a detailed, professional prompt that will guide Gamma API to generate a business strategy presentation suitable for:
-- Investors and stakeholders
-- Business executives
-- Strategic planning sessions
-- Product launch planning
-
-The prompt should be clear, structured, and include all necessary instructions for creating a compelling business strategy presentation."""
-
-                claude_user_prompt = f"""Analyze the following cosmetic formulation data and create a comprehensive business strategy presentation prompt for Gamma API.
-
-FORMULATION DATA:
-{formatted_wish_data}
-
-Your task:
-1. Extract key business insights from the formulation data
-2. Identify market opportunities and positioning
-3. Highlight competitive advantages
-4. Note cost structure and pricing strategy
-5. Identify compliance and regulatory considerations
-6. Create a detailed prompt for Gamma API that will generate a business strategy presentation
-
-The prompt should:
-- Be written in clear, professional language
-- Include specific instructions for slide structure
-- Emphasize business strategy, market positioning, and commercialization
-- Include data visualization requirements
-- Specify the target audience (investors, executives, stakeholders)
-- Request executive summary, market analysis, financial projections, go-to-market strategy, and risk assessment
-
-Return ONLY the prompt text that should be sent to Gamma API's additionalInstructions field. Do not include any explanations or meta-commentary."""
-
-                claude_response = claude_client.messages.create(
-                    model=claude_model,
-                    max_tokens=4096,
-                    temperature=0.3,
-                    system=claude_system_prompt,
-                    messages=[
-                        {"role": "user", "content": claude_user_prompt}
-                    ]
-                )
-                
-                if claude_response.content and len(claude_response.content) > 0:
-                    business_strategy_prompt = claude_response.content[0].text.strip()
-                    print(f"[DEBUG] ✅ Claude generated business strategy prompt ({len(business_strategy_prompt)} characters)")
+        print(f"[DEBUG] 📝 Step 1: Formatting wish data for analysis...")
+        print(f"[DEBUG] 📋 wish_response_data structure:")
+        print(f"[DEBUG]   Keys: {list(wish_response_data.keys()) if isinstance(wish_response_data, dict) else 'Not a dict'}")
+        if isinstance(wish_response_data, dict):
+            for key in ["wish_data", "parsed_data", "ingredient_selection", "optimized_formula"]:
+                value = wish_response_data.get(key)
+                if value:
+                    print(f"[DEBUG]   {key}: {type(value).__name__} with {len(str(value))} chars")
                 else:
-                    print(f"[DEBUG] ⚠️ Claude returned empty response, using default prompt")
-                    business_strategy_prompt = None
-                    
-            except Exception as claude_error:
-                print(f"[DEBUG] ⚠️ Claude prompt generation failed: {claude_error}")
-                import traceback
-                traceback.print_exc()
-                business_strategy_prompt = None
-        else:
-            print(f"[DEBUG] ⚠️ Claude client not available, using default prompt")
+                    print(f"[DEBUG]   {key}: None or empty")
         
-        # Step 3: Prepare Gamma API request with Claude-generated prompt or default
-        if business_strategy_prompt:
-            additional_instructions = business_strategy_prompt
-            print(f"[DEBUG] 📊 Using Claude-generated business strategy prompt")
-        else:
-            # Fallback to default business strategy prompt
-            additional_instructions = (
-                "Create a comprehensive BUSINESS STRATEGY presentation for a cosmetic product launch. "
-                "Focus on business strategy, market positioning, and commercialization rather than technical formulation details. "
-                "\n\nPRESENTATION STRUCTURE:\n"
-                "1. Executive Summary - Product vision, market opportunity, key value propositions\n"
-                "2. Market Analysis - Target market, size, growth trends, customer segments\n"
-                "3. Competitive Positioning - Competitive landscape, differentiation strategy, unique selling points\n"
-                "4. Business Model - Revenue streams, pricing strategy, distribution channels\n"
-                "5. Financial Projections - Cost structure, pricing analysis, revenue forecasts, ROI projections\n"
-                "6. Go-to-Market Strategy - Launch plan, marketing strategy, sales channels, partnerships\n"
-                "7. Risk Assessment - Market risks, regulatory risks, mitigation strategies\n"
-                "8. Timeline & Milestones - Product development timeline, launch schedule, key milestones\n"
-                "9. Success Metrics - KPIs, success criteria, measurement framework\n"
-                "10. Investment Requirements - Funding needs, resource requirements, budget allocation\n\n"
-                "TONE: Professional, strategic, investor-ready\n"
-                "AUDIENCE: Business executives, investors, stakeholders, strategic planners\n"
-                "STYLE: Use data visualizations, charts, tables, and compelling visuals\n"
-                "FOCUS: Business strategy, market opportunity, commercialization, ROI, competitive advantage"
-            )
-            print(f"[DEBUG] 📊 Using default business strategy prompt")
+        formatted_wish_data = format_wish_data_for_gamma(wish_response_data)
+        print(f"[DEBUG] ✅ Formatted data length: {len(formatted_wish_data)} characters")
+        print(f"[DEBUG] 📋 First 1000 chars of formatted data:")
+        print(f"{formatted_wish_data[:1000]}...")
+        print(f"[DEBUG] 📋 Last 1000 chars of formatted data:")
+        print(f"...{formatted_wish_data[-1000:]}")
         
-        gamma_request_payload = {
-            "inputText": formatted_wish_data,
-            "format": "presentation",
-            "exportAs": "pptx",
-            "textMode": "generate",
-            "tone": "professional, strategic, business-focused, investor-ready",
-            "audience": "business executives, investors, stakeholders, strategic planners, C-level executives",
-            "amount": "comprehensive",
-            "language": "en",
-            "numCards": 25,  # More slides for comprehensive business strategy
-            "additionalInstructions": additional_instructions
-        }
+        # Step 2: Send to Claude to generate business strategy prompt
+        print(f"[DEBUG] 🤖 Step 2: Sending to Claude to generate business strategy prompt...")
+        business_strategy_prompt = await generate_business_strategy_prompt(
+            data_text=formatted_wish_data,
+            data_type="cosmetic_formulation",
+            custom_instructions=None
+        )
+        print(f"[DEBUG] ✅ Claude prompt generated ({len(business_strategy_prompt)} characters)")
+        print(f"[DEBUG] 📋 Full Claude-generated prompt (will be sent to Gamma):")
+        print(f"{'='*80}")
+        print(f"{business_strategy_prompt}")
+        print(f"{'='*80}")
         
-        print(f"[DEBUG] 🚀 Calling Gamma API...")
-        print(f"[DEBUG] Formatted text length: {len(formatted_text)} characters")
+        # Step 3: Generate PPT using Gamma API with Claude's prompt
+        print(f"[DEBUG] 🚀 Step 3: Generating PPT with Gamma API...")
+        result = await generate_ppt_from_data(
+            data_text=formatted_wish_data,
+            prompt=business_strategy_prompt,
+            tone="professional, strategic, business-focused, investor-ready",
+            audience="business executives, investors, stakeholders, strategic planners, C-level executives",
+            num_slides=15,  # Fixed to 15 slides for Make a Wish presentations
+            export_format="pptx",
+            language="en"
+        )
         
-        # Call Gamma API
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            try:
-                response = await client.post(
-                    GAMMA_GENERATE_ENDPOINT,
-                    headers={
-                        "X-API-KEY": GAMMA_API_KEY,
-                        "Content-Type": "application/json"
-                    },
-                    json=gamma_request_payload
-                )
-                
-                print(f"[DEBUG] Gamma API Response Status: {response.status_code}")
-                
-                if response.status_code not in [200, 201]:
-                    error_text = response.text
-                    try:
-                        error_json = response.json()
-                        error_text = str(error_json)
-                    except:
-                        pass
-                    
-                    print(f"[DEBUG] ❌ Gamma API Error: {error_text}")
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail=f"Gamma API error: {error_text}"
-                    )
-                
-                # Parse response
-                try:
-                    gamma_response = response.json()
-                except Exception as e:
-                    print(f"[DEBUG] ❌ Failed to parse Gamma API response: {e}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Gamma API returned invalid JSON: {response.text[:200]}"
-                    )
-                
-                print(f"[DEBUG] ✅ Gamma API Response: {gamma_response}")
-                
-                # Extract presentation details
-                # Note: Gamma API response structure may vary - adjust based on actual API response
-                presentation_id = gamma_response.get("presentation_id") or gamma_response.get("id")
-                download_url = gamma_response.get("download_url") or gamma_response.get("url") or gamma_response.get("file_path")
-                edit_url = gamma_response.get("edit_url") or gamma_response.get("edit_path")
-                
-                if not presentation_id:
-                    # If no presentation_id, try to extract from other fields
-                    presentation_id = gamma_response.get("generation_id") or "unknown"
-                
-                if not download_url:
-                    print(f"[DEBUG] ⚠️ Warning: No download_url in Gamma response. Full response: {gamma_response}")
-                    # Some APIs return the file directly or use a different structure
-                    download_url = gamma_response.get("file") or gamma_response.get("presentation_url")
-                
-                return {
-                    "success": True,
-                    "presentation_id": presentation_id,
-                    "download_url": download_url,
-                    "edit_url": edit_url,
-                    "message": "Presentation generated successfully",
-                    "gamma_response": gamma_response  # Include full response for debugging
-                }
-                
-            except httpx.TimeoutException:
-                raise HTTPException(
-                    status_code=504,
-                    detail="Gamma API request timed out. Please try again."
-                )
-            except httpx.RequestError as e:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error connecting to Gamma API: {str(e)}"
-                )
+        print(f"[DEBUG] ✅ PPT Generation complete!")
+        return result
     
     except HTTPException:
         raise

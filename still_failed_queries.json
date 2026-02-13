@@ -1,0 +1,1086 @@
+{
+  "timestamp": "2026-02-13T13:36:32.833092",
+  "total_failed": 180,
+  "failed_queries": [
+    {
+      "query_text": "Glutathione skin face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:33:55.829990"
+    },
+    {
+      "query_text": "Mulethi extract skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:34:39.155197"
+    },
+    {
+      "query_text": "Licorice Extract toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:35:16.524419"
+    },
+    {
+      "query_text": "Mulethi extract skin toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:35:53.285564"
+    },
+    {
+      "query_text": "Licorice Extract face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:36:30.926096"
+    },
+    {
+      "query_text": "Retinal face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:37:10.273077"
+    },
+    {
+      "query_text": "Copper Peptides eye cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:37:48.624334"
+    },
+    {
+      "query_text": "Bakuchi moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:38:51.666456"
+    },
+    {
+      "query_text": "Marine Collagen moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:39:49.550895"
+    },
+    {
+      "query_text": "CoQ10 serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:40:24.492929"
+    },
+    {
+      "query_text": "CoQ10 cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:41:01.198388"
+    },
+    {
+      "query_text": "Coenzyme Q10 skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:41:36.729742"
+    },
+    {
+      "query_text": "CoQ10 moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:42:13.369317"
+    },
+    {
+      "query_text": "Coenzyme Q10 skin moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:42:48.689593"
+    },
+    {
+      "query_text": "Edelweiss skincare serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:43:23.485471"
+    },
+    {
+      "query_text": "Edelweiss skincare cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:44:07.467393"
+    },
+    {
+      "query_text": "HA serum toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:44:47.501843"
+    },
+    {
+      "query_text": "Panthenol face gel",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:45:26.277240"
+    },
+    {
+      "query_text": "BP for acne face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:46:28.059894"
+    },
+    {
+      "query_text": "Zinc PCA toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:47:41.081390"
+    },
+    {
+      "query_text": "Zinc PCA face gel",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:48:16.380733"
+    },
+    {
+      "query_text": "Zinc for acne face gel",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:48:54.899438"
+    },
+    {
+      "query_text": "Sulfur acne face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:49:30.816809"
+    },
+    {
+      "query_text": "Sulfur acne face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:50:05.762377"
+    },
+    {
+      "query_text": "Sulfur mask face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:50:44.169584"
+    },
+    {
+      "query_text": "Lactic Acid peel toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:51:26.377022"
+    },
+    {
+      "query_text": "Lactic Acid peel cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:52:02.187992"
+    },
+    {
+      "query_text": "Mandelic Acid serum toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:52:40.392929"
+    },
+    {
+      "query_text": "Polyhydroxy Acid cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:53:47.047403"
+    },
+    {
+      "query_text": "Allantoin skincare cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:54:26.271076"
+    },
+    {
+      "query_text": "Allantoin skincare face gel",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:55:20.317001"
+    },
+    {
+      "query_text": "Allantoin skincare moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:55:59.964154"
+    },
+    {
+      "query_text": "Oat skincare cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:56:40.411078"
+    },
+    {
+      "query_text": "Oat skincare moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:57:17.034247"
+    },
+    {
+      "query_text": "Oat skincare face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:57:52.707278"
+    },
+    {
+      "query_text": "Colloidal Oatmeal face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:58:28.244285"
+    },
+    {
+      "query_text": "Manjistha for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T11:59:26.300406"
+    },
+    {
+      "query_text": "Manjistha serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:00:00.764403"
+    },
+    {
+      "query_text": "Manjistha for skin face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:01:18.733986"
+    },
+    {
+      "query_text": "Chironji for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:01:54.733505"
+    },
+    {
+      "query_text": "Chironji for skin face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:02:31.950743"
+    },
+    {
+      "query_text": "Charoli face pack face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:03:11.066184"
+    },
+    {
+      "query_text": "Chironji for skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:03:47.625885"
+    },
+    {
+      "query_text": "Charoli face pack face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:04:23.161714"
+    },
+    {
+      "query_text": "Chironji for skin face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:04:57.438789"
+    },
+    {
+      "query_text": "Charoli face pack face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:05:31.865700"
+    },
+    {
+      "query_text": "Mulethi for skin face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:06:07.341807"
+    },
+    {
+      "query_text": "Ubtan face pack body wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:06:42.460348"
+    },
+    {
+      "query_text": "नालपामरादि तैलम for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:07:18.053958"
+    },
+    {
+      "query_text": "Gulab Jal face mist",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:07:53.176466"
+    },
+    {
+      "query_text": "Vetiver toner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:08:28.676807"
+    },
+    {
+      "query_text": "Vetiver face mist",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:09:17.410563"
+    },
+    {
+      "query_text": "Khus face mist",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:09:50.841427"
+    },
+    {
+      "query_text": "Vetiver cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:10:29.792180"
+    },
+    {
+      "query_text": "Khus cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:11:03.951394"
+    },
+    {
+      "query_text": "Khus face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:12:06.212685"
+    },
+    {
+      "query_text": "Camphor for skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:12:46.833455"
+    },
+    {
+      "query_text": "कर्पूर for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:13:20.554432"
+    },
+    {
+      "query_text": "Tulsi for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:13:55.366077"
+    },
+    {
+      "query_text": "Tulsi for skin face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:14:47.303982"
+    },
+    {
+      "query_text": "Lodhra cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:15:21.283194"
+    },
+    {
+      "query_text": "Lodhra face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:15:55.788589"
+    },
+    {
+      "query_text": "Lodhra face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:16:34.088848"
+    },
+    {
+      "query_text": "Lodhra for skin face wash",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:17:08.153648"
+    },
+    {
+      "query_text": "Lodhra for skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:17:47.269891"
+    },
+    {
+      "query_text": "Jaiphal for skin face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:18:21.712184"
+    },
+    {
+      "query_text": "Jaiphal for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:18:55.418343"
+    },
+    {
+      "query_text": "Nutmeg face pack cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:19:30.977280"
+    },
+    {
+      "query_text": "Jaiphal for skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:20:04.960992"
+    },
+    {
+      "query_text": "Nutmeg face pack face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:20:45.178872"
+    },
+    {
+      "query_text": "Jaiphal for skin face powder",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:21:22.138411"
+    },
+    {
+      "query_text": "Ashwagandha skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:21:56.388507"
+    },
+    {
+      "query_text": "Ashwagandha skin face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:22:30.133582"
+    },
+    {
+      "query_text": "Ashwagandha cream face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:23:11.432438"
+    },
+    {
+      "query_text": "Ashwagandha skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:23:45.701132"
+    },
+    {
+      "query_text": "Ashwagandha cream face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:24:20.419032"
+    },
+    {
+      "query_text": "Babchi serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:25:00.538616"
+    },
+    {
+      "query_text": "Babchi cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:25:35.068082"
+    },
+    {
+      "query_text": "Gotu Kola skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:26:27.497295"
+    },
+    {
+      "query_text": "Gotu Kola skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:27:14.263496"
+    },
+    {
+      "query_text": "Gotu Kola face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:27:52.083063"
+    },
+    {
+      "query_text": "Moringa oil skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:28:25.583687"
+    },
+    {
+      "query_text": "Amla face pack serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:30:06.409954"
+    },
+    {
+      "query_text": "Amla face pack face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:31:26.505250"
+    },
+    {
+      "query_text": "Amla face pack face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:32:14.118027"
+    },
+    {
+      "query_text": "Kokum Butter for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:33:30.785888"
+    },
+    {
+      "query_text": "Kokum Butter for skin lip balm",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:34:07.474522"
+    },
+    {
+      "query_text": "Kokum Butter for skin moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:34:47.977394"
+    },
+    {
+      "query_text": "कोकम for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:35:21.200536"
+    },
+    {
+      "query_text": "Sesame oil for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:35:56.679386"
+    },
+    {
+      "query_text": "Til oil for face face massage oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:36:32.576748"
+    },
+    {
+      "query_text": "तिल का तेल for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:37:08.828190"
+    },
+    {
+      "query_text": "Hemp seed oil face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:37:43.421578"
+    },
+    {
+      "query_text": "Hemp oil for skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:38:19.071821"
+    },
+    {
+      "query_text": "Hemp oil for skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:38:54.298690"
+    },
+    {
+      "query_text": "Hemp seed oil moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:39:55.387016"
+    },
+    {
+      "query_text": "Hemp oil for skin moisturizer",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:40:29.528112"
+    },
+    {
+      "query_text": "Tamanu oil for skin face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:41:03.896522"
+    },
+    {
+      "query_text": "Tamanu oil serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:41:39.061605"
+    },
+    {
+      "query_text": "Tamanu oil for skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:42:18.248218"
+    },
+    {
+      "query_text": "Tamanu oil cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:42:55.140464"
+    },
+    {
+      "query_text": "Tamanu oil for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:43:35.940540"
+    },
+    {
+      "query_text": "Marula oil for skin serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:44:13.478846"
+    },
+    {
+      "query_text": "Marula oil for skin cream",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:44:48.065841"
+    },
+    {
+      "query_text": "Kumkumadi oil original face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:45:41.031762"
+    },
+    {
+      "query_text": "Kumkumadi oil original serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:46:17.179255"
+    },
+    {
+      "query_text": "कुमकुमादी तैलम for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:46:55.018088"
+    },
+    {
+      "query_text": "इलादि तैलम for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:47:32.559228"
+    },
+    {
+      "query_text": "Dasapushpam face oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:48:10.468143"
+    },
+    {
+      "query_text": "Ubtan recipe face mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:49:01.796561"
+    },
+    {
+      "query_text": "Ubtan recipe face powder",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:49:38.495282"
+    },
+    {
+      "query_text": "Traditional Ubtan face scrub",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:50:21.814118"
+    },
+    {
+      "query_text": "Ubtan recipe face scrub",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:50:58.890002"
+    },
+    {
+      "query_text": "उबटन for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:51:33.186744"
+    },
+    {
+      "query_text": "हल्दी उबटन for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:52:08.616366"
+    },
+    {
+      "query_text": "ZPT shampoo shampoo",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:52:44.232400"
+    },
+    {
+      "query_text": "Scalp exfoliating shampoo scalp serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:53:21.114652"
+    },
+    {
+      "query_text": "शिकाकाई for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:53:59.514409"
+    },
+    {
+      "query_text": "रीठा for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:54:36.992521"
+    },
+    {
+      "query_text": "Gudhal for hair hair oil",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:55:13.660705"
+    },
+    {
+      "query_text": "Gudhal for hair shampoo",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:55:48.156838"
+    },
+    {
+      "query_text": "Gudhal for hair conditioner",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:56:25.780353"
+    },
+    {
+      "query_text": "Gudhal for hair hair mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:57:08.439737"
+    },
+    {
+      "query_text": "Brahmi for hair shampoo",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:57:42.644969"
+    },
+    {
+      "query_text": "Brahmi for hair hair mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:58:17.993629"
+    },
+    {
+      "query_text": "Brahmi hair oil scalp serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T12:58:58.317088"
+    },
+    {
+      "query_text": "Kadi Patta hair oil hair mask",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:00:15.803547"
+    },
+    {
+      "query_text": "कढ़ी पत्ता for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:00:51.644772"
+    },
+    {
+      "query_text": "करी पत्ता for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:01:28.947099"
+    },
+    {
+      "query_text": "अरंडी का तेल for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:02:03.492452"
+    },
+    {
+      "query_text": "मेहंदी for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:02:55.738403"
+    },
+    {
+      "query_text": "भृंगादि तैलम for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:03:32.441436"
+    },
+    {
+      "query_text": "नीलीभृंगादि for face",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:04:07.873087"
+    },
+    {
+      "query_text": "Jatamansi hair oil scalp serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:04:43.406636"
+    },
+    {
+      "query_text": "Jatamansi for hair scalp serum",
+      "query_level": "ingredient",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:05:18.325726"
+    },
+    {
+      "query_text": "dead skin removal serum",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:05:53.873444"
+    },
+    {
+      "query_text": "dead skin removal moisturizer",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:06:29.800036"
+    },
+    {
+      "query_text": "ayurvedic skincare serum",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:07:16.467120"
+    },
+    {
+      "query_text": "ayurvedic skincare moisturizer",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:08:25.563099"
+    },
+    {
+      "query_text": "chemical free skincare serum",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:09:01.659090"
+    },
+    {
+      "query_text": "chemical free skincare cream",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:09:35.963816"
+    },
+    {
+      "query_text": "natural skincare moisturizer",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:10:16.513418"
+    },
+    {
+      "query_text": "chemical free skincare moisturizer",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:10:53.719470"
+    },
+    {
+      "query_text": "bridal skincare serum",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:11:39.048035"
+    },
+    {
+      "query_text": "wedding glow serum",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:12:13.964816"
+    },
+    {
+      "query_text": "bridal skincare cream",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:12:47.727967"
+    },
+    {
+      "query_text": "wedding glow moisturizer",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:13:22.530647"
+    },
+    {
+      "query_text": "color protect shampoo hair oil",
+      "query_level": "benefit",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:13:56.321798"
+    },
+    {
+      "query_text": "Deconstruct Peptides",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:14:51.465875"
+    },
+    {
+      "query_text": "Fixderma Reticuram",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:15:30.847231"
+    },
+    {
+      "query_text": "Simple skincare Micellar Water",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:16:39.637791"
+    },
+    {
+      "query_text": "SkinCeuticals HA Intensifier",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:17:15.844811"
+    },
+    {
+      "query_text": "Biotique Bio Sandalwood",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:17:55.229052"
+    },
+    {
+      "query_text": "Himalaya Purifying Mud Pack",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:18:29.881218"
+    },
+    {
+      "query_text": "Himalaya Gentle Exfoliating Walnut Scrub",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:19:04.079427"
+    },
+    {
+      "query_text": "Juicy Chemistry Face Mask",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:19:39.309576"
+    },
+    {
+      "query_text": "Earth Rhythm Lip Butter",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:20:27.531920"
+    },
+    {
+      "query_text": "Forest Essentials Soundarya Serum",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:21:29.076725"
+    },
+    {
+      "query_text": "Forest Essentials Nalpamaradi",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:22:04.711133"
+    },
+    {
+      "query_text": "Just Herbs Kumkumadi",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:22:39.902623"
+    },
+    {
+      "query_text": "Just Herbs Rejuvenating Beauty Elixir",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:23:25.414572"
+    },
+    {
+      "query_text": "Vilvah Goatmilk Shampoo",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:24:02.372297"
+    },
+    {
+      "query_text": "Shesha Naturals Face Oil",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:24:45.624152"
+    },
+    {
+      "query_text": "Shesha Naturals Hair Oil",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:25:24.798232"
+    },
+    {
+      "query_text": "Aavrani Glow Activating Exfoliator",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:26:03.407701"
+    },
+    {
+      "query_text": "Aavrani Turmeric Mask",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:26:39.321015"
+    },
+    {
+      "query_text": "RAS Luxury Oils Face Elixir",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:27:15.194757"
+    },
+    {
+      "query_text": "RAS Luxury Oils Kumkumadi",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:27:50.938163"
+    },
+    {
+      "query_text": "Khadi Natural Amla Reetha Shikakai Shampoo",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:28:35.418886"
+    },
+    {
+      "query_text": "Tvakh Brightening Peel",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:29:44.589981"
+    },
+    {
+      "query_text": "Tvakh Sunscreen",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:30:29.715988"
+    },
+    {
+      "query_text": "Tvakh Vitamin C",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:31:07.940096"
+    },
+    {
+      "query_text": "Tribe Concepts Rose Glow Mask",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:32:16.959556"
+    },
+    {
+      "query_text": "Tribe Concepts Face Serum",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:32:55.621108"
+    },
+    {
+      "query_text": "Ohria Ayurveda Night Serum",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:33:30.061280"
+    },
+    {
+      "query_text": "Ohria Ayurveda Face Wash",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:34:05.986925"
+    },
+    {
+      "query_text": "Ohria Ayurveda Hair Oil",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:34:42.265366"
+    },
+    {
+      "query_text": "WOW Red Onion Oil",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:35:17.594235"
+    },
+    {
+      "query_text": "Matrix Oil Wonders",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:35:54.765059"
+    },
+    {
+      "query_text": "Bare Anatomy Custom Shampoo",
+      "query_level": "brand",
+      "error": "Google Trends hasn't returned any results for this query.",
+      "attempted_at": "2026-02-13T13:36:32.550980"
+    }
+  ]
+}

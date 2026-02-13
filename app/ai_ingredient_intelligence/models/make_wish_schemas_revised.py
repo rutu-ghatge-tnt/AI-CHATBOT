@@ -409,6 +409,8 @@ class GetThisMadeRequest(BaseModel):
     name: str = Field(..., description="User name")
     phone: str = Field(..., description="WhatsApp phone number")
     city: str = Field(..., description="City")
+    email: Optional[str] = Field(None, description="User email (optional)")
+    pincode: Optional[str] = Field(None, description="User pincode (optional)")
     experience_level: str = Field(..., description="Experience level")
     timeline: str = Field(..., description="Timeline")
     quantity_interest: Optional[str] = Field(None, description="Quantity interest")
@@ -439,7 +441,6 @@ class GetThisMadeResponse(BaseModel):
     """Response schema for commercialization request"""
     success: bool = Field(..., description="Whether request was submitted")
     queue_number: str = Field(..., description="Queue number assigned")
-    queue_position: Optional[int] = Field(None, description="Position in queue")
     request_id: str = Field(..., description="Request tracking ID")
     created_at: datetime = Field(..., description="Creation timestamp")
     next_steps: List[NextStep] = Field(..., description="Next steps")

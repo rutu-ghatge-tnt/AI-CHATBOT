@@ -31,7 +31,12 @@ async def create_query_from_commercialization(
     quantity_interest: Optional[str] = None,
     additional_notes: Optional[str] = None,
     payment_id: Optional[str] = None,
-    queue_number: Optional[str] = None
+    queue_number: Optional[str] = None,
+    user_name: Optional[str] = None,  # Store user name from form as fallback
+    user_phone: Optional[str] = None,  # Store user phone from form
+    user_city: Optional[str] = None,  # Store user city from form
+    user_email: Optional[str] = None,  # Store user email from form
+    user_pincode: Optional[str] = None  # Store user pincode from form
 ) -> str:
     """
     Create a QMS query from a commercialization request (payment optional).
@@ -84,6 +89,12 @@ async def create_query_from_commercialization(
             "status": QueryStatus.NEW.value,
             "queue_number": int(queue_number) if queue_number else None,  # Store as integer for easy sorting
             "payment_id": payment_id,  # Store payment_id if provided
+            # Store user info from form as fallback (in case users collection doesn't have it)
+            "user_name": user_name,  # From get-this-made form
+            "user_phone": user_phone,  # From get-this-made form
+            "user_city": user_city,  # From get-this-made form
+            "user_email": user_email,  # From get-this-made form
+            "user_pincode": user_pincode,  # From get-this-made form
             "created_at": now,
             "updated_at": now
         }

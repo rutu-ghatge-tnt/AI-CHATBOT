@@ -67,13 +67,21 @@ except ImportError as e:
     print("   Formula Generation API will not be available. This is not critical.")
     formula_generation_router = None
 
-# Import Make a Wish router (with error handling for missing dependencies)
+# Import Make a Wish routers (with error handling for missing dependencies)
 try:
     from app.ai_ingredient_intelligence.api.make_wish_api_revised import router as make_wish_router
 except ImportError as e:
-    print(f"Warning: Could not import make_wish router: {e}")
-    print("   Make a Wish API will not be available. This is not critical.")
+    print(f"Warning: Could not import make_wish_revised router: {e}")
+    print("   Make a Wish Revised API will not be available. This is not critical.")
     make_wish_router = None
+
+# Import Make a Wish API (original with PPT generation)
+try:
+    from app.ai_ingredient_intelligence.api.make_wish_api import router as make_wish_api_router
+except ImportError as e:
+    print(f"Warning: Could not import make_wish_api router: {e}")
+    print("   Make a Wish API (with PPT) will not be available. This is not critical.")
+    make_wish_api_router = None
 # from app.product_listing_image_extraction.route import router as image_extractor_router  # Commented out - module doesn't exist
 from pathlib import Path
 
@@ -314,11 +322,22 @@ if formula_generation_router is not None:
 else:
     print("Warning: Formula Generation router not available, skipping registration")
 
-# ✅ Add Make a Wish API
+# ✅ Add Make a Wish API (Revised)
 if make_wish_router is not None:
     app.include_router(make_wish_router, prefix="/api")
 else:
-    print("Warning: Make a Wish router not available, skipping registration")
+    print("Warning: Make a Wish Revised router not available, skipping registration")
+
+# ✅ Add Make a Wish API (Original with PPT generation)
+if make_wish_api_router is not None:
+    app.include_router(make_wish_api_router, prefix="/api")
+    print("✅ Make a Wish API router (with PPT) registered successfully")
+    # Debug: Print all routes from this router
+    for route in make_wish_api_router.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            print(f"   Route: {list(route.methods)} {route.path}")
+else:
+    print("Warning: Make a Wish API router not available, skipping registration")
 
 # ✅ Add Inspiration Boards API
 try:
@@ -343,6 +362,15 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import auth router: {e}")
     print("   Authentication API will not be available.")
+
+# ✅ Add QMS (Query Management System) API
+try:
+    from app.ai_ingredient_intelligence.api.qms_routes import router as qms_router
+    app.include_router(qms_router, prefix="/api")
+    print("✅ QMS router registered successfully")
+except ImportError as e:
+    print(f"Warning: Could not import QMS router: {e}")
+    print("   QMS API will not be available.")
 
 # ✅ Add Timing Statistics API
 try:

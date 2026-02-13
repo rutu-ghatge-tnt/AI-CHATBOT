@@ -1391,10 +1391,10 @@ async def submit_commercialization_request(
         
         # Validate formula exists
         user_id = current_user.get("user_id") or current_user.get("_id")
+        # First, find the history item by _id and user_id
         history_item = await wish_history_col.find_one({
             "_id": ObjectId(request.history_id),
-            "user_id": user_id,
-            "formula_id": request.formula_id
+            "user_id": user_id
         })
         
         if not history_item:
@@ -1403,10 +1403,31 @@ async def submit_commercialization_request(
                 detail="Formula not found or access denied"
             )
         
+        # Extract formula_id from document (check both root level and parsed_data)
+        formula_id_from_doc = (
+            history_item.get("formula_id") 
+            or history_item.get("parsed_data", {}).get("formula_id")
+        )
+        
+        # Use formula_id from document if available, otherwise use the one from request
+        # This handles cases where formula_id is stored in parsed_data instead of root
+        formula_id_to_use = formula_id_from_doc or request.formula_id
+        
+        if not formula_id_to_use:
+            raise HTTPException(
+                status_code=400,
+                detail="Formula ID not found in document and not provided in request"
+            )
+        
+        # If document has formula_id and it differs from request, use the document's one
+        if formula_id_from_doc and formula_id_from_doc != request.formula_id:
+            print(f"⚠️ Formula ID mismatch: Document has '{formula_id_from_doc}', Request has '{request.formula_id}'. Using document's formula_id.")
+            formula_id_to_use = formula_id_from_doc
+        
         # Check if QMS query already exists for this formula
         existing_query = await qms_queries_col.find_one({
             "user_id": user_id,
-            "formula_id": request.formula_id,
+            "formula_id": formula_id_to_use,
             "history_id": request.history_id,
             "status": {"$nin": ["completed", "cancelled"]}  # Active queries only
         })
@@ -1421,9 +1442,6 @@ async def submit_commercialization_request(
         # Generate queue number (for display purposes) - simple sequential starting from 221
         queue_number = await generate_queue_number()
         created_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
-        
-        # Determine queue position (simplified)
-        queue_position = None  # Would be calculated from database
         
         # Define next steps based on experience level
         next_steps = []
@@ -1525,14 +1543,19 @@ async def submit_commercialization_request(
             query_id = await create_query_from_commercialization(
                 user_id=user_id,
                 wish_history_id=request.history_id,
-                formula_id=request.formula_id,
+                formula_id=formula_id_to_use,  # Use the formula_id from document or request
                 formula_name=formula_name,
                 experience_level=request.experience_level,
                 timeline=request.timeline,
                 quantity_interest=request.quantity_interest,
-                notes=request.additional_notes,
+                additional_notes=request.additional_notes,  # Fixed: was notes=, should be additional_notes=
                 payment_id=request.payment_id,  # Optional - None if not provided
-                queue_number=queue_number  # Pass queue number to store in query
+                queue_number=queue_number,  # Pass queue number to store in query
+                user_name=request.name,  # Store user name from form
+                user_phone=request.phone,  # Store user phone from form
+                user_city=request.city,  # Store user city from form
+                user_email=request.email,  # Store user email from form
+                user_pincode=request.pincode  # Store user pincode from form
             )
             
             # Get query display_id for logging and response
@@ -1560,7 +1583,6 @@ async def submit_commercialization_request(
         return GetThisMadeResponse(
             success=True,
             queue_number=queue_number,
-            queue_position=queue_position,
             request_id=query_display_id,  # Use display_id as request_id
             created_at=created_at,
             next_steps=next_steps,
