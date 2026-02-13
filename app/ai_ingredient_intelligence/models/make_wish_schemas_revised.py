@@ -93,7 +93,7 @@ class MakeWishRequestRevised(BaseModel):
     # Core inputs
     wish_text: str = Field(..., description="Original natural language wish")
     parsed_data: ParsedWishData = Field(..., description="Parsed wish data from /parse-wish endpoint")
-    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Output mode: 'basic' (layman) or 'advanced' (formulator)")
+    # Mode is always "basic" - advanced mode removed
     
     # Complexity selection
     complexity: str = Field(..., description="Formula complexity: 'minimalist', 'classic', or 'luxe'")
@@ -104,10 +104,9 @@ class MakeWishRequestRevised(BaseModel):
     
     # Existing fields (kept)
     claims: Optional[List[str]] = Field(default_factory=list, description="Product claims to support")
-    additional_notes: Optional[str] = Field(None, description="Additional notes or requirements")
+    additional_notes: Optional[str] = Field(None, description="Additional notes, requirements, or user notes")
     name: str = Field(..., description="Required name for auto-save")
     tag: Optional[str] = Field(None, description="Optional tag for categorization")
-    notes: Optional[str] = Field(None, description="Optional user notes")
     history_id: Optional[str] = Field(None, description="Existing history ID to update")
 
 

@@ -10,112 +10,113 @@ All costs are in Indian Rupees (₹).
 
 from typing import Dict, List, Optional
 
-# Packaging type definitions
+# Packaging type definitions - ALL IN GRAMS (g) ONLY
+# Note: For liquid products, 1ml ≈ 1g (standard approximation for cosmetics)
 PACKAGING_TYPES = {
-    # Liquid products (ml)
-    "dropper_bottle_30ml": {
-        "type": "Dropper bottle 30ml",
+    # Liquid products (converted to grams - 1ml = 1g)
+    "dropper_bottle_30g": {
+        "type": "Dropper bottle 30g",
         "category": "liquid",
-        "size": "30ml",
+        "size": "30g",
         "bottle_cost": 15.0,
         "carton_box_cost": 7.0,
         "labeling_cost": 4.0,
         "total": 26.0
     },
-    "dropper_bottle_50ml": {
-        "type": "Dropper bottle 50ml",
+    "dropper_bottle_50g": {
+        "type": "Dropper bottle 50g",
         "category": "liquid",
-        "size": "50ml",
+        "size": "50g",
         "bottle_cost": 18.0,
         "carton_box_cost": 8.0,
         "labeling_cost": 5.0,
         "total": 31.0
     },
-    "dropper_bottle_100ml": {
-        "type": "Dropper bottle 100ml",
+    "dropper_bottle_100g": {
+        "type": "Dropper bottle 100g",
         "category": "liquid",
-        "size": "100ml",
+        "size": "100g",
         "bottle_cost": 22.0,
         "carton_box_cost": 9.0,
         "labeling_cost": 6.0,
         "total": 37.0
     },
-    "pump_bottle_30ml": {
-        "type": "Pump bottle 30ml",
+    "pump_bottle_30g": {
+        "type": "Pump bottle 30g",
         "category": "liquid",
-        "size": "30ml",
+        "size": "30g",
         "bottle_cost": 20.0,
         "carton_box_cost": 7.0,
         "labeling_cost": 4.0,
         "total": 31.0
     },
-    "pump_bottle_50ml": {
-        "type": "Pump bottle 50ml",
+    "pump_bottle_50g": {
+        "type": "Pump bottle 50g",
         "category": "liquid",
-        "size": "50ml",
+        "size": "50g",
         "bottle_cost": 25.0,
         "carton_box_cost": 8.0,
         "labeling_cost": 5.0,
         "total": 38.0
     },
-    "pump_bottle_100ml": {
-        "type": "Pump bottle 100ml",
+    "pump_bottle_100g": {
+        "type": "Pump bottle 100g",
         "category": "liquid",
-        "size": "100ml",
+        "size": "100g",
         "bottle_cost": 25.0,
         "carton_box_cost": 8.0,
         "labeling_cost": 6.0,
         "total": 39.0
     },
-    "airless_pump_30ml": {
-        "type": "Airless pump 30ml",
+    "airless_pump_30g": {
+        "type": "Airless pump 30g",
         "category": "liquid",
-        "size": "30ml",
+        "size": "30g",
         "bottle_cost": 30.0,
         "carton_box_cost": 7.0,
         "labeling_cost": 4.0,
         "total": 41.0
     },
-    "airless_pump_50ml": {
-        "type": "Airless pump 50ml",
+    "airless_pump_50g": {
+        "type": "Airless pump 50g",
         "category": "liquid",
-        "size": "50ml",
+        "size": "50g",
         "bottle_cost": 35.0,
         "carton_box_cost": 8.0,
         "labeling_cost": 5.0,
         "total": 48.0
     },
-    "airless_pump_100ml": {
-        "type": "Airless pump 100ml",
+    "airless_pump_100g": {
+        "type": "Airless pump 100g",
         "category": "liquid",
-        "size": "100ml",
+        "size": "100g",
         "bottle_cost": 40.0,
         "carton_box_cost": 9.0,
         "labeling_cost": 6.0,
         "total": 55.0
     },
-    "spray_bottle_50ml": {
-        "type": "Spray bottle 50ml",
+    "spray_bottle_50g": {
+        "type": "Spray bottle 50g",
         "category": "liquid",
-        "size": "50ml",
+        "size": "50g",
         "bottle_cost": 12.0,
         "carton_box_cost": 7.0,
         "labeling_cost": 4.0,
         "total": 23.0
     },
-    "spray_bottle_100ml": {
-        "type": "Spray bottle 100ml",
+    "spray_bottle_100g": {
+        "type": "Spray bottle 100g",
         "category": "liquid",
-        "size": "100ml",
+        "size": "100g",
         "bottle_cost": 15.0,
         "carton_box_cost": 8.0,
         "labeling_cost": 5.0,
         "total": 28.0
     },
-    "spray_bottle_200ml": {
-        "type": "Spray bottle 200ml",
+    "spray_bottle_200g": {
+        "type": "Spray bottle 200g",
         "category": "liquid",
-        "size": "200ml",
+        "size": "200g",
         "bottle_cost": 18.0,
         "carton_box_cost": 9.0,
         "labeling_cost": 6.0,
@@ -252,7 +253,7 @@ def get_packaging_by_size(size: str, category: str = "liquid") -> List[Dict]:
     Get all packaging options for a specific size.
     
     Args:
-        size: Size string (e.g., "30ml", "50g")
+        size: Size string (e.g., "30g", "50g") - ALL SIZES ARE IN GRAMS
         category: "liquid" or "solid"
     
     Returns:

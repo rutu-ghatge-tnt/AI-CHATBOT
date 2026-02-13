@@ -85,7 +85,7 @@ async def create_query_from_commercialization(
             "experience_level": experience_level,
             "timeline": timeline,
             "quantity_interest": quantity_interest,
-            "additional_notes": additional_notes,
+            "additional_notes": additional_notes if isinstance(additional_notes, str) else (", ".join(additional_notes) if isinstance(additional_notes, list) else str(additional_notes) if additional_notes else None),
             "status": QueryStatus.NEW.value,
             "queue_number": int(queue_number) if queue_number else None,  # Store as integer for easy sorting
             "payment_id": payment_id,  # Store payment_id if provided
