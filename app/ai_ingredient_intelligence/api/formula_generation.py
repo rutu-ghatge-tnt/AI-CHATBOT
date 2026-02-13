@@ -924,14 +924,39 @@ async def get_wish_history(
                 "tag": 1,
                 "status": 1,
                 "wish_text": 1,
+                "query_id": 1,
             }
         ).sort("created_at", -1).skip(skip_value).limit(limit)
+        
+        # Import QMS collection for fetching query details
+        from app.ai_ingredient_intelligence.db.collections import qms_queries_col
         
         items = []
         async for doc in cursor:
             # Create summary item (exclude large fields)
             # wish_data = doc.get("wish_data", {})
             # formula_result = doc.get("formula_result", {})
+            
+            # Fetch query details if query_id exists
+            query_info = None
+            if doc.get("query_id"):
+                try:
+                    query_doc = await qms_queries_col.find_one(
+                        {"_id": ObjectId(doc.get("query_id"))},
+                        {"display_id": 1, "queue_number": 1, "status": 1, "created_at": 1}
+                    )
+                    if query_doc:
+                        query_info = {
+                            "query_id": doc.get("query_id"),
+                            "query_display_id": query_doc.get("display_id"),
+                            "queue_number": query_doc.get("queue_number"),
+                            "status": query_doc.get("status"),
+                            "created_at": query_doc.get("created_at").isoformat() if isinstance(query_doc.get("created_at"), datetime) else query_doc.get("created_at")
+                        }
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to fetch query details: {e}")
+                    # Just include query_id if fetch fails
+                    query_info = {"query_id": doc.get("query_id")}
             
             items.append({
                 "id": str(doc["_id"]),
@@ -942,6 +967,8 @@ async def get_wish_history(
                 "status": doc.get("status", ""),
                 "notes": doc.get("notes", ""),
                 "created_at": doc.get("created_at", ""),
+                "query_id": doc.get("query_id"),  # Include query_id for reference
+                "query_info": query_info,  # Include full query info if available
                 # "formula_data": doc.get("formula_data", None),
                 # "has_wish_data": wish_data is not None and bool(wish_data),
                 # "has_formula_result": formula_result is not None and bool(formula_result)
@@ -1059,6 +1086,30 @@ async def get_wish_history_detail(
         basic_mode_result = doc.get("basic_mode_result")
         formula_data = doc.get("formula_data")
         trend_data = doc.get("trend_data", {})  # Get trend analysis data
+        
+        # Get query/commercialization info if available (fetch from QMS queries collection)
+        query_info = None
+        if doc.get("query_id"):
+            try:
+                from app.ai_ingredient_intelligence.db.collections import qms_queries_col
+                query_doc = await qms_queries_col.find_one(
+                    {"_id": ObjectId(doc.get("query_id"))},
+                    {"display_id": 1, "queue_number": 1, "status": 1, "created_at": 1, "updated_at": 1}
+                )
+                if query_doc:
+                    query_info = {
+                        "query_id": doc.get("query_id"),
+                        "query_display_id": query_doc.get("display_id"),
+                        "queue_number": query_doc.get("queue_number"),
+                        "status": query_doc.get("status"),
+                        "created_at": query_doc.get("created_at").isoformat() if isinstance(query_doc.get("created_at"), datetime) else query_doc.get("created_at"),
+                        "updated_at": query_doc.get("updated_at").isoformat() if isinstance(query_doc.get("updated_at"), datetime) else query_doc.get("updated_at")
+                    }
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to fetch query details: {e}")
+                # Just include query_id if fetch fails
+                query_info = {"query_id": doc.get("query_id")}
+        
         return {
             "id": str(doc["_id"]),
             "history_id": str(doc["_id"]),
@@ -1077,6 +1128,7 @@ async def get_wish_history_detail(
             "basic_mode_result": basic_mode_result,
             "formula_data": formula_data,
             "trend_data": trend_data,  # Include trend analysis data in response
+            "query_info": query_info,  # Include query/commercialization info if available
             # For future reference: legacy / backward compatibility (uncomment if needed)
             # "wish_data": doc.get("wish_data"),
             # "formula_result": doc.get("formula_result"),

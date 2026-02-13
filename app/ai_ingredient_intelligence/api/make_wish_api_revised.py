@@ -1564,6 +1564,22 @@ async def submit_commercialization_request(
                 if query_obj:
                     query_display_id = query_obj.get("display_id")
                     print(f"✅ Created QMS query: {query_display_id} (Queue: {queue_number})")
+                    
+                    # Update wish_history to mark it as converted to query (store only query_id)
+                    try:
+                        await wish_history_col.update_one(
+                            {"_id": ObjectId(request.history_id), "user_id": user_id},
+                            {
+                                "$set": {
+                                    "query_id": query_id,
+                                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                                }
+                            }
+                        )
+                        print(f"✅ Updated wish_history with query_id: {query_id}")
+                    except Exception as history_update_error:
+                        print(f"⚠️ Warning: Failed to update wish_history: {history_update_error}")
+                        # Don't fail the request if history update fails
             
         except Exception as qms_error:
             print(f"❌ Failed to create QMS query: {qms_error}")
