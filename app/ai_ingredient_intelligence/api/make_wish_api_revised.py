@@ -592,6 +592,7 @@ async def generate_formula_revised(
             
             # Fetch market trends data (formatted for frontend visualization)
             market_trends = None
+            synthesis_data = {}  # Store synthesis for each ingredient
             try:
                 print(f"📊 Fetching market trends data for frontend...")
                 trends_service = MarketTrendsService()
@@ -610,6 +611,65 @@ async def generate_formula_revised(
                     use_fallback=True
                 )
                 print(f"✅ Market trends fetched successfully")
+                
+                # Run synthesis for each hero ingredient using market trends data
+                if market_trends and hero_ingredients:
+                    print(f"🔬 Running synthesis for {len(hero_ingredients)} ingredients...")
+                    from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+                    from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
+                    
+                    analyzer = TrendAnalyzer()
+                    ingredient_trends = market_trends.get("ingredient_trends", [])
+                    
+                    for ing in hero_ingredients[:5]:  # Limit to 5 to avoid rate limits
+                        try:
+                            # Find trend data for this ingredient from market trends
+                            ing_trend = next((t for t in ingredient_trends if t.get("ingredient_name") == ing), None)
+                            
+                            if ing_trend:
+                                # Extract trend data from market trends format
+                                trend_data_for_synthesis = {
+                                    "ingredient": ing,
+                                    "current_interest": ing_trend.get("current_score", 0),
+                                    "growth_rate_6mo": ing_trend.get("growth_6m", 0),
+                                    "trend_direction": ing_trend.get("trend_direction", "stable"),
+                                    "timeseries_chart": ing_trend.get("timeseries_chart", []),
+                                    "rising_queries": ing_trend.get("rising_queries", []),
+                                    "top_queries": ing_trend.get("top_queries", [])
+                                }
+                                
+                                # Get additional data for synthesis
+                                consumer_intent_data = None
+                                regional_data = None
+                                
+                                try:
+                                    consumer_intent_data = await analyzer.analyze_consumer_intent(ing)
+                                except:
+                                    pass
+                                
+                                try:
+                                    regional_data = await analyzer.analyze_regional_demand(ing)
+                                except:
+                                    pass
+                                
+                                # Run synthesis
+                                synthesis_result = await synthesize_trend_insights(
+                                    ingredient=ing,
+                                    trend_data=trend_data_for_synthesis,
+                                    consumer_intent_data=consumer_intent_data,
+                                    competitive_data=None,
+                                    regional_data=regional_data
+                                )
+                                
+                                synthesis_data[ing] = synthesis_result
+                                print(f"   ✅ Synthesis completed for {ing}")
+                            else:
+                                print(f"   ⚠️ No trend data found for {ing}, skipping synthesis")
+                        except Exception as synth_error:
+                            print(f"   ⚠️ Error synthesizing {ing}: {synth_error}")
+                            continue
+                    
+                    print(f"✅ Synthesis completed for {len(synthesis_data)} ingredients")
             except Exception as e:
                 print(f"⚠️ Error fetching market trends: {e}")
                 import traceback
@@ -633,6 +693,8 @@ async def generate_formula_revised(
                         "formula_data": None,
                         "basic_mode_result": basic_result,
                         "trend_data": trend_data,  # Store trend analysis data
+                        "market_trends": market_trends,  # Store market trends data
+                        "synthesis_data": synthesis_data,  # Store synthesis data
                         "status": "completed",
                         "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                         "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
@@ -642,6 +704,25 @@ async def generate_formula_revised(
                     print(f"[AUTO-SAVE] Created history record (basic mode): {history_id}")
                 except Exception as e:
                     print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
+            else:
+                # Update existing history record
+                try:
+                    from bson import ObjectId
+                    update_doc = {
+                        "basic_mode_result": basic_result,
+                        "trend_data": trend_data,
+                        "market_trends": market_trends,
+                        "synthesis_data": synthesis_data,
+                        "status": "completed",
+                        "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                    }
+                    await wish_history_col.update_one(
+                        {"_id": ObjectId(history_id), "user_id": user_id},
+                        {"$set": update_doc}
+                    )
+                    print(f"[AUTO-SAVE] Updated history record: {history_id}")
+                except Exception as e:
+                    print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
             # Return full data, not just history_id
             return {
                 "success": True,
@@ -665,7 +746,8 @@ async def generate_formula_revised(
                 "manufacturing": basic_result.get("formula", {}).get("manufacturing", {}),
                 "compliance": basic_result.get("formula", {}).get("compliance", {}),
                 "trend_data": trend_data,  # Detailed trend analysis per ingredient
-                "market_trends": market_trends  # Formatted market trends for frontend visualization
+                "market_trends": market_trends,  # Formatted market trends for frontend visualization
+                "synthesis_data": synthesis_data  # Synthesis insights per ingredient
             }
     
     except HTTPException:
@@ -1202,7 +1284,7 @@ async def submit_commercialization_request(
         existing_query = await qms_queries_col.find_one({
             "user_id": user_id,
             "formula_id": formula_id_to_use,
-            "history_id": request.history_id,
+            "wish_id": request.history_id,  # Check by wish_id (history_id)
             "status": {"$nin": ["completed", "cancelled"]}  # Active queries only
         })
         
@@ -1310,6 +1392,12 @@ async def submit_commercialization_request(
         try:
             from app.ai_ingredient_intelligence.api.qms_utils import create_query_from_commercialization
             
+            # DEBUG: Log the entire request to see what frontend is sending
+            print(f"🔍 [DEBUG] get-this-made request received:")
+            print(f"   payment_id from request: {request.payment_id}")
+            print(f"   payment_id type: {type(request.payment_id)}")
+            print(f"   request dict: {request.model_dump()}")
+            
             # Get formula name from wish_history
             formula_name = history_item.get("name") or history_item.get("formula_name") or "Custom Formula"
             
@@ -1321,10 +1409,28 @@ async def submit_commercialization_request(
                 else:
                     additional_notes_str = str(request.additional_notes)
             
-            # Handle payment_id - create payment document if it's a valid ObjectId and doesn't exist
+            # Handle payment_id - fetch from existing query if not provided, or create if valid ObjectId
             payment_id_to_store = None
+            print(f"🔍 [DEBUG] Checking payment_id: {request.payment_id}")
+            
+            # First, check if we have a query_id in wish_history - if so, fetch payment_id from that query
+            query_id_from_history = history_item.get("query_id")
+            if not request.payment_id and query_id_from_history:
+                try:
+                    print(f"🔍 [DEBUG] Found query_id in wish_history: {query_id_from_history}, fetching payment_id...")
+                    existing_query_by_id = await qms_queries_col.find_one({
+                        "_id": ObjectId(query_id_from_history),
+                        "user_id": user_id
+                    })
+                    if existing_query_by_id and existing_query_by_id.get("payment_id"):
+                        payment_id_from_query = existing_query_by_id.get("payment_id")
+                        print(f"✅ [DEBUG] Found payment_id from query_id {query_id_from_history}: {payment_id_from_query}")
+                        payment_id_to_store = str(payment_id_from_query) if payment_id_from_query else None
+                except Exception as e:
+                    print(f"⚠️ [DEBUG] Error fetching payment_id from query_id: {e}")
+            
             if request.payment_id:
-                # Check if payment_id is a valid ObjectId
+                # Payment ID provided in request - validate and use it
                 try:
                     payment_obj_id = ObjectId(request.payment_id)
                     # Check if payment document exists
@@ -1344,10 +1450,37 @@ async def submit_commercialization_request(
                         await qms_payments_col.insert_one(payment_doc)
                         print(f"✅ Created placeholder payment document: {request.payment_id}")
                     payment_id_to_store = request.payment_id
+                    print(f"✅ [DEBUG] payment_id validated and stored: {payment_id_to_store}")
                 except Exception as e:
                     # payment_id is not a valid ObjectId, store it as-is (might be a reference ID)
                     print(f"⚠️ payment_id '{request.payment_id}' is not a valid ObjectId, storing as string: {e}")
                     payment_id_to_store = request.payment_id
+            else:
+                # No payment_id in request - fetch from queries collection (source of truth)
+                print(f"⚠️ [DEBUG] No payment_id provided in request - checking queries collection...")
+                try:
+                    # Check for any query (even completed/cancelled) for this formula/history_id
+                    # Queries collection is the source of truth for payment_id
+                    # We check by wish_id (history_id) to find related queries
+                    any_query = await qms_queries_col.find_one({
+                        "user_id": user_id,
+                        "wish_id": request.history_id,  # Check by wish_id (history_id)
+                    }, sort=[("created_at", -1)])  # Get most recent query
+                    
+                    if any_query and any_query.get("payment_id"):
+                        payment_id_from_query = any_query.get("payment_id")
+                        print(f"✅ [DEBUG] Found payment_id in queries collection (query: {any_query.get('display_id', 'N/A')}): {payment_id_from_query}")
+                        payment_id_to_store = str(payment_id_from_query) if payment_id_from_query else None
+                    else:
+                        print(f"ℹ️ [DEBUG] No payment_id found in queries collection for this formula/history_id")
+                        payment_id_to_store = None
+                except Exception as e:
+                    print(f"⚠️ [DEBUG] Error checking queries collection for payment_id: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    payment_id_to_store = None
+            
+            print(f"🔍 [DEBUG] payment_id_to_store before creating query: {payment_id_to_store}")
             
             # Create query with all form fields
             query_id = await create_query_from_commercialization(
@@ -1406,16 +1539,33 @@ async def submit_commercialization_request(
                 detail=f"Failed to create commercialization request: {str(qms_error)}"
             )
         
+        # Ensure query_display_id is set (fallback if query creation failed)
+        if not query_display_id and query_id:
+            # Try to fetch display_id one more time
+            try:
+                query_obj = await qms_queries_col.find_one({"_id": ObjectId(query_id)})
+                if query_obj:
+                    query_display_id = query_obj.get("display_id")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not fetch display_id: {e}")
+        
         print(f"✅ Commercialization request submitted")
         print(f"   Queue Number: {queue_number}")
-        print(f"   Query ID: {query_display_id}")
+        print(f"   Query ID: {query_display_id or query_id or 'N/A'}")
         print(f"   Experience Level: {request.experience_level}")
         print(f"   Timeline: {request.timeline}")
+        
+        # Validate that we have at least query_id before returning
+        if not query_id:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create QMS query. Please try again."
+            )
         
         return GetThisMadeResponse(
             success=True,
             queue_number=queue_number,
-            request_id=query_display_id,  # Use display_id as request_id
+            request_id=query_display_id or f"QRY-{query_id[:8]}",  # Fallback to partial ID if display_id missing
             created_at=created_at,
             next_steps=next_steps,
             query_id=query_id,

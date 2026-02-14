@@ -385,23 +385,22 @@ async def get_level_2_competing_approaches(
     benefit_patterns = [re.escape(ben.lower()) for ben in benefits]
     benefit_regex = "|".join(benefit_patterns)
     
-    query = {
-        "$or": [
-            {"benefit_tag": {"$in": benefit_tags}},
-            {"query_level": "benefit", "category": category},
-            {"query_text": {"$regex": benefit_regex, "$options": "i"}},  # Find in query text
-            {"related_queries_list": {"$regex": benefit_regex, "$options": "i"}},  # Find in related queries
-            {"query_variations": {"$regex": benefit_regex, "$options": "i"}}  # Find in variations
-        ],
-        "category": category,
-        "is_active": True,
-        "fetched_at": {"$gte": cutoff_date}
-    }
+    # Build $or conditions
+    or_conditions = [
+        {"benefit_tag": {"$in": benefit_tags}},
+        {"query_level": "benefit", "category": category},
+        {"query_text": {"$regex": benefit_regex, "$options": "i"}},  # Find in query text
+    ]
+    
+    # Add regex conditions for related_queries_list and query_variations if they exist
+    # Note: MongoDB regex on arrays searches array elements
+    or_conditions.append({"related_queries_list": {"$regex": benefit_regex, "$options": "i"}})
+    or_conditions.append({"query_variations": {"$regex": benefit_regex, "$options": "i"}})
     
     # Product type matching - find ALL product types related to the benefit
-    # Don't restrict to exact format match, find variations too
-    product_type_pattern = None
-    if product_type:
+    if product_type and normalized_format:
+        or_conditions.append({"product_format": normalized_format})
+        
         # Create regex pattern for product type variations
         product_type_variations = [
             product_type.lower(),
@@ -409,19 +408,21 @@ async def get_level_2_competing_approaches(
             product_type.lower().replace(" ", ""),  # no spaces
         ]
         product_type_pattern = "|".join([re.escape(v) for v in product_type_variations])
+        or_conditions.append({"query_text": {"$regex": product_type_pattern, "$options": "i"}})
+        or_conditions.append({"query_variations": {"$regex": product_type_pattern, "$options": "i"}})
     
-    if product_type_pattern:
-        # Add product type search to $or clause
-        query["$or"].extend([
-            {"product_format": normalized_format},
-            {"query_text": {"$regex": product_type_pattern, "$options": "i"}},
-            {"query_variations": {"$regex": product_type_pattern, "$options": "i"}}
-        ])
+    query = {
+        "$or": or_conditions,
+        "category": category,
+        "is_active": True,
+        "fetched_at": {"$gte": cutoff_date}
+    }
     
-    # Exclude user's ingredients
+    # Exclude user's ingredients (only if we have exclude list)
     if exclude_ingredients:
         exclude_tags = [normalize_ingredient_name(ing) for ing in exclude_ingredients if normalize_ingredient_name(ing)]
         if exclude_tags:
+            # Add exclusion to query (this will work with $or)
             query["ingredient_tag"] = {"$nin": exclude_tags}
     
     # Get ALL related benefit data (not just exact matches) - find everything related
