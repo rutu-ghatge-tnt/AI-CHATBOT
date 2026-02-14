@@ -75,22 +75,45 @@ class MarketTrendsService:
         
         # Check if we have actual trend data with meaningful content
         has_ingredient_data = False
+        ingredient_count = 0
         if level_1_trends:
-            # Check if any ingredient has actual trend_data
+            # Check if any ingredient has actual trend_data with current_score > 0
             for ing_name, ing_data in level_1_trends.items():
-                if ing_data and ing_data.get("trend_data") and ing_data["trend_data"].get("current_score", 0) > 0:
-                    has_ingredient_data = True
-                    break
+                if ing_data and ing_data.get("trend_data"):
+                    trend_doc = ing_data["trend_data"]
+                    current_score = trend_doc.get("current_score", 0)
+                    if current_score > 0:
+                        has_ingredient_data = True
+                        ingredient_count += 1
+                        print(f"   ✅ Found valid trend data for {ing_name}: current_score={current_score}")
+                    else:
+                        print(f"   ⚠️ Trend data for {ing_name} has current_score=0, will use SerpAPI fallback")
         
-        has_benefit_data = len(level_2_approaches) > 0 and any(
-            item.get("current_score", 0) > 0 for item in level_2_approaches if isinstance(item, dict)
-        )
+        has_benefit_data = False
+        benefit_count = 0
+        if level_2_approaches:
+            for item in level_2_approaches:
+                if isinstance(item, dict) and item.get("current_score", 0) > 0:
+                    has_benefit_data = True
+                    benefit_count += 1
         
-        print(f"📊 Market trends check: ingredient_data={has_ingredient_data}, benefit_data={has_benefit_data}")
+        print(f"📊 Market trends check: ingredient_data={has_ingredient_data} ({ingredient_count} valid), benefit_data={has_benefit_data} ({benefit_count} valid)")
+        print(f"   Total ingredients requested: {len(hero_ingredients)}, Total benefits requested: {len(benefits)}")
         
         # Step 2: Fallback to SerpAPI if needed (query on-demand and store)
-        if use_fallback and (not has_ingredient_data or not has_benefit_data):
-            print(f"📡 MongoDB has insufficient data, querying SerpAPI on-demand...")
+        # ALWAYS use fallback if we don't have data for ALL requested ingredients/benefits
+        needs_fallback = False
+        if use_fallback:
+            # Check if we need fallback: missing data OR current_score = 0
+            if not has_ingredient_data or ingredient_count < len(hero_ingredients):
+                needs_fallback = True
+                print(f"📡 Missing ingredient data: have {ingredient_count}, need {len(hero_ingredients)}")
+            if not has_benefit_data and benefits:
+                needs_fallback = True
+                print(f"📡 Missing benefit data: have {benefit_count}, need {len(benefits)}")
+        
+        if needs_fallback:
+            print(f"📡 MongoDB has insufficient data (or current_score=0), querying SerpAPI on-demand...")
             fallback_data = await self._fetch_from_serpapi_fallback(
                 hero_ingredients=hero_ingredients,
                 benefits=benefits,
@@ -105,7 +128,7 @@ class MarketTrendsService:
             if not use_fallback:
                 print(f"ℹ️ SerpAPI fallback disabled. Using only MongoDB data.")
             else:
-                print(f"✅ MongoDB has sufficient data. No SerpAPI fallback needed.")
+                print(f"✅ MongoDB has sufficient data for all ingredients/benefits. No SerpAPI fallback needed.")
         
         # Step 3: Format for frontend
         formatted_data = self._format_for_frontend(
@@ -430,22 +453,37 @@ class MarketTrendsService:
     ) -> Optional[Dict[str, Any]]:
         """Process SerpAPI response and store in MongoDB"""
         try:
-            # Extract timeline data
-            interest_over_time = trends_data.get("interest_over_time", {})
-            timeline_data = interest_over_time.get("timeline_data", [])
+            # Extract timeline data - safely handle different response structures
+            if not trends_data or not isinstance(trends_data, dict):
+                return None
             
-            if not timeline_data:
+            interest_over_time = trends_data.get("interest_over_time", {})
+            if not interest_over_time or not isinstance(interest_over_time, dict):
+                return None
+            
+            timeline_data = interest_over_time.get("timeline_data", [])
+            if not timeline_data or not isinstance(timeline_data, list):
                 return None
             
             # Process values
             values = []
             dates = []
             for point in timeline_data:
-                if point.get("values"):
-                    val = point["values"][0].get("extracted_value", 0)
-                    if val is not None:
-                        values.append(val)
-                        dates.append(point.get("date", ""))
+                if not isinstance(point, dict):
+                    continue
+                    
+                point_values = point.get("values")
+                if point_values and isinstance(point_values, list) and len(point_values) > 0:
+                    first_value = point_values[0]
+                    if isinstance(first_value, dict):
+                        val = first_value.get("extracted_value", 0)
+                        if val is not None:
+                            try:
+                                val = int(val) if isinstance(val, (int, float, str)) else 0
+                                values.append(val)
+                                dates.append(point.get("date", ""))
+                            except (ValueError, TypeError):
+                                continue
             
             if len(values) < 4:
                 return None
@@ -481,30 +519,42 @@ class MarketTrendsService:
             related_queries_rising = []
             related_queries_top = []
             
-            related_queries = related_data.get("related_queries", {})
-            for item in related_queries.get("rising", [])[:10]:
-                related_queries_rising.append({
-                    "query": item.get("query", ""),
-                    "growth": item.get("value", ""),
-                    "extracted_value": item.get("extracted_value", 0)
-                })
-            
-            for item in related_queries.get("top", [])[:10]:
-                related_queries_top.append({
-                    "query": item.get("query", ""),
-                    "volume": item.get("value", ""),
-                    "extracted_value": item.get("extracted_value", 0)
-                })
+            # Safely handle related_data (might be None or empty dict)
+            if related_data and isinstance(related_data, dict):
+                related_queries = related_data.get("related_queries", {})
+                if isinstance(related_queries, dict):
+                    rising_list = related_queries.get("rising", [])
+                    if isinstance(rising_list, list):
+                        for item in rising_list[:10]:
+                            if isinstance(item, dict):
+                                related_queries_rising.append({
+                                    "query": item.get("query", ""),
+                                    "growth": item.get("value", ""),
+                                    "extracted_value": item.get("extracted_value", 0)
+                                })
+                    
+                    top_list = related_queries.get("top", [])
+                    if isinstance(top_list, list):
+                        for item in top_list[:10]:
+                            if isinstance(item, dict):
+                                related_queries_top.append({
+                                    "query": item.get("query", ""),
+                                    "volume": item.get("value", ""),
+                                    "extracted_value": item.get("extracted_value", 0)
+                                })
             
             # Process regional data
             regional_interest = []
-            interest_by_region = regional_data.get("interest_by_region", [])
-            for region in interest_by_region[:20]:
-                regional_interest.append({
-                    "location": region.get("location", ""),
-                    "value": region.get("value", ""),
-                    "extracted_value": region.get("extracted_value", 0) or region.get("value", 0)
-                })
+            if regional_data and isinstance(regional_data, dict):
+                interest_by_region = regional_data.get("interest_by_region", [])
+                if isinstance(interest_by_region, list):
+                    for region in interest_by_region[:20]:
+                        if isinstance(region, dict):
+                            regional_interest.append({
+                                "location": region.get("location", ""),
+                                "value": region.get("value", ""),
+                                "extracted_value": region.get("extracted_value", 0) or region.get("value", 0)
+                            })
             
             # Build document with all related queries
             doc = {
@@ -637,17 +687,27 @@ class MarketTrendsService:
             
             # Extract timeseries for line chart
             interest_over_time = trend_doc.get("interest_over_time", {})
-            timeline_data = interest_over_time.get("timeline_data", [])
+            timeline_data = interest_over_time.get("timeline_data", []) if isinstance(interest_over_time, dict) else []
             
             chart_data = []
             for point in timeline_data:
-                if point.get("values"):
-                    val = point["values"][0].get("extracted_value", 0)
-                    chart_data.append({
-                        "date": point.get("date", ""),
-                        "timestamp": point.get("timestamp", ""),
-                        "value": val
-                    })
+                if not isinstance(point, dict):
+                    continue
+                    
+                point_values = point.get("values")
+                if point_values and isinstance(point_values, list) and len(point_values) > 0:
+                    first_value = point_values[0]
+                    if isinstance(first_value, dict):
+                        val = first_value.get("extracted_value", 0)
+                        try:
+                            val = int(val) if isinstance(val, (int, float, str)) else 0
+                        except (ValueError, TypeError):
+                            val = 0
+                        chart_data.append({
+                            "date": point.get("date", ""),
+                            "timestamp": point.get("timestamp", ""),
+                            "value": val
+                        })
             
             # Format related queries
             rising_queries = trend_doc.get("related_queries_rising", [])[:5]

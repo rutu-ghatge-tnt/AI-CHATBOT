@@ -1086,6 +1086,8 @@ async def get_wish_history_detail(
         basic_mode_result = doc.get("basic_mode_result")
         formula_data = doc.get("formula_data")
         trend_data = doc.get("trend_data", {})  # Get trend analysis data
+        market_trends = doc.get("market_trends")  # Get market trends data
+        synthesis_data = doc.get("synthesis_data", {})  # Get synthesis data
         
         # Get query/commercialization info if available (fetch from QMS queries collection)
         query_info = None
@@ -1128,6 +1130,8 @@ async def get_wish_history_detail(
             "basic_mode_result": basic_mode_result,
             "formula_data": formula_data,
             "trend_data": trend_data,  # Include trend analysis data in response
+            "market_trends": market_trends,  # Include market trends data in response
+            "synthesis_data": synthesis_data,  # Include synthesis data in response
             "query_info": query_info,  # Include query/commercialization info if available
             # For future reference: legacy / backward compatibility (uncomment if needed)
             # "wish_data": doc.get("wish_data"),

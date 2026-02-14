@@ -428,6 +428,33 @@ async def get_query_detail(
         else:
             print(f"ℹ️ No payment_id found in qms_queries document - query has no payment associated")
             payment_doc = None
+            
+            # Fallback: Try to find payment by queryId or displayId
+            print(f"   🔍 Trying fallback: searching for payment by queryId or displayId...")
+            try:
+                # Try to find payment where queryId matches this query's _id
+                query_id_str = str(query["_id"])
+                payment_by_query_id = await qms_payments_col.find_one({
+                    "queryId": query_id_str
+                })
+                
+                if payment_by_query_id:
+                    print(f"   ✅ Found payment by queryId: {payment_by_query_id.get('_id')}")
+                    payment_doc = payment_by_query_id
+                else:
+                    # Try to find payment by displayId (e.g., QRY-2025-001)
+                    display_id = query.get("display_id")
+                    if display_id:
+                        payment_by_display_id = await qms_payments_col.find_one({
+                            "paymentDetails.displayId": display_id
+                        })
+                        if payment_by_display_id:
+                            print(f"   ✅ Found payment by displayId: {payment_by_display_id.get('_id')}")
+                            payment_doc = payment_by_display_id
+                        else:
+                            print(f"   ❌ No payment found by queryId or displayId")
+            except Exception as e:
+                print(f"   ⚠️ Error in fallback payment search: {e}")
         
         # If payment document found, map it to PaymentResponse
         if payment_doc:

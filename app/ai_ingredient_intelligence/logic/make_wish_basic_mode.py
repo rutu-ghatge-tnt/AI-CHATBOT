@@ -314,7 +314,7 @@ Return JSON matching this structure:
           "price": 549, 
           "size": "30g", 
           "pricePerGram": 18.30,
-          "advantage": "Your advantage description (e.g., ₹X.XX/g cheaper or ₹X.XX/ml cheaper or Better cost efficiency)",
+          "advantage": "Your advantage description (e.g., ₹X.XX/g cheaper or Better cost efficiency)",
           "yourAdvantage": "Your advantage description"
         }}
       ]
@@ -390,7 +390,7 @@ Return JSON matching this structure:
 2. **relatedTrends**: MUST include at least 2-3 related trends. Never return empty array. Base on category, benefits, and market insights.
 3. **marketComparison advantage**: For each competitor in marketComparison, MUST calculate and include "advantage" field showing:
    - Advantage should be comprehensive, not just price:
-     * Price: "₹X.XX/g cheaper" or "₹X.XX/ml cheaper" (if significantly cheaper)
+     * Price: "₹X.XX/g cheaper" (if significantly cheaper) - ALL PRICES IN GRAMS (g) ONLY
      * Ingredients: "Premium actives (Niacinamide, Licorice)" or "More active ingredients"
      * Benefits: "Multi-benefit: Brightening + Healing" or "Targets 3 concerns"
      * Value: "Better value proposition" or "Premium formulation"
@@ -564,7 +564,7 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
             from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
             product_type = wish_data.get('productType', 'serum')
             unit = get_unit_for_product_type(product_type)
-            # Convert cost per 100g to cost per unit (g or ml)
+            # Convert cost per 100g to cost per gram (ALL in grams)
             user_cost_per_unit = user_cost_per_100g / 100 if user_cost_per_100g > 0 else 0
             
             # Get hero ingredients and benefits from formula
@@ -592,23 +592,22 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
                 competitor_size_raw = str(competitor.get("size", "0")).strip()
                 competitor_note = competitor.get("note", "").lower()
                 
-                # Determine unit (g or ml) from size string
-                is_ml = "ml" in competitor_size_raw.lower()
-                unit = "/ml" if is_ml else "/g"
-                
-                # Extract numeric size
-                competitor_size_str = competitor_size_raw.replace("g", "").replace("ml", "").replace("G", "").replace("ML", "").strip()
+                # ALL SIZES ARE IN GRAMS (g) - convert ml to g if needed (1ml ≈ 1g for cosmetics)
+                # Extract numeric size - treat everything as grams
+                competitor_size_str = competitor_size_raw.replace("g", "").replace("ml", "").replace("G", "").replace("ML", "").replace("mL", "").strip()
                 try:
                     competitor_size = float(competitor_size_str) if competitor_size_str else 0
+                    # If original had "ml", it's already approximately grams (1ml ≈ 1g for cosmetics)
                 except:
                     competitor_size = 0
                 
                 competitor_price_per_unit = competitor.get("pricePerGram", 0)
                 
-                # Calculate price per unit (g or ml) if we have size and price
+                # Calculate price per gram (ALL in grams)
+                unit = "/g"  # Always grams
                 if competitor_size > 0 and competitor_price > 0:
                     competitor_price_per_unit = competitor_price / competitor_size
-                    competitor["pricePerGram"] = competitor_price_per_unit  # Keep field name for compatibility
+                    competitor["pricePerGram"] = competitor_price_per_unit  # Keep field name for compatibility (but it's per gram)
                 
                 # Build comprehensive advantage statement
                 advantage_parts = []
