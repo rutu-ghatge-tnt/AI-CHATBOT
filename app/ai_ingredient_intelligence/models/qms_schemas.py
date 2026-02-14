@@ -62,7 +62,7 @@ class NoteRole(str, Enum):
 class PaymentStatus(str, Enum):
     """Payment status enum"""
     CREATED = "created"
-    CAPTURED = "captured"
+    CAPTURED = "paid"  # Label "paid" for API response (successful payment)
     FAILED = "failed"
     REFUNDED = "refunded"
 
@@ -231,6 +231,8 @@ class QueryResponse(QueryBase):
     """Schema for query response"""
     id: str = Field(..., alias="_id")
     display_id: str = Field(..., description="Human-readable ID (QRY-2025-001)")
+    queue_number: Optional[int] = Field(None, description="Queue number assigned to the query")
+    user_id: Optional[str] = Field(None, description="Customer user ID (optional in response)")
     created_at: datetime
     updated_at: datetime
 
@@ -250,6 +252,7 @@ class QueryListResponse(BaseModel):
     """Schema for query list item (simplified for current requirements)"""
     id: str = Field(..., alias="_id")
     display_id: str
+    queue_number: Optional[int] = Field(None, description="Queue number assigned to the query")
     formula_name: str
     user_name: Optional[str] = None
     user_city: Optional[str] = None
@@ -267,7 +270,7 @@ class QueryDetailResponse(QueryResponse):
     user: Optional[UserInfo] = Field(None, description="User information from main user table")
     partner: Optional[PartnerResponse] = None
     payment: Optional[PaymentResponse] = None
-    notes: List["NoteResponse"] = Field(default_factory=list)
+    # notes: List["NoteResponse"] = Field(default_factory=list)
 
 
 class QueryStatusUpdateRequest(BaseModel):

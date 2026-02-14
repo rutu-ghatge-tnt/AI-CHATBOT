@@ -224,6 +224,7 @@ async def list_queries(
             query_responses.append(QueryListResponse(
                 id=str(query["_id"]),
                 display_id=query.get("display_id", ""),
+                queue_number=query.get("queue_number"),
                 formula_name=formula_name,
                 user_name=user_name,
                 user_city=user_city,
@@ -256,7 +257,7 @@ async def list_queries(
         raise HTTPException(status_code=500, detail=f"Failed to list queries: {str(e)}")
 
 
-@router.get("/queries/{query_id}", response_model=QueryDetailResponse)
+@router.get("/queries/{query_id}", response_model=QueryDetailResponse, response_model_exclude={"user_id"})
 async def get_query_detail(
     query_id: str,
     current_user: dict = Depends(verify_jwt_token)
@@ -465,10 +466,10 @@ async def get_query_detail(
                 # Payment doc has: userId, transactionId, providerOrderId, status, etc.
                 # PaymentResponse expects: user_id, razorpay_payment_id, razorpay_order_id, etc.
                 
-                # Map status - convert "paid" to "captured", etc.
+                # Map status - "paid" from doc is returned as "paid" (PaymentStatus.CAPTURED)
                 payment_status = payment_doc.get("status", "created").lower()
                 if payment_status == "paid":
-                    status_enum = PaymentStatus.CAPTURED
+                    status_enum = PaymentStatus.CAPTURED  # serializes as "paid"
                 elif payment_status == "refunded":
                     status_enum = PaymentStatus.REFUNDED
                 elif payment_status == "failed":
@@ -513,32 +514,32 @@ async def get_query_detail(
             print(f"ℹ️ No payment_id found in query document")
         
         # Get notes (filtered by role)
-        notes_filter = {"query_id": query_id, "deleted_at": None}
-        if user_role != "admin":
-            notes_filter["is_internal"] = False
+        # notes_filter = {"query_id": query_id, "deleted_at": None}
+        # if user_role != "admin":
+        #     notes_filter["is_internal"] = False
         
-        notes_cursor = qms_query_notes_col.find(notes_filter).sort("created_at", -1)
-        notes_list = await notes_cursor.to_list(length=100)
+        # notes_cursor = qms_query_notes_col.find(notes_filter).sort("created_at", -1)
+        # notes_list = await notes_cursor.to_list(length=100)
         
-        notes = []
-        for note_doc in notes_list:
-            notes.append(NoteResponse(
-                id=str(note_doc["_id"]),
-                query_id=note_doc.get("query_id", ""),
-                author_id=str(note_doc.get("author_id", "")),
-                author_role=NoteRole(note_doc.get("author_role", "user")),
-                author_name=note_doc.get("author_name", ""),
-                content=note_doc.get("content", ""),
-                attachments=note_doc.get("attachments", []),
-                is_internal=note_doc.get("is_internal", False),
-                created_at=note_doc.get("created_at", datetime.now()),
-                deleted_at=note_doc.get("deleted_at")
-            ))
+        # notes = []
+        # for note_doc in notes_list:
+        #     notes.append(NoteResponse(
+        #         id=str(note_doc["_id"]),
+        #         query_id=note_doc.get("query_id", ""),
+        #         author_id=str(note_doc.get("author_id", "")),
+        #         author_role=NoteRole(note_doc.get("author_role", "user")),
+        #         author_name=note_doc.get("author_name", ""),
+        #         content=note_doc.get("content", ""),
+        #         attachments=note_doc.get("attachments", []),
+        #         is_internal=note_doc.get("is_internal", False),
+        #         created_at=note_doc.get("created_at", datetime.now()),
+        #         deleted_at=note_doc.get("deleted_at")
+        #     ))
         
         return QueryDetailResponse(
             id=str(query["_id"]),
             display_id=query.get("display_id", ""),
-            user_id=str(query.get("user_id", "")),
+            queue_number=query.get("queue_number"),
             formula_id=query.get("formula_id", ""),
             wish_id=query.get("wish_id") or query.get("history_id", ""),
             formula_name=query.get("formula_name", "Custom Formula"),
@@ -552,7 +553,7 @@ async def get_query_detail(
             user=user,
             partner=partner,
             payment=payment,
-            notes=notes
+            # notes=notes
         )
     
     except HTTPException:
@@ -1060,9 +1061,9 @@ async def get_dashboard_stats(
         async for doc in qms_queries_col.aggregate(status_pipeline):
             status_counts[doc["_id"]] = doc["count"]
         
-        # Revenue (sum of all captured payments)
+        # Revenue (sum of all paid payments; include legacy "captured" in DB)
         revenue_pipeline = [
-            {"$match": {"status": "captured"}},
+            {"$match": {"status": {"$in": [PaymentStatus.CAPTURED.value, "captured"]}}},
             {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
         ]
         revenue_result = await qms_payments_col.aggregate(revenue_pipeline).to_list(length=1)

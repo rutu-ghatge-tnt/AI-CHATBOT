@@ -1022,13 +1022,13 @@ async def get_wish_history_detail(
     
     try:
         # Extract user_id from JWT token (already verified by verify_jwt_token)
-        user_id = current_user.get("user_id") or current_user.get("_id")
-        print(f"[DEBUG] User ID extracted: {user_id}")
-        if not user_id:
-            raise HTTPException(
-                status_code=400,
-                detail="User ID not found in JWT token"
-            )
+        # user_id = current_user.get("user_id") or current_user.get("_id")
+        # print(f"[DEBUG] User ID extracted: {user_id}")
+        # if not user_id:
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail="User ID not found in JWT token"
+        #     )
         
         # Validate ObjectId - check if it's a valid MongoDB ObjectId format
         # MongoDB ObjectIds are 24-character hex strings (no dashes)
@@ -1051,7 +1051,7 @@ async def get_wish_history_detail(
         # Fetch full item (including large fields)
         doc = await wish_history_col.find_one({
             "_id": ObjectId(history_id),
-            "user_id": user_id
+            # "user_id": user_id
         })
         
         if not doc:
@@ -1065,7 +1065,7 @@ async def get_wish_history_detail(
             # Check QMS queries instead of commercialization_requests
             from app.ai_ingredient_intelligence.db.collections import qms_queries_col
             qms_query = await qms_queries_col.find_one({
-                "user_id": user_id,
+                # "user_id": user_id,
                 "wish_brief.formula_id": formula_id,
                 "wish_brief.history_id": history_id,
                 "status": {"$nin": ["cancelled"]}  # Any active query
