@@ -316,8 +316,13 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     Transform MakeWishResponse data into structured text for Gamma API.
     Formats ALL data from all 5 stages of the Make a Wish pipeline into comprehensive presentation-ready content.
     Includes every field and nested data available in the wish response.
+    
+    Supports both old format (with ingredient_selection, optimized_formula) and new format (with formula, insights).
     """
     sections = []
+    
+    # Detect format: new format has 'formula' and 'insights' at top level, old format has 'ingredient_selection' and 'optimized_formula'
+    is_new_format = 'formula' in wish_response and 'insights' in wish_response
     
     # Currency Note - IMPORTANT
     sections.append("=" * 80)
@@ -476,7 +481,131 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
                     pref_claims_str = ', '.join([str(c) for c in pref_claims if c])
                 sections.append(f"Preferred Claims: {pref_claims_str}")
     
-    # Stage 1: Ingredient Selection
+    # Handle new format structure
+    formula = {}
+    insights = {}
+    if is_new_format:
+        formula = wish_response.get("formula", {})
+        insights = wish_response.get("insights", {})
+        
+        # Formula Information
+        sections.append("\n" + "=" * 80)
+        sections.append("FORMULA INFORMATION")
+        sections.append("=" * 80)
+        
+        if formula.get('name'):
+            sections.append(f"\nFormula Name: {formula.get('name')}")
+        if formula.get('complexity'):
+            sections.append(f"Complexity: {formula.get('complexity', '').title()}")
+        if formula.get('product_type'):
+            product_type = formula.get('product_type', {})
+            if isinstance(product_type, dict):
+                sections.append(f"Product Type: {product_type.get('name', 'N/A')}")
+        if formula.get('texture'):
+            texture = formula.get('texture', {})
+            if isinstance(texture, dict):
+                sections.append(f"Texture: {texture.get('label', 'N/A')}")
+        
+        # Phases (new format)
+        if formula.get('phases'):
+            sections.append("\nFormula Phases:")
+            for phase in formula.get('phases', []):
+                phase_name = phase.get('name', 'Unknown Phase')
+                phase_order = phase.get('order', 0)
+                ingredients = phase.get('ingredients', [])
+                sections.append(f"\n  Phase {phase_order}: {phase_name}")
+                sections.append(f"    Ingredients ({len(ingredients)}):")
+                for ing in ingredients:
+                    name = ing.get('display_name', ing.get('name', 'Unknown'))
+                    inci = ing.get('inci_name', '')
+                    percent = ing.get('percentage', 'N/A')
+                    phase_letter = ing.get('phase', '')
+                    purpose = ing.get('purpose', '')
+                    is_hero = "⭐ HERO" if ing.get('is_hero', False) else ""
+                    sections.append(f"      • {name} {is_hero} - {percent} ({phase_letter})")
+                    if inci:
+                        sections.append(f"        INCI: {inci}")
+                    if purpose:
+                        sections.append(f"        Purpose: {purpose}")
+        
+        # Hero Ingredients (new format)
+        if formula.get('hero_ingredients'):
+            sections.append("\nHero Ingredients:")
+            for hero in formula.get('hero_ingredients', []):
+                name = hero.get('name', 'Unknown')
+                percent = hero.get('percentage', 'N/A')
+                why = hero.get('why_included', '')
+                sections.append(f"  • {name} ({percent})")
+                if why:
+                    sections.append(f"    Why: {why}")
+        
+        # Formula Summary
+        if formula.get('total_ingredients'):
+            sections.append(f"\nTotal Ingredients: {formula.get('total_ingredients', 0)}")
+        if formula.get('total_hero_actives'):
+            sections.append(f"Hero Actives: {formula.get('total_hero_actives', 0)}")
+        if formula.get('available_claims'):
+            claims = formula.get('available_claims', [])
+            if claims:
+                sections.append(f"Available Claims: {', '.join([str(c) for c in claims])}")
+        if formula.get('exclusions_met'):
+            exclusions = formula.get('exclusions_met', [])
+            if exclusions:
+                sections.append(f"Exclusions Met: {', '.join([str(e) for e in exclusions])}")
+        
+        # Insights (new format)
+        if insights:
+            sections.append("\n" + "=" * 80)
+            sections.append("FORMULA INSIGHTS")
+            sections.append("=" * 80)
+            
+            # Why These Ingredients
+            if insights.get('why_these_ingredients'):
+                sections.append("\nWhy These Ingredients:")
+                for why_ing in insights.get('why_these_ingredients', []):
+                    name = why_ing.get('ingredient_name', 'Unknown')
+                    explanation = why_ing.get('explanation', '')
+                    complexity_reason = why_ing.get('complexity_reason', '')
+                    sections.append(f"  • {name}: {explanation}")
+                    if complexity_reason:
+                        sections.append(f"    Complexity Note: {complexity_reason}")
+            
+            # Challenges
+            if insights.get('challenges'):
+                sections.append("\nPotential Challenges:")
+                for challenge in insights.get('challenges', []):
+                    title = challenge.get('title', '')
+                    description = challenge.get('description', '')
+                    tip = challenge.get('tip', '')
+                    severity = challenge.get('severity', 'info').upper()
+                    sections.append(f"  [{severity}] {title}")
+                    if description:
+                        sections.append(f"    Description: {description}")
+                    if tip:
+                        sections.append(f"    Tip: {tip}")
+            
+            # Marketing Tips
+            if insights.get('marketing_tips'):
+                sections.append("\nMarketing Tips:")
+                for tip in insights.get('marketing_tips', []):
+                    title = tip.get('title', '')
+                    content = tip.get('content', '')
+                    category = tip.get('category', '').title()
+                    sections.append(f"  [{category}] {title}")
+                    if content:
+                        sections.append(f"    {content}")
+            
+            # FAQ
+            if insights.get('faq'):
+                sections.append("\nFrequently Asked Questions:")
+                for faq in insights.get('faq', []):
+                    question = faq.get('question', '')
+                    answer = faq.get('answer', '')
+                    sections.append(f"  Q: {question}")
+                    if answer:
+                        sections.append(f"  A: {answer}")
+    
+    # Stage 1: Ingredient Selection (old format)
     sections.append("\n" + "=" * 80)
     sections.append("STAGE 1: INGREDIENT SELECTION")
     sections.append("=" * 80)
@@ -605,95 +734,136 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     # Ensure optimized_formula is a dict (handle None case)
     if not isinstance(optimized_formula, dict):
         optimized_formula = {}
-    formula_info = optimized_formula.get("optimized_formula", {}) if isinstance(optimized_formula, dict) else {}
-    # Ensure formula_info is a dict
-    if not isinstance(formula_info, dict):
-        formula_info = {}
     
-    if formula_info.get('name'):
-        sections.append(f"\nFormula Name: {formula_info.get('name')}")
-    if formula_info.get('total_percentage'):
-        sections.append(f"Total Percentage: {formula_info.get('total_percentage')}%")
-    if formula_info.get('estimated_cost_per_g'):
-        sections.append(f"Estimated Cost: ₹{formula_info.get('estimated_cost_per_g')}/g")
-    if formula_info.get('target_ph'):
-        ph_range = formula_info.get('target_ph', {})
-        sections.append(f"Target pH: {ph_range.get('min', '')} - {ph_range.get('max', '')}")
+    # For new format, optimized_formula might be empty or have different structure
+    # Check if we have formula data from new format
+    if is_new_format and formula:
+        # Extract from new format structure
+        if formula.get('name'):
+            sections.append(f"\nFormula Name: {formula.get('name')}")
+        if formula.get('complexity'):
+            sections.append(f"Complexity: {formula.get('complexity', '').title()}")
+        
+        # Calculate total percentage from phases
+        if formula.get('phases'):
+            total_percent = 0
+            sections.append("\nOptimized Ingredient Percentages:")
+            sections.append("-" * 80)
+            sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Purpose':<15}")
+            sections.append("-" * 80)
+            
+            for phase in formula.get('phases', []):
+                phase_name = phase.get('name', '')
+                phase_order = phase.get('order', 0)
+                for ing in phase.get('ingredients', []):
+                    name = ing.get('display_name', ing.get('name', 'Unknown'))
+                    percent_str = ing.get('percentage', '0%')
+                    phase_letter = ing.get('phase', str(phase_order))
+                    purpose = ing.get('purpose', '')
+                    
+                    # Try to extract numeric value for total calculation
+                    try:
+                        percent_val = float(percent_str.replace('%', '').replace('q.s.', '0').strip())
+                        total_percent += percent_val
+                    except:
+                        pass
+                    
+                    sections.append(f"{name:<40} {percent_str:<15} {phase_letter:<10} {purpose:<15}")
+            
+            if total_percent > 0:
+                sections.append("-" * 80)
+                sections.append(f"Total Percentage: {total_percent:.2f}%")
+    else:
+        # Old format handling
+        formula_info = optimized_formula.get("optimized_formula", {}) if isinstance(optimized_formula, dict) else {}
+        # Ensure formula_info is a dict
+        if not isinstance(formula_info, dict):
+            formula_info = {}
+        
+        if formula_info.get('name'):
+            sections.append(f"\nFormula Name: {formula_info.get('name')}")
+        if formula_info.get('total_percentage'):
+            sections.append(f"Total Percentage: {formula_info.get('total_percentage')}%")
+        if formula_info.get('estimated_cost_per_g'):
+            sections.append(f"Estimated Cost: ₹{formula_info.get('estimated_cost_per_g')}/g")
+        if formula_info.get('target_ph'):
+            ph_range = formula_info.get('target_ph', {})
+            sections.append(f"Target pH: {ph_range.get('min', '')} - {ph_range.get('max', '')}")
+        
+        if 'ingredients' in optimized_formula:
+            sections.append("\nOptimized Ingredient Percentages:")
+            sections.append("-" * 80)
+            sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Function':<15}")
+            sections.append("-" * 80)
+            for ing in optimized_formula['ingredients']:
+                name = ing.get('name', 'Unknown')
+                percent = ing.get('percent', 0)
+                phase = ing.get('phase', '')
+                function = ing.get('function', '')
+                sections.append(f"{name:<40} {percent:<15}% {phase:<10} {function:<15}")
     
-    if 'ingredients' in optimized_formula:
-        sections.append("\nOptimized Ingredient Percentages:")
-        sections.append("-" * 80)
-        sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Function':<15}")
-        sections.append("-" * 80)
-        for ing in optimized_formula['ingredients']:
-            name = ing.get('name', 'Unknown')
-            percent = ing.get('percent', 0)
-            phase = ing.get('phase', '')
-            function = ing.get('function', '')
-            sections.append(f"{name:<40} {percent:<15}% {phase:<10} {function:<15}")
-    
-    # Cost Breakdown
-    if optimized_formula.get('cost_breakdown'):
-        cost_breakdown = optimized_formula.get('cost_breakdown', {})
-        sections.append("\nCost Breakdown:")
-        sections.append(f"  Total per g: ₹{cost_breakdown.get('total_per_g', 0)}")
-        sections.append(f"  Actives: ₹{cost_breakdown.get('actives_cost', 0)}")
-        sections.append(f"  Base: ₹{cost_breakdown.get('base_cost', 0)}")
-        sections.append(f"  Functional: ₹{cost_breakdown.get('functional_cost', 0)}")
-        sections.append(f"  Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}")
-        if cost_breakdown.get('cost_vs_target'):
-            sections.append(f"  Cost vs Target: {cost_breakdown.get('cost_vs_target', 'N/A')}")
-    
-    # Phase Summary
-    if optimized_formula.get('phase_summary'):
-        sections.append("\nPhase Summary:")
-        for phase_sum in optimized_formula.get('phase_summary', []):
-            sections.append(f"  Phase {phase_sum.get('phase', '')}: {phase_sum.get('name', '')} - {phase_sum.get('total_percent', 0)}% ({phase_sum.get('ingredients_count', 0)} ingredients)")
-    
-    # Insights from Optimized Formula
-    if optimized_formula.get('insights'):
-        sections.append("\nOptimization Insights:")
-        for insight in optimized_formula.get('insights', []):
-            icon = insight.get('icon', '•')
-            title = insight.get('title', '')
-            text = insight.get('text', '')
-            sections.append(f"  {icon} {title}: {text}")
-    
-    # Warnings from Optimized Formula
-    if optimized_formula.get('warnings'):
-        sections.append("\nOptimization Warnings:")
-        for warning in optimized_formula.get('warnings', []):
-            severity = warning.get('severity', 'info').upper()
-            text = warning.get('text', '')
-            affected = warning.get('affected_ingredients', [])
-            solution = warning.get('solution', '')
-            sections.append(f"  [{severity}] {text}")
-            if affected:
-                if affected and isinstance(affected, list):
-                    if affected and isinstance(affected[0], dict):
-                        affected_str = ', '.join([str(a.get('name', a.get('ingredient', a))) for a in affected if a])
+        # Cost Breakdown (old format only)
+        if optimized_formula.get('cost_breakdown'):
+            cost_breakdown = optimized_formula.get('cost_breakdown', {})
+            sections.append("\nCost Breakdown:")
+            sections.append(f"  Total per g: ₹{cost_breakdown.get('total_per_g', 0)}")
+            sections.append(f"  Actives: ₹{cost_breakdown.get('actives_cost', 0)}")
+            sections.append(f"  Base: ₹{cost_breakdown.get('base_cost', 0)}")
+            sections.append(f"  Functional: ₹{cost_breakdown.get('functional_cost', 0)}")
+            sections.append(f"  Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}")
+            if cost_breakdown.get('cost_vs_target'):
+                sections.append(f"  Cost vs Target: {cost_breakdown.get('cost_vs_target', 'N/A')}")
+        
+        # Phase Summary (old format only)
+        if optimized_formula.get('phase_summary'):
+            sections.append("\nPhase Summary:")
+            for phase_sum in optimized_formula.get('phase_summary', []):
+                sections.append(f"  Phase {phase_sum.get('phase', '')}: {phase_sum.get('name', '')} - {phase_sum.get('total_percent', 0)}% ({phase_sum.get('ingredients_count', 0)} ingredients)")
+        
+        # Insights from Optimized Formula (old format only)
+        if optimized_formula.get('insights'):
+            sections.append("\nOptimization Insights:")
+            for insight in optimized_formula.get('insights', []):
+                icon = insight.get('icon', '•')
+                title = insight.get('title', '')
+                text = insight.get('text', '')
+                sections.append(f"  {icon} {title}: {text}")
+        
+        # Warnings from Optimized Formula (old format only)
+        if optimized_formula.get('warnings'):
+            sections.append("\nOptimization Warnings:")
+            for warning in optimized_formula.get('warnings', []):
+                severity = warning.get('severity', 'info').upper()
+                text = warning.get('text', '')
+                affected = warning.get('affected_ingredients', [])
+                solution = warning.get('solution', '')
+                sections.append(f"  [{severity}] {text}")
+                if affected:
+                    if affected and isinstance(affected, list):
+                        if affected and isinstance(affected[0], dict):
+                            affected_str = ', '.join([str(a.get('name', a.get('ingredient', a))) for a in affected if a])
+                        else:
+                            affected_str = ', '.join([str(a) for a in affected if a])
+                        sections.append(f"    Affected Ingredients: {affected_str}")
                     else:
-                        affected_str = ', '.join([str(a) for a in affected if a])
-                    sections.append(f"    Affected Ingredients: {affected_str}")
-                else:
-                    sections.append(f"    Affected Ingredients: {str(affected)}")
-            if solution:
-                sections.append(f"    Solution: {solution}")
-    
-    # Stability Notes
-    if optimized_formula.get('stability_notes'):
-        sections.append("\nStability Notes:")
-        for note in optimized_formula.get('stability_notes', []):
-            sections.append(f"  • {note}")
-    
-    # pH Adjustment
-    if optimized_formula.get('ph_adjustment'):
-        ph_adj = optimized_formula.get('ph_adjustment', {})
-        sections.append("\npH Adjustment:")
-        sections.append(f"  Expected Initial pH: {ph_adj.get('expected_initial_ph', 'N/A')}")
-        sections.append(f"  Target pH: {ph_adj.get('target_ph', 'N/A')}")
-        sections.append(f"  Adjuster: {ph_adj.get('adjuster', 'N/A')}")
-        sections.append(f"  Estimated Amount: {ph_adj.get('estimated_amount', 'N/A')}")
+                        sections.append(f"    Affected Ingredients: {str(affected)}")
+                if solution:
+                    sections.append(f"    Solution: {solution}")
+        
+        # Stability Notes (old format only)
+        if optimized_formula.get('stability_notes'):
+            sections.append("\nStability Notes:")
+            for note in optimized_formula.get('stability_notes', []):
+                sections.append(f"  • {note}")
+        
+        # pH Adjustment (old format only)
+        if optimized_formula.get('ph_adjustment'):
+            ph_adj = optimized_formula.get('ph_adjustment', {})
+            sections.append("\npH Adjustment:")
+            sections.append(f"  Expected Initial pH: {ph_adj.get('expected_initial_ph', 'N/A')}")
+            sections.append(f"  Target pH: {ph_adj.get('target_ph', 'N/A')}")
+            sections.append(f"  Adjuster: {ph_adj.get('adjuster', 'N/A')}")
+            sections.append(f"  Estimated Amount: {ph_adj.get('estimated_amount', 'N/A')}")
     
     # Stage 3: Manufacturing Process
     sections.append("\n" + "=" * 80)
@@ -1655,11 +1825,23 @@ async def generate_make_wish_formula(
 # ============================================================================
 
 class GeneratePPTRequest(BaseModel):
-    """Request schema for PPT generation - accepts either history_id or full wish data"""
+    """Request schema for PPT generation - accepts either history_id or full wish data
+    
+    Supports both old format (ingredient_selection, optimized_formula) and new format (formula, insights)
+    """
     history_id: Optional[str] = Field(default=None, description="History ID to fetch wish data from database")
     wish_data: Optional[Dict[str, Any]] = Field(default=None, description="Full wish data object")
-    ingredient_selection: Optional[Dict[str, Any]] = Field(default=None, description="Ingredient selection data")
-    optimized_formula: Optional[Dict[str, Any]] = Field(default=None, description="Optimized formula data")
+    parsed_data: Optional[Dict[str, Any]] = Field(default=None, description="Parsed wish data (new format)")
+    
+    # Old format fields
+    ingredient_selection: Optional[Dict[str, Any]] = Field(default=None, description="Ingredient selection data (old format)")
+    optimized_formula: Optional[Dict[str, Any]] = Field(default=None, description="Optimized formula data (old format)")
+    
+    # New format fields
+    formula: Optional[Dict[str, Any]] = Field(default=None, description="Formula data (new format)")
+    insights: Optional[Dict[str, Any]] = Field(default=None, description="Formula insights (new format)")
+    
+    # Common fields (both formats)
     manufacturing: Optional[Dict[str, Any]] = Field(default=None, description="Manufacturing process data")
     cost_analysis: Optional[Dict[str, Any]] = Field(default=None, description="Cost analysis data")
     compliance: Optional[Dict[str, Any]] = Field(default=None, description="Compliance data")
@@ -1787,14 +1969,27 @@ async def generate_wish_ppt(
                 if not isinstance(formula_data, dict):
                     formula_data = {}
                 
-                wish_response_data = {
-                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
-                    "ingredient_selection": formula_data.get("ingredient_selection", {}) if isinstance(formula_data, dict) else {},
-                    "optimized_formula": formula_data.get("optimized_formula", {}) if isinstance(formula_data, dict) else {},
-                    "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
-                    "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
-                    "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
-                }
+                # Check if it's the new revised format (has 'formula' and 'insights') or old format within formula_data
+                if "formula" in formula_data or "insights" in formula_data:
+                    # New revised format structure
+                    wish_response_data = {
+                        "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                        "formula": formula_data.get("formula", {}) if isinstance(formula_data, dict) else {},
+                        "insights": formula_data.get("insights", {}) if isinstance(formula_data, dict) else {},
+                        "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                        "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                        "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
+                    }
+                else:
+                    # Old format within formula_data (backward compatibility)
+                    wish_response_data = {
+                        "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                        "ingredient_selection": formula_data.get("ingredient_selection", {}) if isinstance(formula_data, dict) else {},
+                        "optimized_formula": formula_data.get("optimized_formula", {}) if isinstance(formula_data, dict) else {},
+                        "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                        "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                        "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
+                    }
                 # Also include parsed_data if available (for new format)
                 if "parsed_data" in history_doc:
                     wish_response_data["parsed_data"] = history_doc.get("parsed_data")
@@ -1858,17 +2053,34 @@ async def generate_wish_ppt(
                   f"optimized_formula={bool(wish_response_data.get('optimized_formula'))}, "
                   f"parsed_data={bool(wish_response_data.get('parsed_data'))}")
         
-        elif request.wish_data or request.ingredient_selection:
+        elif request.wish_data or request.ingredient_selection or hasattr(request, 'formula') or hasattr(request, 'insights'):
             # Use data from request body directly
-            wish_response_data = {
-                "wish_data": request.wish_data or {},
-                "ingredient_selection": request.ingredient_selection or {},
-                "optimized_formula": request.optimized_formula or {},
-                "manufacturing": request.manufacturing or {},
-                "cost_analysis": request.cost_analysis or {},
-                "compliance": request.compliance or {}
-            }
-            print(f"[DEBUG] ✅ Using wish data from request body")
+            # Check if it's new format (has formula/insights) or old format
+            request_dict = request.model_dump(exclude_none=True) if hasattr(request, 'model_dump') else {}
+            
+            if 'formula' in request_dict or 'insights' in request_dict:
+                # New format
+                wish_response_data = {
+                    "wish_data": request.wish_data or request_dict.get("wish_data") or {},
+                    "parsed_data": request_dict.get("parsed_data") or {},
+                    "formula": request_dict.get("formula") or {},
+                    "insights": request_dict.get("insights") or {},
+                    "manufacturing": request.manufacturing or request_dict.get("manufacturing") or {},
+                    "cost_analysis": request.cost_analysis or request_dict.get("cost_analysis") or {},
+                    "compliance": request.compliance or request_dict.get("compliance") or {}
+                }
+                print(f"[DEBUG] ✅ Using wish data from request body (new format)")
+            else:
+                # Old format
+                wish_response_data = {
+                    "wish_data": request.wish_data or {},
+                    "ingredient_selection": request.ingredient_selection or {},
+                    "optimized_formula": request.optimized_formula or {},
+                    "manufacturing": request.manufacturing or {},
+                    "cost_analysis": request.cost_analysis or {},
+                    "compliance": request.compliance or {}
+                }
+                print(f"[DEBUG] ✅ Using wish data from request body (old format)")
         
         else:
             raise HTTPException(
@@ -1897,12 +2109,16 @@ async def generate_wish_ppt(
         has_ingredient_selection = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("ingredient_selection"))
         has_optimized_formula = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("optimized_formula"))
         has_parsed_data = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("parsed_data"))
+        # New format checks
+        has_formula = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("formula"))
+        has_insights = wish_response_data and isinstance(wish_response_data, dict) and bool(wish_response_data.get("insights"))
         
         # For old format, formula_result might have data directly (check if it's a non-empty dict)
         is_non_empty_dict = wish_response_data and isinstance(wish_response_data, dict) and len(wish_response_data) > 0
         
         print(f"[DEBUG] Validation checks: has_wish_data={has_wish_data}, has_ingredient_selection={has_ingredient_selection}, "
-              f"has_optimized_formula={has_optimized_formula}, has_parsed_data={has_parsed_data}, is_non_empty_dict={is_non_empty_dict}")
+              f"has_optimized_formula={has_optimized_formula}, has_parsed_data={has_parsed_data}, "
+              f"has_formula={has_formula}, has_insights={has_insights}, is_non_empty_dict={is_non_empty_dict}")
         
         # For old format, check if formula_result has nested data
         has_nested_data = False
@@ -1921,6 +2137,8 @@ async def generate_wish_ppt(
             has_ingredient_selection or 
             has_optimized_formula or 
             has_parsed_data or
+            has_formula or  # New format
+            has_insights or  # New format
             has_nested_data or
             is_non_empty_dict
         )
@@ -1931,7 +2149,7 @@ async def generate_wish_ppt(
             error_detail = "Invalid wish data. Missing required fields. "
             if wish_response_data and isinstance(wish_response_data, dict):
                 error_detail += f"Found keys: {list(wish_response_data.keys())}. "
-            error_detail += "The history item must contain formula data (ingredient_selection, optimized_formula, wish_data, or parsed_data)."
+            error_detail += "The history item must contain formula data (formula/insights for new format, or ingredient_selection/optimized_formula for old format, or wish_data/parsed_data)."
             print(f"[DEBUG] ❌ Validation failed: {error_detail}")
             raise HTTPException(
                 status_code=400,
