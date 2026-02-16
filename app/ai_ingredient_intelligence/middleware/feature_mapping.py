@@ -17,7 +17,7 @@ FEATURE_MAPPING = {
     "/api/decode": "INCI Analysis",  # Alias
     
     # Formulation Reports Feature
-    "/api/formulation-report": "Formulation Reports",
+    "/api/formulation-report-json": "Formulation Reports",
     
     # Market Research Feature
     "/api/market-research": "Market Research",

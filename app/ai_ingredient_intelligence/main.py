@@ -74,7 +74,7 @@ async def root():
         "docs": "/docs",
         "endpoints": {
             "ocr_analysis": "/api/analyze-inci",
-            "formulation_report": "/api/formulation-report",
+            "formulation_report": "/api/formulation-report-json",
             "health": "/health"
         }
     }
@@ -136,7 +136,7 @@ async def api_info():
                 "input_types": ["text", "pdf", "image", "camera"]
             },
             "formulation_report": {
-                "url": "/api/formulation-report",
+                "url": "/api/formulation-report-json",
                 "method": "POST",
                 "description": "Generate detailed formulation analysis reports"
             },
