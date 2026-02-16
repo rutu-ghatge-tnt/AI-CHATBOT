@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
 from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
-from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+# synthesize_trend_insights - function doesn't exist, will handle gracefully in endpoint
 from app.ai_ingredient_intelligence.logic.trend_monitor import TrendMonitor
 from app.ai_ingredient_intelligence.models.trend_schemas import (
     TrendAnalysisRequest,
@@ -288,33 +288,22 @@ async def synthesize_trends(
         
         synthesis_result = None
         if has_valid_data:
-            try:
-                synthesis_result = await synthesize_trend_insights(
-                    request.ingredient,
-                    safe_trend_data,
-                    safe_consumer_intent_data,
-                    safe_competitive_data,
-                    safe_regional_data
-                )
-            except Exception as synth_error:
-                print(f"⚠️ Synthesis error: {synth_error}")
-                import traceback
-                traceback.print_exc()
-                default_synthesis = {
-                    "opportunity_score": None,
-                    "scores_breakdown": {},
-                    "tier": None,
-                    "confidence": "low",
-                    "key_insights": [],
-                    "product_recommendations": [],
-                    "marketing_angles": [],
-                    "risks": [],
-                    "next_steps": []
-                }
-                synthesis_result = {
-                    "error": f"Synthesis failed: {str(synth_error)}",
-                    "synthesis": default_synthesis  # Return default structure instead of None
-                }
+            # synthesize_trend_insights function not available - return error message
+            default_synthesis = {
+                "opportunity_score": None,
+                "scores_breakdown": {},
+                "tier": None,
+                "confidence": "low",
+                "key_insights": ["Synthesis function not available. Please use /api/make-wish/market-trends endpoint instead."],
+                "product_recommendations": [],
+                "marketing_angles": [],
+                "risks": [],
+                "next_steps": []
+            }
+            synthesis_result = {
+                "error": "synthesize_trend_insights function is not available. Use /api/make-wish/market-trends endpoint instead.",
+                "synthesis": default_synthesis
+            }
         else:
             default_synthesis = {
                 "opportunity_score": None,

@@ -113,18 +113,16 @@ async def generate_ppt_from_data(
                 print(f"[GAMMA] ✅ Truncated at character limit: {len(prompt)} characters")
     
     # Prepare Gamma API request
-    # Note: Gamma API only accepts: inputText, format, exportAs, textMode, numCards, additionalInstructions, imageOptions
+    # Note: Gamma API only accepts: inputText, format, exportAs, textMode, numCards, additionalInstructions
     # Removed: tone, audience, amount, language (not supported by Gamma API - included in prompt instead)
+    # Removed: imageOptions - not supported by Gamma API
     gamma_request_payload = {
         "inputText": data_text,
         "format": "presentation",
         "exportAs": export_format,
         "textMode": "generate",
         "numCards": num_slides,
-        "additionalInstructions": prompt,
-        "imageOptions": {
-            "model": "webAllImages"
-        }
+        "additionalInstructions": prompt
     }
     
     # Call Gamma API

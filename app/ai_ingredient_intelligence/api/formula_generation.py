@@ -1133,6 +1133,7 @@ async def get_wish_history_detail(
             "market_trends": market_trends,  # Include market trends data in response
             "synthesis_data": synthesis_data,  # Include synthesis data in response
             "query_info": query_info,  # Include query/commercialization info if available
+            "gamma_ppt": doc.get("gamma_ppt"),  # Include Gamma PPT info (download_url, edit_url, etc.)
             # For future reference: legacy / backward compatibility (uncomment if needed)
             # "wish_data": doc.get("wish_data"),
             # "formula_result": doc.get("formula_result"),
