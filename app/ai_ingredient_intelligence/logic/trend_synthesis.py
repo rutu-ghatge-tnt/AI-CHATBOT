@@ -769,19 +769,19 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
     
     try:
         if not has_new_format and not has_old_format:
-        # Log what we actually got
-        present_fields = [key for key in data.keys() if not key.startswith('_')]
-        print(f"[TREND SYNTHESIS] ⚠️ Neither new nor old format detected. Present fields: {', '.join(present_fields)}")
-        print(f"[TREND SYNTHESIS] 🔧 Creating minimal valid response structure...")
-        
-        # Create a minimal valid response with executive_summary
-        data['executive_summary'] = create_fallback_executive_summary(data)
-        data['related_keywords'] = data.get('related_keywords', [])
-        data['hero_ingredient_analysis'] = data.get('hero_ingredient_analysis', [])
-        data['competitive_landscape'] = data.get('competitive_landscape', [])
-        
-        # Mark as new format now
-        has_new_format = True
+            # Log what we actually got
+            present_fields = [key for key in data.keys() if not key.startswith('_')]
+            print(f"[TREND SYNTHESIS] ⚠️ Neither new nor old format detected. Present fields: {', '.join(present_fields)}")
+            print(f"[TREND SYNTHESIS] 🔧 Creating minimal valid response structure...")
+            
+            # Create a minimal valid response with executive_summary
+            data['executive_summary'] = create_fallback_executive_summary(data)
+            data['related_keywords'] = data.get('related_keywords', [])
+            data['hero_ingredient_analysis'] = data.get('hero_ingredient_analysis', [])
+            data['competitive_landscape'] = data.get('competitive_landscape', [])
+            
+            # Mark as new format now
+            has_new_format = True
     
     if has_new_format:
         # Validate new format structure (more lenient - only require executive_summary)
@@ -857,13 +857,7 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
         
         # Validate opportunity_breakdown if present
         opp_breakdown = data.get('opportunity_breakdown', {})
-        if opp_breakdown:
-            demand_score = opp_breakdown.get('demand_score', 0)
-            competition_score = opp_breakdown.get('competition_score', 0)
-            timing_score = opp_breakdown.get('timing_score', 0)
-            feasibility_score = opp_breakdown.get('feasibility_score', 0)
-            margin_score = opp_breakdown.get('margin_score', 0)
-            
+        if opp_breakdown and isinstance(opp_breakdown, dict):
             # Validate and clamp sub-scores to valid ranges
             score_ranges = {
                 'demand_score': (0, 25),
