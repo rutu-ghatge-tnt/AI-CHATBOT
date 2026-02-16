@@ -136,16 +136,16 @@ class PromptCacheManager:
             
             if age < cached_entry.get('ttl', CACHE_TTL):
                 # Cache is still valid - Claude will use cached version
-                print(f"✅ Cache HIT for {prompt_type} (age: {age:.0f}s) - using cached system prompt")
+                print(f"[CACHE] Cache HIT for {prompt_type} (age: {age:.0f}s) - using cached system prompt")
                 return {"type": "ephemeral", "ttl": ttl}
             else:
                 # Cache expired, remove it
-                print(f"⏰ Cache EXPIRED for {prompt_type} (age: {age:.0f}s)")
+                print(f"[CACHE] Cache EXPIRED for {prompt_type} (age: {age:.0f}s)")
                 del self._cache_store[cache_key]
         
         # No valid cache, create new cache entry
         try:
-            print(f"📝 Setting up cache for {prompt_type} (will cache for {ttl})...")
+            print(f"[CACHE] Setting up cache for {prompt_type} (will cache for {ttl})...")
             
             # Store cache metadata
             cache_block_id = self._get_prompt_hash(system_prompt)
@@ -158,11 +158,11 @@ class PromptCacheManager:
                 "system_prompt": system_prompt  # Store for reference
             }
             
-            print(f"✅ Cache configured for {prompt_type} - first call will write to cache")
+            print(f"[CACHE] Cache configured for {prompt_type} - first call will write to cache")
             return {"type": "ephemeral", "ttl": ttl}
             
         except Exception as e:
-            print(f"⚠️ Failed to configure cache for {prompt_type}: {e}")
+            print(f"[CACHE] WARNING: Failed to configure cache for {prompt_type}: {e}")
             # Return None to fall back to regular API call
             return None
     
@@ -198,11 +198,11 @@ class PromptCacheManager:
             
             if age < cached_entry.get('ttl', CACHE_TTL):
                 # Cache is still valid - Claude will use cached version
-                print(f"✅ Cache HIT for {prompt_type} (age: {age:.0f}s) - using cached system prompt")
+                print(f"[CACHE] Cache HIT for {prompt_type} (age: {age:.0f}s) - using cached system prompt")
                 cache_control = {"type": "ephemeral", "ttl": ttl}
             else:
                 # Cache expired, remove it
-                print(f"⏰ Cache EXPIRED for {prompt_type} (age: {age:.0f}s)")
+                print(f"[CACHE] Cache EXPIRED for {prompt_type} (age: {age:.0f}s)")
                 del self._cache_store[cache_key]
                 cache_control = None
         else:
@@ -211,7 +211,7 @@ class PromptCacheManager:
         # If no valid cache, create new cache entry
         if not cache_control:
             try:
-                print(f"📝 Setting up cache for {prompt_type} (will cache for {ttl})...")
+                print(f"[CACHE] Setting up cache for {prompt_type} (will cache for {ttl})...")
                 
                 # Store cache metadata
                 cache_block_id = self._get_prompt_hash(system_prompt)
@@ -225,9 +225,9 @@ class PromptCacheManager:
                 }
                 
                 cache_control = {"type": "ephemeral", "ttl": ttl}
-                print(f"✅ Cache configured for {prompt_type} - first call will write to cache")
+                print(f"[CACHE] Cache configured for {prompt_type} - first call will write to cache")
             except Exception as e:
-                print(f"⚠️ Failed to configure cache for {prompt_type}: {e}")
+                print(f"[CACHE] WARNING: Failed to configure cache for {prompt_type}: {e}")
                 # Return original string if caching fails
                 return system_prompt
         
@@ -310,11 +310,11 @@ class PromptCacheManager:
             ]
             for key in keys_to_remove:
                 del self._cache_store[key]
-            print(f"🗑️ Cleared {len(keys_to_remove)} cache entries for {prompt_type}")
+            print(f"[CACHE] Cleared {len(keys_to_remove)} cache entries for {prompt_type}")
         else:
             count = len(self._cache_store)
             self._cache_store.clear()
-            print(f"🗑️ Cleared all {count} cache entries")
+            print(f"[CACHE] Cleared all {count} cache entries")
 
 
 # Global cache manager instance
