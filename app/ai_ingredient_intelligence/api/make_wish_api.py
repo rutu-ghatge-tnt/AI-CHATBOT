@@ -1142,11 +1142,11 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         sections.append("\n" + "=" * 80)
         sections.append("STAGE 2: OPTIMIZED FORMULA")
         sections.append("=" * 80)
-        
-        optimized_formula = wish_response.get("optimized_formula") or {}
-        # Ensure optimized_formula is a dict (handle None case)
-        if not isinstance(optimized_formula, dict):
-            optimized_formula = {}
+    
+    optimized_formula = wish_response.get("optimized_formula") or {}
+    # Ensure optimized_formula is a dict (handle None case)
+    if not isinstance(optimized_formula, dict):
+        optimized_formula = {}
         
         # For new format, optimized_formula might be empty or have different structure
         # Check if we have formula data from new format
@@ -1189,94 +1189,94 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         else:
             # Old format handling
             formula_info = optimized_formula.get("optimized_formula", {}) if isinstance(optimized_formula, dict) else {}
-            # Ensure formula_info is a dict
-            if not isinstance(formula_info, dict):
-                formula_info = {}
-            
-            if formula_info.get('name'):
-                sections.append(f"\nFormula Name: {formula_info.get('name')}")
-            if formula_info.get('total_percentage'):
-                sections.append(f"Total Percentage: {formula_info.get('total_percentage')}%")
-            if formula_info.get('estimated_cost_per_g'):
-                sections.append(f"Estimated Cost: ₹{formula_info.get('estimated_cost_per_g')}/g")
-            if formula_info.get('target_ph'):
-                ph_range = formula_info.get('target_ph', {})
-                sections.append(f"Target pH: {ph_range.get('min', '')} - {ph_range.get('max', '')}")
-            
-            if 'ingredients' in optimized_formula:
-                sections.append("\nOptimized Ingredient Percentages:")
-                sections.append("-" * 80)
-                sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Function':<15}")
-                sections.append("-" * 80)
-                for ing in optimized_formula['ingredients']:
-                    name = ing.get('name', 'Unknown')
-                    percent = ing.get('percent', 0)
-                    phase = ing.get('phase', '')
-                    function = ing.get('function', '')
-                    sections.append(f"{name:<40} {percent:<15}% {phase:<10} {function:<15}")
-        
+    # Ensure formula_info is a dict
+    if not isinstance(formula_info, dict):
+        formula_info = {}
+    
+    if formula_info.get('name'):
+        sections.append(f"\nFormula Name: {formula_info.get('name')}")
+    if formula_info.get('total_percentage'):
+        sections.append(f"Total Percentage: {formula_info.get('total_percentage')}%")
+    if formula_info.get('estimated_cost_per_g'):
+        sections.append(f"Estimated Cost: ₹{formula_info.get('estimated_cost_per_g')}/g")
+    if formula_info.get('target_ph'):
+        ph_range = formula_info.get('target_ph', {})
+        sections.append(f"Target pH: {ph_range.get('min', '')} - {ph_range.get('max', '')}")
+    
+    if 'ingredients' in optimized_formula:
+        sections.append("\nOptimized Ingredient Percentages:")
+        sections.append("-" * 80)
+        sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Function':<15}")
+        sections.append("-" * 80)
+        for ing in optimized_formula['ingredients']:
+            name = ing.get('name', 'Unknown')
+            percent = ing.get('percent', 0)
+            phase = ing.get('phase', '')
+            function = ing.get('function', '')
+            sections.append(f"{name:<40} {percent:<15}% {phase:<10} {function:<15}")
+    
             # Cost Breakdown (old format only)
-            if optimized_formula.get('cost_breakdown'):
-                cost_breakdown = optimized_formula.get('cost_breakdown', {})
-                sections.append("\nCost Breakdown:")
-                sections.append(f"  Total per g: ₹{cost_breakdown.get('total_per_g', 0)}")
-                sections.append(f"  Actives: ₹{cost_breakdown.get('actives_cost', 0)}")
-                sections.append(f"  Base: ₹{cost_breakdown.get('base_cost', 0)}")
-                sections.append(f"  Functional: ₹{cost_breakdown.get('functional_cost', 0)}")
-                sections.append(f"  Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}")
-                if cost_breakdown.get('cost_vs_target'):
-                    sections.append(f"  Cost vs Target: {cost_breakdown.get('cost_vs_target', 'N/A')}")
-            
+    if optimized_formula.get('cost_breakdown'):
+        cost_breakdown = optimized_formula.get('cost_breakdown', {})
+        sections.append("\nCost Breakdown:")
+        sections.append(f"  Total per g: ₹{cost_breakdown.get('total_per_g', 0)}")
+        sections.append(f"  Actives: ₹{cost_breakdown.get('actives_cost', 0)}")
+        sections.append(f"  Base: ₹{cost_breakdown.get('base_cost', 0)}")
+        sections.append(f"  Functional: ₹{cost_breakdown.get('functional_cost', 0)}")
+        sections.append(f"  Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}")
+        if cost_breakdown.get('cost_vs_target'):
+            sections.append(f"  Cost vs Target: {cost_breakdown.get('cost_vs_target', 'N/A')}")
+    
             # Phase Summary (old format only)
-            if optimized_formula.get('phase_summary'):
-                sections.append("\nPhase Summary:")
-                for phase_sum in optimized_formula.get('phase_summary', []):
-                    sections.append(f"  Phase {phase_sum.get('phase', '')}: {phase_sum.get('name', '')} - {phase_sum.get('total_percent', 0)}% ({phase_sum.get('ingredients_count', 0)} ingredients)")
-            
+    if optimized_formula.get('phase_summary'):
+        sections.append("\nPhase Summary:")
+        for phase_sum in optimized_formula.get('phase_summary', []):
+            sections.append(f"  Phase {phase_sum.get('phase', '')}: {phase_sum.get('name', '')} - {phase_sum.get('total_percent', 0)}% ({phase_sum.get('ingredients_count', 0)} ingredients)")
+    
             # Insights from Optimized Formula (old format only)
-            if optimized_formula.get('insights'):
-                sections.append("\nOptimization Insights:")
-                for insight in optimized_formula.get('insights', []):
-                    icon = insight.get('icon', '•')
-                    title = insight.get('title', '')
-                    text = insight.get('text', '')
-                    sections.append(f"  {icon} {title}: {text}")
-            
+    if optimized_formula.get('insights'):
+        sections.append("\nOptimization Insights:")
+        for insight in optimized_formula.get('insights', []):
+            icon = insight.get('icon', '•')
+            title = insight.get('title', '')
+            text = insight.get('text', '')
+            sections.append(f"  {icon} {title}: {text}")
+    
             # Warnings from Optimized Formula (old format only)
-            if optimized_formula.get('warnings'):
-                sections.append("\nOptimization Warnings:")
-                for warning in optimized_formula.get('warnings', []):
-                    severity = warning.get('severity', 'info').upper()
-                    text = warning.get('text', '')
-                    affected = warning.get('affected_ingredients', [])
-                    solution = warning.get('solution', '')
-                    sections.append(f"  [{severity}] {text}")
-                    if affected:
-                        if affected and isinstance(affected, list):
-                            if affected and isinstance(affected[0], dict):
-                                affected_str = ', '.join([str(a.get('name', a.get('ingredient', a))) for a in affected if a])
-                            else:
-                                affected_str = ', '.join([str(a) for a in affected if a])
-                            sections.append(f"    Affected Ingredients: {affected_str}")
-                        else:
-                            sections.append(f"    Affected Ingredients: {str(affected)}")
-                    if solution:
-                        sections.append(f"    Solution: {solution}")
-            
+    if optimized_formula.get('warnings'):
+        sections.append("\nOptimization Warnings:")
+        for warning in optimized_formula.get('warnings', []):
+            severity = warning.get('severity', 'info').upper()
+            text = warning.get('text', '')
+            affected = warning.get('affected_ingredients', [])
+            solution = warning.get('solution', '')
+            sections.append(f"  [{severity}] {text}")
+            if affected:
+                if affected and isinstance(affected, list):
+                    if affected and isinstance(affected[0], dict):
+                        affected_str = ', '.join([str(a.get('name', a.get('ingredient', a))) for a in affected if a])
+                    else:
+                        affected_str = ', '.join([str(a) for a in affected if a])
+                    sections.append(f"    Affected Ingredients: {affected_str}")
+                else:
+                    sections.append(f"    Affected Ingredients: {str(affected)}")
+            if solution:
+                sections.append(f"    Solution: {solution}")
+    
             # Stability Notes (old format only)
-            if optimized_formula.get('stability_notes'):
-                sections.append("\nStability Notes:")
-                for note in optimized_formula.get('stability_notes', []):
-                    sections.append(f"  • {note}")
-            
+    if optimized_formula.get('stability_notes'):
+        sections.append("\nStability Notes:")
+        for note in optimized_formula.get('stability_notes', []):
+            sections.append(f"  • {note}")
+    
             # pH Adjustment (old format only)
-            if optimized_formula.get('ph_adjustment'):
-                ph_adj = optimized_formula.get('ph_adjustment', {})
-                sections.append("\npH Adjustment:")
-                sections.append(f"  Expected Initial pH: {ph_adj.get('expected_initial_ph', 'N/A')}")
-                sections.append(f"  Target pH: {ph_adj.get('target_ph', 'N/A')}")
-                sections.append(f"  Adjuster: {ph_adj.get('adjuster', 'N/A')}")
-                sections.append(f"  Estimated Amount: {ph_adj.get('estimated_amount', 'N/A')}")
+    if optimized_formula.get('ph_adjustment'):
+        ph_adj = optimized_formula.get('ph_adjustment', {})
+        sections.append("\npH Adjustment:")
+        sections.append(f"  Expected Initial pH: {ph_adj.get('expected_initial_ph', 'N/A')}")
+        sections.append(f"  Target pH: {ph_adj.get('target_ph', 'N/A')}")
+        sections.append(f"  Adjuster: {ph_adj.get('adjuster', 'N/A')}")
+        sections.append(f"  Estimated Amount: {ph_adj.get('estimated_amount', 'N/A')}")
     
     # Stage 3: Manufacturing Process
     # Skip if we already handled formula_result or basic_mode_result format
@@ -1284,121 +1284,121 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         sections.append("\n" + "=" * 80)
         sections.append("STAGE 3: MANUFACTURING PROCESS")
         sections.append("=" * 80)
-        
-        manufacturing = wish_response.get("manufacturing") or {}
-        # Ensure manufacturing is a dict (handle None case)
-        if not isinstance(manufacturing, dict):
-            manufacturing = {}
-        if manufacturing.get('process_type'):
-            sections.append(f"\nProcess Type: {manufacturing.get('process_type', '').title()}")
-        if manufacturing.get('difficulty_level'):
-            sections.append(f"Difficulty Level: {manufacturing.get('difficulty_level', '').title()}")
-        if manufacturing.get('estimated_time'):
-            time_info = manufacturing.get('estimated_time', {})
-            sections.append(f"Lab Scale (100g): {time_info.get('lab_scale_100g', 'N/A')}")
-            sections.append(f"Pilot Scale (5kg): {time_info.get('pilot_scale_5kg', 'N/A')}")
-        
-        if 'manufacturing_steps' in manufacturing:
-            sections.append("\nManufacturing Steps:")
-            for step in manufacturing['manufacturing_steps']:
-                step_num = step.get('step_number', '')
-                title = step.get('title', '')
-                phase = step.get('phase', '')
-                temp = step.get('temperature', '')
-                duration = step.get('duration', '')
-                
-                sections.append(f"\nStep {step_num}: {title}")
-                if phase:
-                    sections.append(f"  Phase: {phase}")
-                if temp:
-                    sections.append(f"  Temperature: {temp}")
-                if duration:
-                    sections.append(f"  Duration: {duration}")
-                if step.get('ingredients'):
-                    sections.append(f"  Ingredients: {', '.join(step.get('ingredients', []))}")
-                if step.get('instructions'):
-                    for instruction in step.get('instructions', []):
-                        sections.append(f"    • {instruction}")
-        
-        # Equipment
-        if manufacturing.get('equipment_needed'):
-            equipment = manufacturing.get('equipment_needed', {})
-            if equipment.get('essential'):
-                sections.append("\nEssential Equipment:")
-                for item in equipment.get('essential', []):
-                    sections.append(f"  • {item.get('item', '')}: {item.get('purpose', '')}")
-            if equipment.get('recommended'):
-                sections.append("\nRecommended Equipment:")
-                for item in equipment.get('recommended', []):
-                    sections.append(f"  • {item.get('item', '')}: {item.get('purpose', '')}")
-        
-        # Critical Parameters
-        if manufacturing.get('critical_parameters'):
-            sections.append("\nCritical Parameters:")
-            for param in manufacturing.get('critical_parameters', []):
-                sections.append(f"  {param.get('parameter', '')} ({param.get('stage', '')}):")
-                sections.append(f"    Target: {param.get('target', 'N/A')}")
-                sections.append(f"    Method: {param.get('method', 'N/A')}")
-                if param.get('adjustment'):
-                    sections.append(f"    Adjustment: {param.get('adjustment', 'N/A')}")
-        
-        # Troubleshooting
-        if manufacturing.get('troubleshooting'):
-            sections.append("\nTroubleshooting Guide:")
-            for issue in manufacturing.get('troubleshooting', []):
-                sections.append(f"  Issue: {issue.get('issue', 'N/A')}")
-                sections.append(f"    Cause: {issue.get('cause', 'N/A')}")
-                sections.append(f"    Solution: {issue.get('solution', 'N/A')}")
-        
-        # Packaging Guidelines
-        if manufacturing.get('packaging_guidelines'):
-            pkg = manufacturing.get('packaging_guidelines', {})
-            sections.append("\nPackaging Guidelines:")
-            if pkg.get('recommended_packaging'):
-                rec_pkg = pkg.get('recommended_packaging', [])
-                if rec_pkg and isinstance(rec_pkg, list):
-                    if rec_pkg and isinstance(rec_pkg[0], dict):
-                        rec_pkg_str = ', '.join([str(p.get('name', p.get('packaging', p))) for p in rec_pkg if p])
-                    else:
-                        rec_pkg_str = ', '.join([str(p) for p in rec_pkg if p])
-                    sections.append(f"  Recommended: {rec_pkg_str}")
-            if pkg.get('avoid'):
-                avoid_pkg = pkg.get('avoid', [])
-                if avoid_pkg and isinstance(avoid_pkg, list):
-                    if avoid_pkg and isinstance(avoid_pkg[0], dict):
-                        avoid_pkg_str = ', '.join([str(p.get('name', p.get('packaging', p))) for p in avoid_pkg if p])
-                    else:
-                        avoid_pkg_str = ', '.join([str(p) for p in avoid_pkg if p])
-                    sections.append(f"  Avoid: {avoid_pkg_str}")
-            if pkg.get('fill_temperature'):
-                sections.append(f"  Fill Temperature: {pkg.get('fill_temperature', 'N/A')}")
-            if pkg.get('storage'):
-                sections.append(f"  Storage: {pkg.get('storage', 'N/A')}")
-        
-        # Quality Control
-        if manufacturing.get('quality_control'):
-            qc = manufacturing.get('quality_control', {})
-            sections.append("\nQuality Control:")
-            if qc.get('in_process'):
-                sections.append("  In-Process Checks:")
-                for check in qc.get('in_process', []):
-                    sections.append(f"    • {check}")
-            if qc.get('final_product'):
-                sections.append("  Final Product Checks:")
-                for check in qc.get('final_product', []):
-                    sections.append(f"    • {check}")
-        
-        # Scale Up Notes
-        if manufacturing.get('scale_up_notes'):
-            sections.append("\nScale-Up Notes:")
-            for note in manufacturing.get('scale_up_notes', []):
-                sections.append(f"  • {note}")
-        
-        # Safety Precautions
-        if manufacturing.get('safety_precautions'):
-            sections.append("\nSafety Precautions:")
-            for precaution in manufacturing.get('safety_precautions', []):
-                sections.append(f"  • {precaution}")
+    
+    manufacturing = wish_response.get("manufacturing") or {}
+    # Ensure manufacturing is a dict (handle None case)
+    if not isinstance(manufacturing, dict):
+        manufacturing = {}
+    if manufacturing.get('process_type'):
+        sections.append(f"\nProcess Type: {manufacturing.get('process_type', '').title()}")
+    if manufacturing.get('difficulty_level'):
+        sections.append(f"Difficulty Level: {manufacturing.get('difficulty_level', '').title()}")
+    if manufacturing.get('estimated_time'):
+        time_info = manufacturing.get('estimated_time', {})
+        sections.append(f"Lab Scale (100g): {time_info.get('lab_scale_100g', 'N/A')}")
+        sections.append(f"Pilot Scale (5kg): {time_info.get('pilot_scale_5kg', 'N/A')}")
+    
+    if 'manufacturing_steps' in manufacturing:
+        sections.append("\nManufacturing Steps:")
+        for step in manufacturing['manufacturing_steps']:
+            step_num = step.get('step_number', '')
+            title = step.get('title', '')
+            phase = step.get('phase', '')
+            temp = step.get('temperature', '')
+            duration = step.get('duration', '')
+            
+            sections.append(f"\nStep {step_num}: {title}")
+            if phase:
+                sections.append(f"  Phase: {phase}")
+            if temp:
+                sections.append(f"  Temperature: {temp}")
+            if duration:
+                sections.append(f"  Duration: {duration}")
+            if step.get('ingredients'):
+                sections.append(f"  Ingredients: {', '.join(step.get('ingredients', []))}")
+            if step.get('instructions'):
+                for instruction in step.get('instructions', []):
+                    sections.append(f"    • {instruction}")
+    
+    # Equipment
+    if manufacturing.get('equipment_needed'):
+        equipment = manufacturing.get('equipment_needed', {})
+        if equipment.get('essential'):
+            sections.append("\nEssential Equipment:")
+            for item in equipment.get('essential', []):
+                sections.append(f"  • {item.get('item', '')}: {item.get('purpose', '')}")
+        if equipment.get('recommended'):
+            sections.append("\nRecommended Equipment:")
+            for item in equipment.get('recommended', []):
+                sections.append(f"  • {item.get('item', '')}: {item.get('purpose', '')}")
+    
+    # Critical Parameters
+    if manufacturing.get('critical_parameters'):
+        sections.append("\nCritical Parameters:")
+        for param in manufacturing.get('critical_parameters', []):
+            sections.append(f"  {param.get('parameter', '')} ({param.get('stage', '')}):")
+            sections.append(f"    Target: {param.get('target', 'N/A')}")
+            sections.append(f"    Method: {param.get('method', 'N/A')}")
+            if param.get('adjustment'):
+                sections.append(f"    Adjustment: {param.get('adjustment', 'N/A')}")
+    
+    # Troubleshooting
+    if manufacturing.get('troubleshooting'):
+        sections.append("\nTroubleshooting Guide:")
+        for issue in manufacturing.get('troubleshooting', []):
+            sections.append(f"  Issue: {issue.get('issue', 'N/A')}")
+            sections.append(f"    Cause: {issue.get('cause', 'N/A')}")
+            sections.append(f"    Solution: {issue.get('solution', 'N/A')}")
+    
+    # Packaging Guidelines
+    if manufacturing.get('packaging_guidelines'):
+        pkg = manufacturing.get('packaging_guidelines', {})
+        sections.append("\nPackaging Guidelines:")
+        if pkg.get('recommended_packaging'):
+            rec_pkg = pkg.get('recommended_packaging', [])
+            if rec_pkg and isinstance(rec_pkg, list):
+                if rec_pkg and isinstance(rec_pkg[0], dict):
+                    rec_pkg_str = ', '.join([str(p.get('name', p.get('packaging', p))) for p in rec_pkg if p])
+                else:
+                    rec_pkg_str = ', '.join([str(p) for p in rec_pkg if p])
+                sections.append(f"  Recommended: {rec_pkg_str}")
+        if pkg.get('avoid'):
+            avoid_pkg = pkg.get('avoid', [])
+            if avoid_pkg and isinstance(avoid_pkg, list):
+                if avoid_pkg and isinstance(avoid_pkg[0], dict):
+                    avoid_pkg_str = ', '.join([str(p.get('name', p.get('packaging', p))) for p in avoid_pkg if p])
+                else:
+                    avoid_pkg_str = ', '.join([str(p) for p in avoid_pkg if p])
+                sections.append(f"  Avoid: {avoid_pkg_str}")
+        if pkg.get('fill_temperature'):
+            sections.append(f"  Fill Temperature: {pkg.get('fill_temperature', 'N/A')}")
+        if pkg.get('storage'):
+            sections.append(f"  Storage: {pkg.get('storage', 'N/A')}")
+    
+    # Quality Control
+    if manufacturing.get('quality_control'):
+        qc = manufacturing.get('quality_control', {})
+        sections.append("\nQuality Control:")
+        if qc.get('in_process'):
+            sections.append("  In-Process Checks:")
+            for check in qc.get('in_process', []):
+                sections.append(f"    • {check}")
+        if qc.get('final_product'):
+            sections.append("  Final Product Checks:")
+            for check in qc.get('final_product', []):
+                sections.append(f"    • {check}")
+    
+    # Scale Up Notes
+    if manufacturing.get('scale_up_notes'):
+        sections.append("\nScale-Up Notes:")
+        for note in manufacturing.get('scale_up_notes', []):
+            sections.append(f"  • {note}")
+    
+    # Safety Precautions
+    if manufacturing.get('safety_precautions'):
+        sections.append("\nSafety Precautions:")
+        for precaution in manufacturing.get('safety_precautions', []):
+            sections.append(f"  • {precaution}")
     
     # Stage 4: Cost Analysis
     # Skip if we already handled formula_result or basic_mode_result format (cost info already included)
@@ -1406,197 +1406,197 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         sections.append("\n" + "=" * 80)
         sections.append("STAGE 4: COST ANALYSIS")
         sections.append("=" * 80)
-        
-        cost_analysis = wish_response.get("cost_analysis") or {}
-        # Ensure cost_analysis is a dict (handle None case)
-        if not isinstance(cost_analysis, dict):
-            cost_analysis = {}
     
-        # Raw Material Cost
-        if cost_analysis.get('raw_material_cost'):
-            rm_cost = cost_analysis.get('raw_material_cost', {})
-            sections.append("\nRaw Material Cost:")
-            sections.append(f"  Total per g: ₹{rm_cost.get('total_per_g', 0)}")
-            sections.append(f"  Total per 100g: ₹{rm_cost.get('total_per_100g', 0)}")
-            
-            if rm_cost.get('breakdown_by_category'):
-                breakdown = rm_cost.get('breakdown_by_category', {})
-                sections.append("\n  Breakdown by Category:")
-                sections.append(f"    Actives: ₹{breakdown.get('actives', 0)}")
-                sections.append(f"    Base: ₹{breakdown.get('base_ingredients', 0)}")
-                sections.append(f"    Functional: ₹{breakdown.get('functional_ingredients', 0)}")
-                sections.append(f"    Preservatives: ₹{breakdown.get('preservatives', 0)}")
+    cost_analysis = wish_response.get("cost_analysis") or {}
+    # Ensure cost_analysis is a dict (handle None case)
+    if not isinstance(cost_analysis, dict):
+        cost_analysis = {}
+    
+    # Raw Material Cost
+    if cost_analysis.get('raw_material_cost'):
+        rm_cost = cost_analysis.get('raw_material_cost', {})
+        sections.append("\nRaw Material Cost:")
+        sections.append(f"  Total per g: ₹{rm_cost.get('total_per_g', 0)}")
+        sections.append(f"  Total per 100g: ₹{rm_cost.get('total_per_100g', 0)}")
         
-        # Cost Estimate with ranges
-        if cost_analysis.get('cost_estimate'):
-            cost_est = cost_analysis.get('cost_estimate', {})
-            if cost_est.get('raw_material_per_g'):
-                per_g = cost_est.get('raw_material_per_g', {})
-                sections.append("\nCost Estimate (per g):")
-                sections.append(f"  Optimistic: ₹{per_g.get('optimistic', 0)}")
-                sections.append(f"  Realistic: ₹{per_g.get('realistic', 0)}")
-                sections.append(f"  Conservative: ₹{per_g.get('conservative', 0)}")
-                sections.append(f"  Range: {per_g.get('display_range', 'N/A')}")
-                sections.append(f"  Confidence: {per_g.get('confidence', 'N/A').title()}")
+        if rm_cost.get('breakdown_by_category'):
+            breakdown = rm_cost.get('breakdown_by_category', {})
+            sections.append("\n  Breakdown by Category:")
+            sections.append(f"    Actives: ₹{breakdown.get('actives', 0)}")
+            sections.append(f"    Base: ₹{breakdown.get('base_ingredients', 0)}")
+            sections.append(f"    Functional: ₹{breakdown.get('functional_ingredients', 0)}")
+            sections.append(f"    Preservatives: ₹{breakdown.get('preservatives', 0)}")
+    
+    # Cost Estimate with ranges
+    if cost_analysis.get('cost_estimate'):
+        cost_est = cost_analysis.get('cost_estimate', {})
+        if cost_est.get('raw_material_per_g'):
+            per_g = cost_est.get('raw_material_per_g', {})
+            sections.append("\nCost Estimate (per g):")
+            sections.append(f"  Optimistic: ₹{per_g.get('optimistic', 0)}")
+            sections.append(f"  Realistic: ₹{per_g.get('realistic', 0)}")
+            sections.append(f"  Conservative: ₹{per_g.get('conservative', 0)}")
+            sections.append(f"  Range: {per_g.get('display_range', 'N/A')}")
+            sections.append(f"  Confidence: {per_g.get('confidence', 'N/A').title()}")
+    
+    # Total Product Cost
+    if cost_analysis.get('total_product_cost'):
+        total_cost = cost_analysis.get('total_product_cost', {})
+        if total_cost.get('with_packaging_per_unit'):
+            sections.append("\nTotal Product Cost (with packaging):")
+            for size, cost_data in total_cost.get('with_packaging_per_unit', {}).items():
+                sections.append(f"  {size}: ₹{cost_data.get('total', 0)}")
+                sections.append(f"    - Formula: ₹{cost_data.get('formula_cost', 0)}")
+                sections.append(f"    - Packaging: ₹{cost_data.get('packaging_cost', 0)}")
+                sections.append(f"    - Labelling: ₹{cost_data.get('labelling_cost', 0)}")
+                sections.append(f"    - Carton: ₹{cost_data.get('carton_box_cost', 0)}")
+    
+    # Top Cost Drivers
+    if cost_analysis.get('raw_material_cost', {}).get('top_cost_drivers'):
+        sections.append("\nTop Cost Drivers:")
+        for driver in cost_analysis.get('raw_material_cost', {}).get('top_cost_drivers', []):
+            sections.append(f"  {driver.get('ingredient', '')}: ₹{driver.get('cost', 0)} ({driver.get('percentage', 0)}%) - {driver.get('contribution', '')} of total")
+    
+    # Cost Estimate Details
+    if cost_analysis.get('cost_estimate'):
+        cost_est = cost_analysis.get('cost_estimate', {})
+        if cost_est.get('raw_material_per_100g'):
+            per_100g = cost_est.get('raw_material_per_100g', {})
+            sections.append("\nCost Estimate (per 100g):")
+            sections.append(f"  Optimistic: ₹{per_100g.get('optimistic', 0)}")
+            sections.append(f"  Realistic: ₹{per_100g.get('realistic', 0)}")
+            sections.append(f"  Conservative: ₹{per_100g.get('conservative', 0)}")
+            sections.append(f"  Range: {per_100g.get('display_range', 'N/A')}")
         
-        # Total Product Cost
-        if cost_analysis.get('total_product_cost'):
-            total_cost = cost_analysis.get('total_product_cost', {})
-            if total_cost.get('with_packaging_per_unit'):
-                sections.append("\nTotal Product Cost (with packaging):")
-                for size, cost_data in total_cost.get('with_packaging_per_unit', {}).items():
-                    sections.append(f"  {size}: ₹{cost_data.get('total', 0)}")
-                    sections.append(f"    - Formula: ₹{cost_data.get('formula_cost', 0)}")
-                    sections.append(f"    - Packaging: ₹{cost_data.get('packaging_cost', 0)}")
-                    sections.append(f"    - Labelling: ₹{cost_data.get('labelling_cost', 0)}")
-                    sections.append(f"    - Carton: ₹{cost_data.get('carton_box_cost', 0)}")
-        
-        # Top Cost Drivers
-        if cost_analysis.get('raw_material_cost', {}).get('top_cost_drivers'):
-            sections.append("\nTop Cost Drivers:")
-            for driver in cost_analysis.get('raw_material_cost', {}).get('top_cost_drivers', []):
-                sections.append(f"  {driver.get('ingredient', '')}: ₹{driver.get('cost', 0)} ({driver.get('percentage', 0)}%) - {driver.get('contribution', '')} of total")
-        
-        # Cost Estimate Details
-        if cost_analysis.get('cost_estimate'):
-            cost_est = cost_analysis.get('cost_estimate', {})
-            if cost_est.get('raw_material_per_100g'):
-                per_100g = cost_est.get('raw_material_per_100g', {})
-                sections.append("\nCost Estimate (per 100g):")
-                sections.append(f"  Optimistic: ₹{per_100g.get('optimistic', 0)}")
-                sections.append(f"  Realistic: ₹{per_100g.get('realistic', 0)}")
-                sections.append(f"  Conservative: ₹{per_100g.get('conservative', 0)}")
-                sections.append(f"  Range: {per_100g.get('display_range', 'N/A')}")
-            
-            # Confidence Breakdown
-            if cost_est.get('confidence_breakdown'):
-                conf = cost_est.get('confidence_breakdown', {})
-                sections.append("\nConfidence Breakdown:")
-                if conf.get('high_confidence_ingredients'):
-                    high = conf.get('high_confidence_ingredients', {})
-                    sections.append(f"  High Confidence: {high.get('count', 0)} ingredients, ₹{high.get('cost_contribution', 0)} ({high.get('percentage_of_total', '0%')})")
-                if conf.get('medium_confidence_ingredients'):
-                    med = conf.get('medium_confidence_ingredients', {})
-                    sections.append(f"  Medium Confidence: {med.get('count', 0)} ingredients, ₹{med.get('cost_contribution', 0)} ({med.get('percentage_of_total', '0%')})")
-                if conf.get('low_confidence_ingredients'):
-                    low = conf.get('low_confidence_ingredients', {})
-                    sections.append(f"  Low Confidence: {low.get('count', 0)} ingredients, ₹{low.get('cost_contribution', 0)} ({low.get('percentage_of_total', '0%')})")
-                    if low.get('names'):
-                        low_names = low.get('names', [])
-                        if low_names and isinstance(low_names, list):
-                            if low_names and isinstance(low_names[0], dict):
-                                low_names_str = ', '.join([str(n.get('name', n.get('ingredient', n))) for n in low_names if n])
-                            else:
-                                low_names_str = ', '.join([str(n) for n in low_names if n])
-                            sections.append(f"    Ingredients: {low_names_str}")
+        # Confidence Breakdown
+        if cost_est.get('confidence_breakdown'):
+            conf = cost_est.get('confidence_breakdown', {})
+            sections.append("\nConfidence Breakdown:")
+            if conf.get('high_confidence_ingredients'):
+                high = conf.get('high_confidence_ingredients', {})
+                sections.append(f"  High Confidence: {high.get('count', 0)} ingredients, ₹{high.get('cost_contribution', 0)} ({high.get('percentage_of_total', '0%')})")
+            if conf.get('medium_confidence_ingredients'):
+                med = conf.get('medium_confidence_ingredients', {})
+                sections.append(f"  Medium Confidence: {med.get('count', 0)} ingredients, ₹{med.get('cost_contribution', 0)} ({med.get('percentage_of_total', '0%')})")
+            if conf.get('low_confidence_ingredients'):
+                low = conf.get('low_confidence_ingredients', {})
+                sections.append(f"  Low Confidence: {low.get('count', 0)} ingredients, ₹{low.get('cost_contribution', 0)} ({low.get('percentage_of_total', '0%')})")
+                if low.get('names'):
+                    low_names = low.get('names', [])
+                    if low_names and isinstance(low_names, list):
+                        if low_names and isinstance(low_names[0], dict):
+                            low_names_str = ', '.join([str(n.get('name', n.get('ingredient', n))) for n in low_names if n])
                         else:
-                            sections.append(f"    Ingredients: {str(low_names)}")
-                    if low.get('recommendation'):
-                        sections.append(f"    Recommendation: {low.get('recommendation', '')}")
-            
-            # Top Cost Drivers (detailed)
-            if cost_est.get('top_cost_drivers'):
-                sections.append("\nDetailed Top Cost Drivers:")
-                for driver in cost_est.get('top_cost_drivers', []):
-                    sections.append(f"  {driver.get('ingredient', '')}:")
-                    sections.append(f"    Percentage in Formula: {driver.get('percentage_in_formula', 0)}%")
-                    sections.append(f"    Cost per kg Range: {driver.get('cost_per_kg_range', 'N/A')}")
-                    sections.append(f"    Cost per g Range: {driver.get('cost_per_g_range', 'N/A')}")
-                    sections.append(f"    Share of Total: {driver.get('share_of_total', 'N/A')}")
-                    sections.append(f"    Confidence: {driver.get('confidence', 'N/A').title()}")
-                    if driver.get('note'):
-                        sections.append(f"    Note: {driver.get('note', '')}")
-            
-            # Disclaimers
-            if cost_est.get('disclaimers'):
-                sections.append("\nCost Estimation Disclaimers:")
-                for disclaimer in cost_est.get('disclaimers', []):
-                    sections.append(f"  • {disclaimer}")
+                            low_names_str = ', '.join([str(n) for n in low_names if n])
+                        sections.append(f"    Ingredients: {low_names_str}")
+                    else:
+                        sections.append(f"    Ingredients: {str(low_names)}")
+                if low.get('recommendation'):
+                    sections.append(f"    Recommendation: {low.get('recommendation', '')}")
         
-        # Packaging Estimate
-        if cost_analysis.get('packaging_estimate'):
-            sections.append("\nPackaging Options:")
-            for option_key, option_data in cost_analysis.get('packaging_estimate', {}).items():
-                sections.append(f"  {option_data.get('type', option_key)}:")
-                sections.append(f"    Packaging: ₹{option_data.get('packaging_cost', 0)}")
-                sections.append(f"    Labelling: ₹{option_data.get('labelling_cost', 0)}")
-                sections.append(f"    Carton: ₹{option_data.get('carton_box_cost', 0)}")
-                sections.append(f"    Total: ₹{option_data.get('total_packaging_cost', 0)}")
-                sections.append(f"    Total Unit Cost: ₹{option_data.get('total_unit', 0)}")
+        # Top Cost Drivers (detailed)
+        if cost_est.get('top_cost_drivers'):
+            sections.append("\nDetailed Top Cost Drivers:")
+            for driver in cost_est.get('top_cost_drivers', []):
+                sections.append(f"  {driver.get('ingredient', '')}:")
+                sections.append(f"    Percentage in Formula: {driver.get('percentage_in_formula', 0)}%")
+                sections.append(f"    Cost per kg Range: {driver.get('cost_per_kg_range', 'N/A')}")
+                sections.append(f"    Cost per g Range: {driver.get('cost_per_g_range', 'N/A')}")
+                sections.append(f"    Share of Total: {driver.get('share_of_total', 'N/A')}")
+                sections.append(f"    Confidence: {driver.get('confidence', 'N/A').title()}")
+                if driver.get('note'):
+                    sections.append(f"    Note: {driver.get('note', '')}")
         
-        # Total Product Cost with Overhead
-        if cost_analysis.get('total_product_cost', {}).get('with_overhead_20_percent'):
-            sections.append("\nTotal Product Cost (with 20% Manufacturing Overhead):")
-            for size, cost_data in cost_analysis.get('total_product_cost', {}).get('with_overhead_20_percent', {}).items():
-                sections.append(f"  {size}:")
-                sections.append(f"    Subtotal: ₹{cost_data.get('subtotal_before_overhead', 0)}")
-                sections.append(f"    Overhead (20%): ₹{cost_data.get('manufacturing_overhead_20_percent', 0)}")
-                sections.append(f"    Total: ₹{cost_data.get('total', 0)}")
-        
-        # Pricing Recommendations
-        if cost_analysis.get('pricing_recommendations'):
-            pricing = cost_analysis.get('pricing_recommendations', {})
-            sections.append("\nPricing Recommendations:")
-            if pricing.get('d2c_mrp_5x'):
-                sections.append("\n  D2C MRP (5x markup):")
-                for size, price in pricing.get('d2c_mrp_5x', {}).items():
-                    sections.append(f"    {size}: ₹{price}")
-            if pricing.get('retail_mrp_6x'):
-                sections.append("\n  Retail MRP (6x markup):")
-                for size, price in pricing.get('retail_mrp_6x', {}).items():
-                    sections.append(f"    {size}: ₹{price}")
-            if pricing.get('premium_positioning_8x'):
-                sections.append("\n  Premium Positioning (8x markup):")
-                for size, price in pricing.get('premium_positioning_8x', {}).items():
-                    sections.append(f"    {size}: ₹{price}")
-        
-        # Cost Optimization Suggestions
-        if cost_analysis.get('cost_optimization_suggestions'):
-            sections.append("\nCost Optimization Suggestions:")
-            for suggestion in cost_analysis.get('cost_optimization_suggestions', []):
-                sections.append(f"  • {suggestion.get('suggestion', '')}")
-                sections.append(f"    Savings: {suggestion.get('savings', 'N/A')}")
-                sections.append(f"    Impact: {suggestion.get('impact', 'N/A')}")
-        
-        # Competitor Comparison
-        if cost_analysis.get('competitor_comparison'):
-            comp = cost_analysis.get('competitor_comparison', {})
-            sections.append("\nCompetitor Comparison:")
-            if comp.get('similar_products'):
-                sections.append("  Similar Products:")
-                for product in comp.get('similar_products', []):
-                    sections.append(f"    {product.get('brand', '')} - {product.get('product', '')}:")
-                    sections.append(f"      MRP: ₹{product.get('mrp', 0)} ({product.get('size', 'N/A')})")
-                    sections.append(f"      Price per {product.get('size_unit', 'unit')}: {product.get('price_per_unit_display', 'N/A')}")
-                    if product.get('advantage'):
-                        sections.append(f"      Advantage: {product.get('advantage', '')}")
-            if comp.get('your_product'):
-                your_prod = comp.get('your_product', {})
-                sections.append("  Your Product:")
-                sections.append(f"    Recommended MRP: ₹{your_prod.get('recommended_mrp', 0)} ({your_prod.get('size', 'N/A')})")
-                sections.append(f"    Price per {your_prod.get('size_unit', 'unit')}: {your_prod.get('price_per_unit_display', 'N/A')}")
-            if comp.get('competitive_position'):
-                sections.append(f"  Competitive Position: {comp.get('competitive_position', 'N/A')}")
-            if comp.get('advantages'):
-                sections.append("  Advantages:")
-                for adv in comp.get('advantages', []):
-                    sections.append(f"    • {adv.get('competitor_brand', '')}: {adv.get('advantage', '')}")
-        
-        # Validation Report
-        if cost_analysis.get('validation_report'):
-            val = cost_analysis.get('validation_report', {})
-            sections.append("\nCost Validation Report:")
-            sections.append(f"  Water Cost Check: {val.get('water_cost_check', 'N/A')}")
-            sections.append(f"  Total vs Benchmark: {val.get('total_vs_benchmark', 'N/A')}")
-            sections.append(f"  Active Cost Ratio: {val.get('active_cost_ratio', 'N/A')}")
-            sections.append(f"  MRP Plausibility: {val.get('mrp_plausibility', 'N/A')}")
-            sections.append(f"  Ingredient Ratio Check: {val.get('ingredient_ratio_check', 'N/A')}")
-            sections.append(f"  Competitor Alignment: {val.get('competitor_alignment', 'N/A')}")
-            sections.append(f"  Overall Confidence: {val.get('overall_confidence', 'N/A').upper()}")
-            if val.get('flags'):
-                sections.append("  Flags:")
-                for flag in val.get('flags', []):
-                    sections.append(f"    ⚠️ {flag}")
+        # Disclaimers
+        if cost_est.get('disclaimers'):
+            sections.append("\nCost Estimation Disclaimers:")
+            for disclaimer in cost_est.get('disclaimers', []):
+                sections.append(f"  • {disclaimer}")
+    
+    # Packaging Estimate
+    if cost_analysis.get('packaging_estimate'):
+        sections.append("\nPackaging Options:")
+        for option_key, option_data in cost_analysis.get('packaging_estimate', {}).items():
+            sections.append(f"  {option_data.get('type', option_key)}:")
+            sections.append(f"    Packaging: ₹{option_data.get('packaging_cost', 0)}")
+            sections.append(f"    Labelling: ₹{option_data.get('labelling_cost', 0)}")
+            sections.append(f"    Carton: ₹{option_data.get('carton_box_cost', 0)}")
+            sections.append(f"    Total: ₹{option_data.get('total_packaging_cost', 0)}")
+            sections.append(f"    Total Unit Cost: ₹{option_data.get('total_unit', 0)}")
+    
+    # Total Product Cost with Overhead
+    if cost_analysis.get('total_product_cost', {}).get('with_overhead_20_percent'):
+        sections.append("\nTotal Product Cost (with 20% Manufacturing Overhead):")
+        for size, cost_data in cost_analysis.get('total_product_cost', {}).get('with_overhead_20_percent', {}).items():
+            sections.append(f"  {size}:")
+            sections.append(f"    Subtotal: ₹{cost_data.get('subtotal_before_overhead', 0)}")
+            sections.append(f"    Overhead (20%): ₹{cost_data.get('manufacturing_overhead_20_percent', 0)}")
+            sections.append(f"    Total: ₹{cost_data.get('total', 0)}")
+    
+    # Pricing Recommendations
+    if cost_analysis.get('pricing_recommendations'):
+        pricing = cost_analysis.get('pricing_recommendations', {})
+        sections.append("\nPricing Recommendations:")
+        if pricing.get('d2c_mrp_5x'):
+            sections.append("\n  D2C MRP (5x markup):")
+            for size, price in pricing.get('d2c_mrp_5x', {}).items():
+                sections.append(f"    {size}: ₹{price}")
+        if pricing.get('retail_mrp_6x'):
+            sections.append("\n  Retail MRP (6x markup):")
+            for size, price in pricing.get('retail_mrp_6x', {}).items():
+                sections.append(f"    {size}: ₹{price}")
+        if pricing.get('premium_positioning_8x'):
+            sections.append("\n  Premium Positioning (8x markup):")
+            for size, price in pricing.get('premium_positioning_8x', {}).items():
+                sections.append(f"    {size}: ₹{price}")
+    
+    # Cost Optimization Suggestions
+    if cost_analysis.get('cost_optimization_suggestions'):
+        sections.append("\nCost Optimization Suggestions:")
+        for suggestion in cost_analysis.get('cost_optimization_suggestions', []):
+            sections.append(f"  • {suggestion.get('suggestion', '')}")
+            sections.append(f"    Savings: {suggestion.get('savings', 'N/A')}")
+            sections.append(f"    Impact: {suggestion.get('impact', 'N/A')}")
+    
+    # Competitor Comparison
+    if cost_analysis.get('competitor_comparison'):
+        comp = cost_analysis.get('competitor_comparison', {})
+        sections.append("\nCompetitor Comparison:")
+        if comp.get('similar_products'):
+            sections.append("  Similar Products:")
+            for product in comp.get('similar_products', []):
+                sections.append(f"    {product.get('brand', '')} - {product.get('product', '')}:")
+                sections.append(f"      MRP: ₹{product.get('mrp', 0)} ({product.get('size', 'N/A')})")
+                sections.append(f"      Price per {product.get('size_unit', 'unit')}: {product.get('price_per_unit_display', 'N/A')}")
+                if product.get('advantage'):
+                    sections.append(f"      Advantage: {product.get('advantage', '')}")
+        if comp.get('your_product'):
+            your_prod = comp.get('your_product', {})
+            sections.append("  Your Product:")
+            sections.append(f"    Recommended MRP: ₹{your_prod.get('recommended_mrp', 0)} ({your_prod.get('size', 'N/A')})")
+            sections.append(f"    Price per {your_prod.get('size_unit', 'unit')}: {your_prod.get('price_per_unit_display', 'N/A')}")
+        if comp.get('competitive_position'):
+            sections.append(f"  Competitive Position: {comp.get('competitive_position', 'N/A')}")
+        if comp.get('advantages'):
+            sections.append("  Advantages:")
+            for adv in comp.get('advantages', []):
+                sections.append(f"    • {adv.get('competitor_brand', '')}: {adv.get('advantage', '')}")
+    
+    # Validation Report
+    if cost_analysis.get('validation_report'):
+        val = cost_analysis.get('validation_report', {})
+        sections.append("\nCost Validation Report:")
+        sections.append(f"  Water Cost Check: {val.get('water_cost_check', 'N/A')}")
+        sections.append(f"  Total vs Benchmark: {val.get('total_vs_benchmark', 'N/A')}")
+        sections.append(f"  Active Cost Ratio: {val.get('active_cost_ratio', 'N/A')}")
+        sections.append(f"  MRP Plausibility: {val.get('mrp_plausibility', 'N/A')}")
+        sections.append(f"  Ingredient Ratio Check: {val.get('ingredient_ratio_check', 'N/A')}")
+        sections.append(f"  Competitor Alignment: {val.get('competitor_alignment', 'N/A')}")
+        sections.append(f"  Overall Confidence: {val.get('overall_confidence', 'N/A').upper()}")
+        if val.get('flags'):
+            sections.append("  Flags:")
+            for flag in val.get('flags', []):
+                sections.append(f"    ⚠️ {flag}")
     
     # Stage 5: Compliance
     # Skip if we already handled formula_result or basic_mode_result format (compliance already included)
@@ -1604,12 +1604,12 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
         sections.append("\n" + "=" * 80)
         sections.append("STAGE 5: COMPLIANCE CHECK")
         sections.append("=" * 80)
-        
-        compliance = wish_response.get("compliance") or {}
-        # Ensure compliance is a dict (handle None case)
-        if not isinstance(compliance, dict):
-            compliance = {}
-        sections.append(f"\nOverall Status: {compliance.get('overall_status', 'N/A') if isinstance(compliance, dict) else 'N/A'}")
+    
+    compliance = wish_response.get("compliance") or {}
+    # Ensure compliance is a dict (handle None case)
+    if not isinstance(compliance, dict):
+        compliance = {}
+    sections.append(f"\nOverall Status: {compliance.get('overall_status', 'N/A') if isinstance(compliance, dict) else 'N/A'}")
     
     # BIS Compliance
     if compliance.get('bis_compliance'):
@@ -2268,9 +2268,9 @@ async def generate_wish_ppt(
     Generate PowerPoint presentation from Make a Wish data using Gamma API.
     
     REQUEST BODY:
-    {
-        "history_id": "mongodb_object_id_here"
-    }
+       {
+           "history_id": "mongodb_object_id_here"
+       }
     
     All data will be retrieved from the database using the history_id.
     Supports all formats:
@@ -2346,39 +2346,39 @@ async def generate_wish_ppt(
             )
         
         # Extract wish response data from history
-            # Check if it's the new format (formula_data), old format (formula_result), or basic mode (basic_mode_result)
-            if "formula_data" in history_doc:
-                # New format (revised make wish - advanced mode)
-                formula_data = history_doc.get("formula_data") or {}
-                # Ensure formula_data is a dict (handle None case)
-                if not isinstance(formula_data, dict):
-                    formula_data = {}
-                
-                # Check if it's the new revised format (has 'formula' and 'insights') or old format within formula_data
-                if "formula" in formula_data or "insights" in formula_data:
-                    # New revised format structure
-                    wish_response_data = {
-                        "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
-                        "formula": formula_data.get("formula", {}) if isinstance(formula_data, dict) else {},
-                        "insights": formula_data.get("insights", {}) if isinstance(formula_data, dict) else {},
-                        "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
-                        "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
-                        "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
-                    }
-                else:
-                    # Old format within formula_data (backward compatibility)
-                    wish_response_data = {
-                        "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
-                        "ingredient_selection": formula_data.get("ingredient_selection", {}) if isinstance(formula_data, dict) else {},
-                        "optimized_formula": formula_data.get("optimized_formula", {}) if isinstance(formula_data, dict) else {},
-                        "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
-                        "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
-                        "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
-                    }
-                # Also include parsed_data if available (for new format)
-                if "parsed_data" in history_doc:
-                    wish_response_data["parsed_data"] = history_doc.get("parsed_data")
-            elif "formula_result" in history_doc:
+        # Check if it's the new format (formula_data), old format (formula_result), or basic mode (basic_mode_result)
+        if "formula_data" in history_doc:
+            # New format (revised make wish - advanced mode)
+            formula_data = history_doc.get("formula_data") or {}
+            # Ensure formula_data is a dict (handle None case)
+            if not isinstance(formula_data, dict):
+                formula_data = {}
+            
+            # Check if it's the new revised format (has 'formula' and 'insights') or old format within formula_data
+            if "formula" in formula_data or "insights" in formula_data:
+                # New revised format structure
+                wish_response_data = {
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "formula": formula_data.get("formula", {}) if isinstance(formula_data, dict) else {},
+                    "insights": formula_data.get("insights", {}) if isinstance(formula_data, dict) else {},
+                    "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                    "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                    "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
+                }
+            else:
+                # Old format within formula_data (backward compatibility)
+                wish_response_data = {
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "ingredient_selection": formula_data.get("ingredient_selection", {}) if isinstance(formula_data, dict) else {},
+                    "optimized_formula": formula_data.get("optimized_formula", {}) if isinstance(formula_data, dict) else {},
+                    "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                    "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                    "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
+                }
+            # Also include parsed_data if available (for new format)
+            if "parsed_data" in history_doc:
+                wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+        elif "formula_result" in history_doc:
                 # Old format (make wish) - formula_result contains the full response
                 formula_result = history_doc.get("formula_result", {})
                 # Ensure it has the expected structure
@@ -2412,66 +2412,66 @@ async def generate_wish_ppt(
                     },
                     "compliance": formula_result.get("compliance", {})
                 }
-            elif "basic_mode_result" in history_doc:
-                # Basic mode format - basic_mode_result contains the simplified formula
-                basic_result = history_doc.get("basic_mode_result") or {}
-                # Ensure basic_result is a dict (handle None case)
-                if not isinstance(basic_result, dict):
-                    basic_result = {}
-                
-                # Extract data from basic_mode_result structure
-                # basic_mode_result has: extractedParameters, activeOptions, formula, businessNumbers, etc.
-                formula_data = basic_result.get("formula", {})
-                technical_formula = formula_data.get("technicalFormula", {}) if isinstance(formula_data, dict) else {}
-                business_numbers = basic_result.get("businessNumbers", {}) if isinstance(basic_result, dict) else {}
-                
+        elif "basic_mode_result" in history_doc:
+            # Basic mode format - basic_mode_result contains the simplified formula
+            basic_result = history_doc.get("basic_mode_result") or {}
+            # Ensure basic_result is a dict (handle None case)
+            if not isinstance(basic_result, dict):
+                basic_result = {}
+            
+            # Extract data from basic_mode_result structure
+            # basic_mode_result has: extractedParameters, activeOptions, formula, businessNumbers, etc.
+            formula_data = basic_result.get("formula", {})
+            technical_formula = formula_data.get("technicalFormula", {}) if isinstance(formula_data, dict) else {}
+            business_numbers = basic_result.get("businessNumbers", {}) if isinstance(basic_result, dict) else {}
+            
+            wish_response_data = {
+                "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                "basic_mode_result": basic_result,  # Keep full basic_mode_result for reference
+                # Map to standard structure for compatibility
+                "ingredient_selection": {
+                    "formula_name": formula_data.get("formulaName", ""),
+                    "formula_type": basic_result.get("extractedParameters", {}).get("productType", ""),
+                    "ingredients": _extract_ingredients_from_basic_mode(basic_result)
+                },
+                "optimized_formula": {
+                    "optimized_formula": {
+                        "name": formula_data.get("formulaName", ""),
+                        "total_percentage": 100.0,
+                        "estimated_cost_per_g": technical_formula.get("totalCostPer100g", 0) / 100 if technical_formula.get("totalCostPer100g") else 0
+                    },
+                    "ingredients": _extract_ingredients_from_basic_mode(basic_result),
+                    "phases": technical_formula.get("phases", []),
+                    "insights": _extract_insights_from_basic_mode(basic_result),
+                    "warnings": _extract_warnings_from_basic_mode(basic_result)
+                },
+                "manufacturing": basic_result.get("manufacturing", {}),
+                "cost_analysis": _extract_cost_analysis_from_basic_mode(basic_result, business_numbers),
+                "compliance": basic_result.get("compliance", {})
+            }
+            # Include parsed_data if available
+            if "parsed_data" in history_doc:
+                wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+        else:
+            # No formula data found - check if we can still create a presentation from parsed_data
+            if "parsed_data" in history_doc or "wish_data" in history_doc:
+                # Use parsed_data/wish_data to create a basic presentation
                 wish_response_data = {
                     "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
-                    "basic_mode_result": basic_result,  # Keep full basic_mode_result for reference
-                    # Map to standard structure for compatibility
-                    "ingredient_selection": {
-                        "formula_name": formula_data.get("formulaName", ""),
-                        "formula_type": basic_result.get("extractedParameters", {}).get("productType", ""),
-                        "ingredients": _extract_ingredients_from_basic_mode(basic_result)
-                    },
-                    "optimized_formula": {
-                        "optimized_formula": {
-                            "name": formula_data.get("formulaName", ""),
-                            "total_percentage": 100.0,
-                            "estimated_cost_per_g": technical_formula.get("totalCostPer100g", 0) / 100 if technical_formula.get("totalCostPer100g") else 0
-                        },
-                        "ingredients": _extract_ingredients_from_basic_mode(basic_result),
-                        "phases": technical_formula.get("phases", []),
-                        "insights": _extract_insights_from_basic_mode(basic_result),
-                        "warnings": _extract_warnings_from_basic_mode(basic_result)
-                    },
-                    "manufacturing": basic_result.get("manufacturing", {}),
-                    "cost_analysis": _extract_cost_analysis_from_basic_mode(basic_result, business_numbers),
-                    "compliance": basic_result.get("compliance", {})
+                    "ingredient_selection": {},
+                    "optimized_formula": {},
+                    "manufacturing": {},
+                    "cost_analysis": {},
+                    "compliance": {}
                 }
-                # Include parsed_data if available
                 if "parsed_data" in history_doc:
                     wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+                print(f"[DEBUG] ⚠️ No formula data found, using parsed_data/wish_data only")
             else:
-                # No formula data found - check if we can still create a presentation from parsed_data
-                if "parsed_data" in history_doc or "wish_data" in history_doc:
-                    # Use parsed_data/wish_data to create a basic presentation
-                    wish_response_data = {
-                        "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
-                        "ingredient_selection": {},
-                        "optimized_formula": {},
-                        "manufacturing": {},
-                        "cost_analysis": {},
-                        "compliance": {}
-                    }
-                    if "parsed_data" in history_doc:
-                        wish_response_data["parsed_data"] = history_doc.get("parsed_data")
-                    print(f"[DEBUG] ⚠️ No formula data found, using parsed_data/wish_data only")
-                else:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="History item does not contain formula data or wish data. Please generate a formula first."
-                    )
+                raise HTTPException(
+                    status_code=400,
+                    detail="History item does not contain formula data or wish data. Please generate a formula first."
+                )
         
         print(f"[DEBUG] ✅ Fetched wish data from history_id: {history_id}")
         print(f"[DEBUG] History doc keys: {list(history_doc.keys())}")
