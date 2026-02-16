@@ -1814,21 +1814,16 @@ async def check_ppt_status(
 # MARKET TRENDS ENDPOINT
 # ============================================================================
 
-class MarketTrendsRequest(BaseModel):
-    """Request schema for market trends fetching - accepts history_id to fetch data from database"""
-    history_id: str = Field(..., description="History ID to fetch wish data from database")
-    max_age_days: int = Field(35, description="Maximum age of cached data in days")
-    use_fallback: bool = Field(True, description="Whether to use SerpAPI if MongoDB has no data")
-    use_synthesis: bool = Field(True, description="Whether to use Claude synthesis (default: True, recommended)")
-
-
-@router.post("/market-trends", response_model=None)
+@router.post("/market-trends/{history_id}", response_model=None)
 async def fetch_market_trends(
-    request: MarketTrendsRequest = Body(...),
+    history_id: str,
+    max_age_days: int = Query(35, description="Maximum age of cached data in days"),
+    use_fallback: bool = Query(True, description="Whether to use SerpAPI if MongoDB has no data"),
+    use_synthesis: bool = Query(True, description="Whether to use Claude synthesis (default: True, recommended)"),
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
-    Fetch market trends data for a wish using history_id.
+    Fetch market trends data for a wish using history_id from route.
     
     This endpoint fetches wish data from the database using history_id, then provides
     market intelligence data from MongoDB (batch data) with SerpAPI fallback if needed.
@@ -1836,13 +1831,16 @@ async def fetch_market_trends(
     
     The market trends data is automatically saved to wish_history for future reference.
     
-    REQUEST BODY:
-    {
-        "history_id": "507f1f77bcf86cd799439011",
-        "max_age_days": 35,
-        "use_fallback": true,
-        "use_synthesis": true
-    }
+    PATH PARAMETER:
+    - history_id: MongoDB ObjectId of the wish history item
+    
+    QUERY PARAMETERS (optional):
+    - max_age_days: Maximum age of cached data in days (default: 35)
+    - use_fallback: Whether to use SerpAPI if MongoDB has no data (default: true)
+    - use_synthesis: Whether to use Claude synthesis (default: true, recommended)
+    
+    EXAMPLE:
+    POST /api/make-wish/market-trends/507f1f77bcf86cd799439011?max_age_days=35&use_fallback=true&use_synthesis=true
     
     RESPONSE (if use_synthesis=true with parsed_data):
     Synthesized structured intelligence:
@@ -1865,11 +1863,6 @@ async def fetch_market_trends(
         user_id_value = current_user.get("user_id") or current_user.get("_id")
         if not user_id_value:
             raise HTTPException(status_code=400, detail="User ID not found in JWT token")
-        
-        # Validate history_id
-        history_id = request.history_id
-        if not history_id:
-            raise HTTPException(status_code=400, detail="history_id is required")
         
         # Validate ObjectId
         if not ObjectId.is_valid(history_id):
@@ -1957,9 +1950,9 @@ async def fetch_market_trends(
             benefits=benefits,
             product_type=product_type,
             category=category,
-            max_age_days=request.max_age_days,
-            use_fallback=request.use_fallback,
-            use_synthesis=request.use_synthesis,
+            max_age_days=max_age_days,
+            use_fallback=use_fallback,
+            use_synthesis=use_synthesis,
             parsed_data=parsed_data if parsed_data else None
         )
         
