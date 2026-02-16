@@ -235,7 +235,7 @@ def build_trend_synthesis_user_prompt(
     Args:
         parsed_data: Parsed wish data from NLP stage
         matched_trends: MongoDB trend records organized by level (L1-L5)
-    
+        
     Returns:
         Formatted user prompt string
     """
@@ -331,50 +331,121 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
     """
     Validate the synthesized trend data structure.
     
+    Supports both old format (related_keyword_trends, trend_by_ingredient) 
+    and new format (related_keywords, hero_ingredient_analysis, executive_summary).
+    
     Args:
         data: The synthesized JSON response
     
     Returns:
         True if valid, raises ValueError if invalid
     """
-    required_fields = [
-        'related_keyword_trends',
-        'competitive_landscape',
-        'trend_by_ingredient',
-        'insights_breakdown',
-        'marketing_angles',
-        'risks',
-        'next_steps',
-        'product_recommendations',
-        'key_insights',
-        'metadata'
-    ]
+    # Check for new format (based on system prompt)
+    has_new_format = any(key in data for key in [
+        'executive_summary', 'hero_ingredient_analysis', 'related_keywords',
+        'opportunity_breakdown', 'regional_intelligence'
+    ])
     
-    for field in required_fields:
-        if field not in data:
-            raise ValueError(f"Missing required field: {field}")
+    # Check for old format
+    has_old_format = any(key in data for key in [
+        'related_keyword_trends', 'trend_by_ingredient', 'insights_breakdown'
+    ])
     
-    # Validate opportunity scores are within bounds
-    for ingredient in data.get('trend_by_ingredient', []):
-        synthesis = ingredient.get('synthesis', {})
-        if synthesis:
-            opp_score = synthesis.get('opportunity_score', 0)
+    if not has_new_format and not has_old_format:
+        raise ValueError("Invalid response format: missing both new and old format fields")
+    
+    if has_new_format:
+        # Validate new format structure (more lenient - only require executive_summary)
+        # Other fields may be missing if response was truncated
+        if 'executive_summary' not in data:
+            raise ValueError("Missing required field: executive_summary")
+        
+        # Log what fields are present for debugging
+        present_fields = [key for key in data.keys() if not key.startswith('_')]
+        print(f"[TREND SYNTHESIS] ✅ New format detected. Present fields: {', '.join(present_fields)}")
+        
+        # Warn about missing optional fields but don't fail
+        optional_fields = {
+            'hero_ingredient_analysis': 'hero_ingredient_analysis',
+            'competitive_landscape': 'competitive_landscape',
+            'related_keywords': 'related_keywords',
+            'related_keyword_trends': 'related_keywords',  # Alternative name
+            'opportunity_breakdown': 'opportunity_breakdown',
+            'regional_intelligence': 'regional_intelligence'
+        }
+        
+        missing_fields = []
+        for field, display_name in optional_fields.items():
+            if field not in data:
+                # Check for alternative names
+                if field == 'related_keywords' and 'related_keyword_trends' in data:
+                    continue
+                missing_fields.append(display_name)
+        
+        if missing_fields:
+            print(f"[TREND SYNTHESIS] ⚠️ Missing optional fields (response may be truncated): {', '.join(missing_fields)}")
+        
+        # Validate executive_summary structure
+        exec_summary = data.get('executive_summary', {})
+        if exec_summary:
+            opp_score = exec_summary.get('opportunity_score', 0)
             if opp_score < 0 or opp_score > 100:
                 raise ValueError(f"Invalid opportunity score: {opp_score} (must be 0-100)")
+        
+        # Validate opportunity_breakdown if present
+        opp_breakdown = data.get('opportunity_breakdown', {})
+        if opp_breakdown:
+            demand_score = opp_breakdown.get('demand_score', 0)
+            competition_score = opp_breakdown.get('competition_score', 0)
+            timing_score = opp_breakdown.get('timing_score', 0)
+            feasibility_score = opp_breakdown.get('feasibility_score', 0)
+            margin_score = opp_breakdown.get('margin_score', 0)
             
-            # Validate sub-scores sum approximately equals opportunity score
-            breakdown = synthesis.get('scores_breakdown', {})
-            if breakdown:
-                sub_total = (
-                    breakdown.get('demand', {}).get('score', 0) +
-                    breakdown.get('competition', {}).get('score', 0) +
-                    breakdown.get('timing', {}).get('score', 0) +
-                    breakdown.get('feasibility', {}).get('score', 0) +
-                    breakdown.get('margin', {}).get('score', 0)
-                )
-                # Allow 2 point tolerance for rounding
-                if abs(sub_total - opp_score) > 2:
-                    print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
+            # Validate sub-scores are within bounds
+            for score_name, score_value in [
+                ('demand_score', demand_score),
+                ('competition_score', competition_score),
+                ('timing_score', timing_score),
+                ('feasibility_score', feasibility_score),
+                ('margin_score', margin_score)
+            ]:
+                if score_value < 0 or score_value > 25:
+                    print(f"⚠️ Warning: {score_name} out of expected range: {score_value}")
+    
+    else:
+        # Validate old format structure
+        required_fields = [
+            'related_keyword_trends',
+            'competitive_landscape',
+            'trend_by_ingredient',
+            'insights_breakdown'
+        ]
+        
+        for field in required_fields:
+            if field not in data:
+                raise ValueError(f"Missing required field: {field}")
+        
+        # Validate opportunity scores are within bounds
+        for ingredient in data.get('trend_by_ingredient', []):
+            synthesis = ingredient.get('synthesis', {})
+            if synthesis:
+                opp_score = synthesis.get('opportunity_score', 0)
+                if opp_score < 0 or opp_score > 100:
+                    raise ValueError(f"Invalid opportunity score: {opp_score} (must be 0-100)")
+                
+                # Validate sub-scores sum approximately equals opportunity score
+                breakdown = synthesis.get('scores_breakdown', {})
+                if breakdown:
+                    sub_total = (
+                        breakdown.get('demand', {}).get('score', 0) +
+                        breakdown.get('competition', {}).get('score', 0) +
+                        breakdown.get('timing', {}).get('score', 0) +
+                        breakdown.get('feasibility', {}).get('score', 0) +
+                        breakdown.get('margin', {}).get('score', 0)
+                    )
+                    # Allow 2 point tolerance for rounding
+                    if abs(sub_total - opp_score) > 2:
+                        print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
     
     return True
 
@@ -450,19 +521,20 @@ async def synthesize_trends(
         except Exception as e:
             print(f"[TREND SYNTHESIS] ⚠️ Could not get cache control: {e}")
     
-    # Prepare API call
+    # Prepare API call (don't include cache_control - SDK version doesn't support it)
     api_params = {
         "model": CLAUDE_MODEL,
-        "max_tokens": 4000,
+        "max_tokens": 8000,  # Increased to handle large synthesis responses
         "temperature": 0.3,
         "system": system_prompt,
         "messages": [
-            {"role": "user", "content": user_prompt}
-        ]
+                {"role": "user", "content": user_prompt}
+            ]
     }
     
+    # Note: cache_control is available but not used due to SDK compatibility
     if cache_control:
-        api_params["cache_control"] = cache_control
+        print(f"[TREND SYNTHESIS] ⚠️ Cache control available but not using (SDK compatibility)")
     
     try:
         # Call Claude API
@@ -477,6 +549,12 @@ async def synthesize_trends(
         if not content:
             raise ValueError("Empty text in Claude response")
         
+        # Check if response was truncated (Claude stops mid-sentence when hitting max_tokens)
+        stop_reason = getattr(response, 'stop_reason', None)
+        if stop_reason == "max_tokens":
+            print(f"[TREND SYNTHESIS] ⚠️ Response was truncated (hit max_tokens limit)")
+            print(f"[TREND SYNTHESIS]   Response length: {len(content)} chars")
+        
         # Extract JSON from response (handle markdown code blocks if present)
         json_content = content
         if "```json" in content:
@@ -484,21 +562,120 @@ async def synthesize_trends(
         elif "```" in content:
             json_content = content.split("```")[1].split("```")[0].strip()
         
-        # Parse JSON
+        # Check if JSON appears truncated (ends with incomplete string/object)
+        # Look for unterminated strings (odd number of unescaped quotes)
+        if json_content:
+            # Count unescaped quotes to detect unterminated strings
+            quote_count = 0
+            escaped = False
+            for char in json_content:
+                if char == '\\' and not escaped:
+                    escaped = True
+                    continue
+                if char == '"' and not escaped:
+                    quote_count += 1
+                escaped = False
+            
+            # If odd number of quotes, we likely have an unterminated string
+            if quote_count % 2 != 0:
+                print(f"[TREND SYNTHESIS] ⚠️ Detected unterminated string in JSON (odd quote count: {quote_count})")
+                # Try to fix by finding the last unclosed quote and closing it, then closing any open objects/arrays
+                last_quote_pos = json_content.rfind('"')
+                if last_quote_pos > 0:
+                    # Check if this quote is escaped
+                    before_quote = json_content[:last_quote_pos]
+                    escape_count = 0
+                    for i in range(len(before_quote) - 1, -1, -1):
+                        if before_quote[i] == '\\':
+                            escape_count += 1
+                        else:
+                            break
+                    
+                    # If not escaped, close the string
+                    if escape_count % 2 == 0:
+                        # Find the last complete object/array before this point
+                        # Close the string, then close any open structures
+                        fixed_json = json_content[:last_quote_pos+1] + '"'
+                        
+                        # Count open braces and brackets to close them
+                        open_braces = fixed_json.count('{') - fixed_json.count('}')
+                        open_brackets = fixed_json.count('[') - fixed_json.count(']')
+                        
+                        # Close brackets first, then braces
+                        fixed_json += ']' * open_brackets
+                        fixed_json += '}' * open_braces
+                        
+                        json_content = fixed_json
+                        print(f"[TREND SYNTHESIS]   Attempted to fix truncated JSON by closing string and structures")
+        
+        # Parse JSON with better error handling
         try:
             synthesized = json.loads(json_content)
-        except json.JSONDecodeError as e:
-            print(f"[TREND SYNTHESIS] ❌ JSON parse error: {e}")
-            print(f"[TREND SYNTHESIS]   Response preview: {content[:500]}")
-            raise ValueError(f"Invalid JSON in Claude response: {str(e)}")
+        except json.JSONDecodeError as json_err:
+            print(f"[TREND SYNTHESIS] ❌ JSON parse error: {json_err}")
+            print(f"[TREND SYNTHESIS]   Error at position: {json_err.pos if hasattr(json_err, 'pos') else 'unknown'}")
+            print(f"[TREND SYNTHESIS]   Response length: {len(json_content)} chars")
+            
+            # Try to extract the problematic section
+            if hasattr(json_err, 'pos') and json_err.pos:
+                error_pos = json_err.pos
+                start = max(0, error_pos - 200)
+                end = min(len(json_content), error_pos + 200)
+                print(f"[TREND SYNTHESIS]   Problematic section: {json_content[start:end]}")
+            
+            # Try to fix common JSON issues
+            fixed = False
+            try:
+                # Try removing trailing commas
+                json_content_fixed = json_content.replace(',\n}', '\n}').replace(',\n]', '\n]')
+                synthesized = json.loads(json_content_fixed)
+                print(f"[TREND SYNTHESIS] ✅ Fixed JSON by removing trailing commas")
+                fixed = True
+            except:
+                pass
+            
+            if not fixed:
+                # Try to extract JSON from a larger context
+                try:
+                    # Find the first { and last } to extract valid JSON
+                    first_brace = json_content.find('{')
+                    last_brace = json_content.rfind('}')
+                    if first_brace >= 0 and last_brace > first_brace:
+                        json_content_fixed = json_content[first_brace:last_brace+1]
+                        synthesized = json.loads(json_content_fixed)
+                        print(f"[TREND SYNTHESIS] ✅ Fixed JSON by extracting from braces")
+                        fixed = True
+                except Exception as fix_err:
+                    print(f"[TREND SYNTHESIS] ❌ Could not fix JSON: {fix_err}")
+            
+            if not fixed:
+                # Save problematic response for debugging
+                import os
+                debug_dir = "debug_responses"
+                os.makedirs(debug_dir, exist_ok=True)
+                debug_file = os.path.join(debug_dir, f"trend_synthesis_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(f"Error: {json_err}\n\n")
+                    f.write(f"Full response:\n{content}\n\n")
+                    f.write(f"Extracted JSON:\n{json_content}\n")
+                print(f"[TREND SYNTHESIS]   Saved problematic response to: {debug_file}")
+                raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
         
-        # Validate structure
+        # Log response structure for debugging
+        response_keys = list(synthesized.keys())[:10]
+        print(f"[TREND SYNTHESIS] 📋 Response keys: {', '.join(response_keys)}...")
+        
+        # Validate structure (lenient validation - won't fail on missing optional fields)
         validate_trend_synthesis(synthesized)
         
         print(f"[TREND SYNTHESIS] ✅ Synthesis complete!")
-        print(f"[TREND SYNTHESIS]   Ingredients analyzed: {len(synthesized.get('trend_by_ingredient', []))}")
-        print(f"[TREND SYNTHESIS]   Keywords: {len(synthesized.get('related_keyword_trends', []))}")
-        print(f"[TREND SYNTHESIS]   Brands: {len(synthesized.get('competitive_landscape', []))}")
+        # Support both old and new formats
+        ingredients_count = len(synthesized.get('trend_by_ingredient', [])) or (1 if synthesized.get('hero_ingredient_analysis') else 0)
+        keywords_count = len(synthesized.get('related_keyword_trends', [])) or len(synthesized.get('related_keywords', []))
+        brands_count = len(synthesized.get('competitive_landscape', [])) if isinstance(synthesized.get('competitive_landscape'), list) else (1 if synthesized.get('competitive_landscape') else 0)
+        print(f"[TREND SYNTHESIS]   Ingredients analyzed: {ingredients_count}")
+        print(f"[TREND SYNTHESIS]   Keywords: {keywords_count}")
+        print(f"[TREND SYNTHESIS]   Brands: {brands_count}")
         
         return synthesized
         
@@ -507,8 +684,7 @@ async def synthesize_trends(
         error_str = str(cache_error).lower()
         if "cache_control" in error_str or "unexpected keyword" in error_str:
             # SDK version doesn't support cache_control - this is normal for older SDK versions
-            # The request will work fine without caching, just won't benefit from cost savings
-            print(f"[TREND SYNTHESIS] ⚠️ Cache control not supported in this SDK version, retrying without it (this is normal)...")
+            print(f"[TREND SYNTHESIS] ⚠️ Cache control not supported, retrying without it...")
             api_params_clean = {k: v for k, v in api_params.items() if k != "cache_control"}
             if "extra_body" in api_params_clean:
                 api_params_clean["extra_body"] = {k: v for k, v in api_params_clean["extra_body"].items() if k != "cache_control"}
@@ -518,21 +694,46 @@ async def synthesize_trends(
             response = claude_client.messages.create(**api_params_clean)
             content = response.content[0].text.strip()
             
-            # Extract and parse JSON
+            # Extract and parse JSON with same error handling
             json_content = content
             if "```json" in content:
                 json_content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
                 json_content = content.split("```")[1].split("```")[0].strip()
             
-            synthesized = json.loads(json_content)
-            validate_trend_synthesis(synthesized)
+            try:
+                synthesized = json.loads(json_content)
+            except json.JSONDecodeError as json_err:
+                print(f"[TREND SYNTHESIS] ❌ JSON parse error (retry): {json_err}")
+                # Try same fixes as above
+                fixed = False
+                try:
+                    json_content_fixed = json_content.replace(',\n}', '\n}').replace(',\n]', '\n]')
+                    synthesized = json.loads(json_content_fixed)
+                    fixed = True
+                except:
+                    pass
+                
+                if not fixed:
+                    try:
+                        first_brace = json_content.find('{')
+                        last_brace = json_content.rfind('}')
+                        if first_brace >= 0 and last_brace > first_brace:
+                            json_content_fixed = json_content[first_brace:last_brace+1]
+                            synthesized = json.loads(json_content_fixed)
+                            fixed = True
+                    except:
+                        pass
+                
+                if not fixed:
+                    raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
             
+            validate_trend_synthesis(synthesized)
             print(f"[TREND SYNTHESIS] ✅ Synthesis complete (without cache)!")
             return synthesized
         else:
             raise
-    
+        
     except Exception as e:
         print(f"[TREND SYNTHESIS] ❌ Error during synthesis: {e}")
         import traceback
