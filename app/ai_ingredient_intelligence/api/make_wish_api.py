@@ -2618,6 +2618,34 @@ async def generate_wish_ppt(
         )
         
         print(f"[DEBUG] ✅ PPT Generation complete!")
+        
+        # Save Gamma PPT info to wish_history
+        if result.get("success"):
+            try:
+                gamma_ppt_info = {
+                    "presentation_id": result.get("presentation_id"),
+                    "download_url": result.get("download_url"),
+                    "edit_url": result.get("edit_url"),
+                    "generation_id": result.get("generation_id"),
+                    "generated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                    "status": "completed" if result.get("download_url") or result.get("edit_url") else "pending"
+                }
+                
+                # Update wish_history with Gamma PPT info
+                await wish_history_col.update_one(
+                    {"_id": ObjectId(history_id), "user_id": user_id_value},
+                    {"$set": {"gamma_ppt": gamma_ppt_info}}
+                )
+                print(f"[DEBUG] ✅ Saved Gamma PPT info to wish_history: {history_id}")
+                print(f"[DEBUG]   - presentation_id: {gamma_ppt_info.get('presentation_id')}")
+                print(f"[DEBUG]   - download_url: {gamma_ppt_info.get('download_url')}")
+                print(f"[DEBUG]   - edit_url: {gamma_ppt_info.get('edit_url')}")
+            except Exception as save_error:
+                print(f"[DEBUG] ⚠️ Warning: Failed to save Gamma PPT info to wish_history: {save_error}")
+                import traceback
+                traceback.print_exc()
+                # Don't fail the request if saving fails - the result is still returned
+        
         return result
     
     except HTTPException:
