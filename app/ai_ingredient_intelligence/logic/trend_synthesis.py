@@ -329,31 +329,79 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
 
 def truncate_trend_data_for_prompt(
     matched_trends: Dict[str, Any],
+    parsed_data: Optional[Dict[str, Any]] = None,
     max_tokens: int = 180000  # Leave room for system prompt and safety margin
 ) -> Dict[str, Any]:
     """
     Truncate and filter trend data to fit within token limits.
+    
+    Filters by:
+    - Category (skincare vs haircare) - must match
+    - Product format/type - should match (keeps records without format as fallback)
     
     Removes:
     - Full timeline arrays (keeps only summaries)
     - Excessive related queries
     - Low-significance records
     - Redundant data
+    - Records that don't match category/product_format
     
     Args:
         matched_trends: Full trend data from MongoDB
+        parsed_data: Parsed wish data to filter by category and product_format
         max_tokens: Maximum tokens allowed (default: 180k to leave room for system prompt)
     
     Returns:
-        Truncated trend data optimized for prompt size
+        Truncated and filtered trend data optimized for prompt size
     """
+    # Extract filtering criteria from parsed_data
+    wish_category = None
+    wish_product_format = None
+    
+    if parsed_data:
+        wish_category = parsed_data.get("category", "").lower()
+        product_type_obj = parsed_data.get("product_type", {})
+        wish_product_type = product_type_obj.get("id") or product_type_obj.get("name") if isinstance(product_type_obj, dict) else str(product_type_obj) if product_type_obj else None
+        wish_product_format = parsed_data.get("product_format") or wish_product_type
+        if wish_product_format:
+            wish_product_format = str(wish_product_format).lower().strip()
+    
+    print(f"[TREND FILTER] Filtering by category='{wish_category}', product_format='{wish_product_format}'")
+    
+    def matches_category_and_format(record: Dict[str, Any]) -> bool:
+        """Check if a trend record matches the wish's category and product format"""
+        if not wish_category:
+            return True  # No filter if category not specified
+        
+        record_category = str(record.get("category", "")).lower().strip() if record.get("category") else ""
+        record_format = str(record.get("product_format", "")).lower().strip() if record.get("product_format") else ""
+        
+        # Category must match (if record has a category)
+        # If record has no category, allow it as fallback
+        if record_category:
+            if record_category != wish_category:
+                return False
+        
+        # Product format should match (but keep records without format as fallback)
+        if wish_product_format and record_format:
+            # Normalize formats for comparison (handle variations like "serum" vs "serums")
+            if record_format != wish_product_format:
+                # Check if formats are similar (e.g., "serum" matches "serums")
+                format_base = wish_product_format.rstrip('s')  # Remove plural
+                record_base = record_format.rstrip('s')
+                if format_base != record_base:
+                    return False
+        
+        return True
+    
     truncated = {}
     
-    # L1: Hero Ingredient Trends - limit to top 5 ingredients, remove full timelines
+    # L1: Hero Ingredient Trends - filter and limit to top 5 ingredients, remove full timelines
     l1_trends = matched_trends.get("level_1_ingredient_trends", {}) or matched_trends.get("hero_ingredient_trends", {})
     truncated_l1 = {}
-    for idx, (ing_name, ing_data) in enumerate(l1_trends.items()):
-        if idx >= 5:  # Limit to top 5 ingredients
+    count = 0
+    for ing_name, ing_data in l1_trends.items():
+        if count >= 5:  # Limit to top 5 ingredients
             break
         
         if not ing_data or not isinstance(ing_data, dict):
@@ -362,6 +410,11 @@ def truncate_trend_data_for_prompt(
         # Extract trend_data
         trend_data = ing_data.get("trend_data", {})
         if not trend_data:
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(trend_data):
+            print(f"[TREND FILTER] Skipping L1 ingredient '{ing_name}' - category/format mismatch")
             continue
         
         # Create truncated version - remove full timeline, keep summaries
@@ -401,14 +454,24 @@ def truncate_trend_data_for_prompt(
         }
         
         truncated_l1[ing_name] = truncated_ing_data
+        count += 1
     
     truncated["level_1_ingredient_trends"] = truncated_l1
+    print(f"[TREND FILTER] L1: Kept {count} ingredients after filtering")
     
-    # L2: Competitive Landscape - limit to top 10, remove full timelines
+    # L2: Competitive Landscape - filter and limit to top 10, remove full timelines
     l2_trends = matched_trends.get("level_2_competing_approaches", []) or matched_trends.get("competitive_landscape", [])
     truncated_l2 = []
-    for idx, item in enumerate(l2_trends[:10]):  # Limit to top 10
+    count = 0
+    for item in l2_trends:
+        if count >= 10:  # Limit to top 10
+            break
+        
         if not isinstance(item, dict):
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(item):
             continue
         
         truncated_item = {
@@ -434,14 +497,24 @@ def truncate_trend_data_for_prompt(
             "regional_interest": item.get("regional_interest", [])[:5],  # Top 5 only
         }
         truncated_l2.append(truncated_item)
+        count += 1
     
     truncated["level_2_competing_approaches"] = truncated_l2
+    print(f"[TREND FILTER] L2: Kept {count} competing approaches after filtering")
     
-    # L3: Brand Intelligence - limit to top 8
+    # L3: Brand Intelligence - filter and limit to top 8
     l3_trends = matched_trends.get("level_3_brand_trends", []) or matched_trends.get("brand_intelligence", [])
     truncated_l3 = []
-    for idx, item in enumerate(l3_trends[:8]):  # Limit to top 8
+    count = 0
+    for item in l3_trends:
+        if count >= 8:  # Limit to top 8
+            break
+        
         if not isinstance(item, dict):
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(item):
             continue
         
         truncated_item = {
@@ -460,14 +533,24 @@ def truncate_trend_data_for_prompt(
             "regional_interest": item.get("regional_interest", [])[:5],  # Top 5 only
         }
         truncated_l3.append(truncated_item)
+        count += 1
     
     truncated["level_3_brand_trends"] = truncated_l3
+    print(f"[TREND FILTER] L3: Kept {count} brand trends after filtering")
     
-    # L4: Head-to-Head Comparisons - limit to top 5
+    # L4: Head-to-Head Comparisons - filter and limit to top 5
     l4_trends = matched_trends.get("comparison_data", []) or matched_trends.get("head_to_head", [])
     truncated_l4 = []
-    for idx, item in enumerate(l4_trends[:5]):  # Limit to top 5
+    count = 0
+    for item in l4_trends:
+        if count >= 5:  # Limit to top 5
+            break
+        
         if not isinstance(item, dict):
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(item):
             continue
         
         truncated_item = {
@@ -477,12 +560,32 @@ def truncate_trend_data_for_prompt(
             "trend_direction": item.get("trend_direction", ""),
         }
         truncated_l4.append(truncated_item)
+        count += 1
     
     truncated["comparison_data"] = truncated_l4
+    print(f"[TREND FILTER] L4: Kept {count} comparisons after filtering")
     
-    # L5: Derivative Trends - limit to top 5
+    # L5: Derivative Trends - filter and limit to top 5
     l5_trends = matched_trends.get("derivative_trends", [])
-    truncated["derivative_trends"] = l5_trends[:5] if isinstance(l5_trends, list) else []
+    truncated_l5 = []
+    count = 0
+    if isinstance(l5_trends, list):
+        for item in l5_trends:
+            if count >= 5:  # Limit to top 5
+                break
+            
+            if not isinstance(item, dict):
+                continue
+            
+            # Filter by category and product format
+            if not matches_category_and_format(item):
+                continue
+            
+            truncated_l5.append(item)
+            count += 1
+    
+    truncated["derivative_trends"] = truncated_l5
+    print(f"[TREND FILTER] L5: Kept {count} derivative trends after filtering")
     
     # Shopping data - keep only summary
     shopping_data = matched_trends.get("shopping_data")
@@ -687,9 +790,9 @@ async def synthesize_trends(
     print(f"[TREND SYNTHESIS]   Parsed data keys: {list(parsed_data.keys())}")
     print(f"[TREND SYNTHESIS]   Matched trends keys: {list(matched_trends.keys())}")
     
-    # Truncate trend data to prevent token limit issues
-    print(f"[TREND SYNTHESIS] ✂️ Truncating trend data to fit token limits...")
-    truncated_trends = truncate_trend_data_for_prompt(matched_trends, max_tokens=180000)
+    # Truncate and filter trend data to prevent token limit issues
+    print(f"[TREND SYNTHESIS] ✂️ Truncating and filtering trend data by category/product_format...")
+    truncated_trends = truncate_trend_data_for_prompt(matched_trends, parsed_data=parsed_data, max_tokens=180000)
     
     # Build prompts with truncated data
     system_prompt = TREND_SYNTHESIS_SYSTEM_PROMPT
