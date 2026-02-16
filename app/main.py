@@ -239,31 +239,36 @@ app.openapi = custom_openapi
 # This must be added BEFORE CORS middleware to ensure it wraps all requests
 app.add_middleware(TimingMiddleware)
 
-# ✅ CORS - Updated for production
-# Using both explicit origins and regex pattern for flexibility
+# ✅ CORS - Configuration loaded from .env
+# Parse CORS settings from environment variables
+cors_allow_origins_str = os.getenv("CORS_ALLOW_ORIGINS", "")
+cors_allow_origins = [origin.strip() for origin in cors_allow_origins_str.split(",") if origin.strip()] if cors_allow_origins_str else []
+
+cors_allow_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", None)
+
+cors_allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() == "true"
+
+cors_allow_methods_str = os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD")
+cors_allow_methods = [method.strip() for method in cors_allow_methods_str.split(",") if method.strip()] if cors_allow_methods_str else ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+
+cors_allow_headers_str = os.getenv("CORS_ALLOW_HEADERS", "*")
+cors_allow_headers = ["*"] if cors_allow_headers_str.strip() == "*" else [header.strip() for header in cors_allow_headers_str.split(",") if header.strip()]
+
+cors_expose_headers_str = os.getenv("CORS_EXPOSE_HEADERS", "*")
+cors_expose_headers = ["*"] if cors_expose_headers_str.strip() == "*" else [header.strip() for header in cors_expose_headers_str.split(",") if header.strip()]
+
+cors_max_age = int(os.getenv("CORS_MAX_AGE", "3600"))
+
 # This middleware handles all CORS preflight (OPTIONS) and actual requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://tt.skintruth.in", 
-        "https://capi.skintruth.in",
-        "http://localhost:5174", 
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:8501",
-        "https://metaverse.skinbb.com",
-        "https://formulynx.in",
-        "https://www.formulynx.in",
-        "http://formulynx.in",
-        "http://www.formulynx.in"
-    ],
-    allow_origin_regex=r"https?://(www\.)?formulynx\.in",
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,  # Cache preflight requests for 1 hour
+    allow_origins=cors_allow_origins,
+    allow_origin_regex=cors_allow_origin_regex,
+    allow_credentials=cors_allow_credentials,
+    allow_methods=cors_allow_methods,
+    allow_headers=cors_allow_headers,
+    expose_headers=cors_expose_headers,
+    max_age=cors_max_age,  # Cache preflight requests
 )
 
 # ✅ Existing chatbot API
