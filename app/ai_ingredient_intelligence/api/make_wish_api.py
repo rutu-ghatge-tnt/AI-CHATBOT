@@ -1147,48 +1147,51 @@ def format_wish_data_for_gamma(wish_response: Dict[str, Any]) -> str:
     # Ensure optimized_formula is a dict (handle None case)
     if not isinstance(optimized_formula, dict):
         optimized_formula = {}
+
+    # Ensure formula_info is always defined (set in else for old format; new format uses formula directly)
+    formula_info = {}
+
+    # For new format, optimized_formula might be empty or have different structure
+    # Check if we have formula data from new format
+    if is_new_format and formula:
+        # Extract from new format structure
+        if formula.get('name'):
+            sections.append(f"\nFormula Name: {formula.get('name')}")
+        if formula.get('complexity'):
+            sections.append(f"Complexity: {formula.get('complexity', '').title()}")
         
-        # For new format, optimized_formula might be empty or have different structure
-        # Check if we have formula data from new format
-        if is_new_format and formula:
-            # Extract from new format structure
-            if formula.get('name'):
-                sections.append(f"\nFormula Name: {formula.get('name')}")
-            if formula.get('complexity'):
-                sections.append(f"Complexity: {formula.get('complexity', '').title()}")
+        # Calculate total percentage from phases
+        if formula.get('phases'):
+            total_percent = 0
+            sections.append("\nOptimized Ingredient Percentages:")
+            sections.append("-" * 80)
+            sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Purpose':<15}")
+            sections.append("-" * 80)
             
-            # Calculate total percentage from phases
-            if formula.get('phases'):
-                total_percent = 0
-                sections.append("\nOptimized Ingredient Percentages:")
+            for phase in formula.get('phases', []):
+                phase_name = phase.get('name', '')
+                phase_order = phase.get('order', 0)
+                for ing in phase.get('ingredients', []):
+                    name = ing.get('display_name', ing.get('name', 'Unknown'))
+                    percent_str = ing.get('percentage', '0%')
+                    phase_letter = ing.get('phase', str(phase_order))
+                    purpose = ing.get('purpose', '')
+                    
+                    # Try to extract numeric value for total calculation
+                    try:
+                        percent_val = float(percent_str.replace('%', '').replace('q.s.', '0').strip())
+                        total_percent += percent_val
+                    except:
+                        pass
+                    
+                    sections.append(f"{name:<40} {percent_str:<15} {phase_letter:<10} {purpose:<15}")
+            
+            if total_percent > 0:
                 sections.append("-" * 80)
-                sections.append(f"{'Ingredient':<40} {'Percentage':<15} {'Phase':<10} {'Purpose':<15}")
-                sections.append("-" * 80)
-                
-                for phase in formula.get('phases', []):
-                    phase_name = phase.get('name', '')
-                    phase_order = phase.get('order', 0)
-                    for ing in phase.get('ingredients', []):
-                        name = ing.get('display_name', ing.get('name', 'Unknown'))
-                        percent_str = ing.get('percentage', '0%')
-                        phase_letter = ing.get('phase', str(phase_order))
-                        purpose = ing.get('purpose', '')
-                        
-                        # Try to extract numeric value for total calculation
-                        try:
-                            percent_val = float(percent_str.replace('%', '').replace('q.s.', '0').strip())
-                            total_percent += percent_val
-                        except:
-                            pass
-                        
-                        sections.append(f"{name:<40} {percent_str:<15} {phase_letter:<10} {purpose:<15}")
-                
-                if total_percent > 0:
-                    sections.append("-" * 80)
-                    sections.append(f"Total Percentage: {total_percent:.2f}%")
-        else:
-            # Old format handling
-            formula_info = optimized_formula.get("optimized_formula", {}) if isinstance(optimized_formula, dict) else {}
+                sections.append(f"Total Percentage: {total_percent:.2f}%")
+    else:
+        # Old format handling
+        formula_info = optimized_formula.get("optimized_formula", {}) if isinstance(optimized_formula, dict) else {}
     # Ensure formula_info is a dict
     if not isinstance(formula_info, dict):
         formula_info = {}
