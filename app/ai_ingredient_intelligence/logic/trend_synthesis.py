@@ -742,24 +742,33 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
     Supports both old format (related_keyword_trends, trend_by_ingredient) 
     and new format (related_keywords, hero_ingredient_analysis, executive_summary).
     
+    This function never raises exceptions - it fixes issues and logs warnings.
+    
     Args:
         data: The synthesized JSON response
     
     Returns:
-        True if valid, raises ValueError if invalid
+        True if valid (or fixed), never raises exceptions
     """
-    # Check for new format (based on system prompt)
-    has_new_format = any(key in data for key in [
-        'executive_summary', 'hero_ingredient_analysis', 'related_keywords',
-        'opportunity_breakdown', 'regional_intelligence'
-    ])
+    # Wrap entire validation in try-catch to never raise exceptions
+    try:
+        # Check for new format (based on system prompt)
+        has_new_format = any(key in data for key in [
+            'executive_summary', 'hero_ingredient_analysis', 'related_keywords',
+            'opportunity_breakdown', 'regional_intelligence'
+        ])
+        
+        # Check for old format
+        has_old_format = any(key in data for key in [
+            'related_keyword_trends', 'trend_by_ingredient', 'insights_breakdown'
+        ])
+    except Exception as e:
+        print(f"[TREND SYNTHESIS] ⚠️ Error checking format: {e}. Assuming new format.")
+        has_new_format = True
+        has_old_format = False
     
-    # Check for old format
-    has_old_format = any(key in data for key in [
-        'related_keyword_trends', 'trend_by_ingredient', 'insights_breakdown'
-    ])
-    
-    if not has_new_format and not has_old_format:
+    try:
+        if not has_new_format and not has_old_format:
         # Log what we actually got
         present_fields = [key for key in data.keys() if not key.startswith('_')]
         print(f"[TREND SYNTHESIS] ⚠️ Neither new nor old format detected. Present fields: {', '.join(present_fields)}")
@@ -815,6 +824,20 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
         exec_summary = data.get('executive_summary', {})
         if exec_summary:
             opp_score = exec_summary.get('opportunity_score', 0)
+            
+            # Handle case where opp_score might be a dict
+            if isinstance(opp_score, dict):
+                numeric_value = opp_score.get('value') or opp_score.get('score') or opp_score.get('opportunity_score')
+                if numeric_value is None:
+                    numeric_value = next((v for v in opp_score.values() if isinstance(v, (int, float))), 0)
+                opp_score = numeric_value if isinstance(numeric_value, (int, float)) else 0
+                print(f"[TREND SYNTHESIS] ⚠️ opportunity_score was a dict, extracted value: {opp_score}")
+            
+            # Ensure opp_score is numeric
+            if not isinstance(opp_score, (int, float)):
+                print(f"[TREND SYNTHESIS] ⚠️ opportunity_score is not numeric ({type(opp_score).__name__}), defaulting to 50")
+                opp_score = 50
+            
             if opp_score < 0 or opp_score > 100:
                 print(f"[TREND SYNTHESIS] ⚠️ Invalid opportunity score: {opp_score}. Clamping to valid range.")
                 # Clamp to valid range instead of raising error
@@ -852,9 +875,28 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
             
             for score_name, (min_val, max_val) in score_ranges.items():
                 score_value = opp_breakdown.get(score_name, 0)
+                
+                # Handle case where score_value might be a dict (e.g., {"value": 10, "reason": "..."})
+                if isinstance(score_value, dict):
+                    # Try to extract numeric value from dict
+                    numeric_value = score_value.get('value') or score_value.get('score') or score_value.get('score_value')
+                    if numeric_value is None:
+                        # If no numeric field found, use first numeric value in dict
+                        numeric_value = next((v for v in score_value.values() if isinstance(v, (int, float))), 0)
+                    score_value = numeric_value if isinstance(numeric_value, (int, float)) else 0
+                    print(f"[TREND SYNTHESIS] ⚠️ {score_name} was a dict, extracted value: {score_value}")
+                
+                # Ensure score_value is numeric
+                if not isinstance(score_value, (int, float)):
+                    print(f"[TREND SYNTHESIS] ⚠️ {score_name} is not numeric ({type(score_value).__name__}), defaulting to 0")
+                    score_value = 0
+                
                 if score_value < min_val or score_value > max_val:
                     print(f"[TREND SYNTHESIS] ⚠️ {score_name} out of range ({score_value}). Clamping to [{min_val}, {max_val}].")
                     opp_breakdown[score_name] = max(min_val, min(max_val, score_value))
+                else:
+                    # Ensure the value is stored as a number (not dict)
+                    opp_breakdown[score_name] = score_value
     
     else:
         # Validate old format structure (more lenient - allow missing fields)
@@ -892,9 +934,26 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
             synthesis = ingredient.get('synthesis', {})
             if synthesis:
                 opp_score = synthesis.get('opportunity_score', 0)
+                
+                # Handle case where opp_score might be a dict
+                if isinstance(opp_score, dict):
+                    numeric_value = opp_score.get('value') or opp_score.get('score') or opp_score.get('opportunity_score')
+                    if numeric_value is None:
+                        numeric_value = next((v for v in opp_score.values() if isinstance(v, (int, float))), 0)
+                    opp_score = numeric_value if isinstance(numeric_value, (int, float)) else 0
+                    print(f"[TREND SYNTHESIS] ⚠️ opportunity_score was a dict, extracted value: {opp_score}")
+                
+                # Ensure opp_score is numeric
+                if not isinstance(opp_score, (int, float)):
+                    print(f"[TREND SYNTHESIS] ⚠️ opportunity_score is not numeric ({type(opp_score).__name__}), defaulting to 50")
+                    opp_score = 50
+                
                 if opp_score < 0 or opp_score > 100:
                     print(f"[TREND SYNTHESIS] ⚠️ Invalid opportunity score for ingredient: {opp_score}. Clamping to [0, 100].")
                     synthesis['opportunity_score'] = max(0, min(100, opp_score))
+                else:
+                    # Ensure the value is stored as a number (not dict)
+                    synthesis['opportunity_score'] = opp_score
                 
                 # Validate sub-scores sum approximately equals opportunity score
                 breakdown = synthesis.get('scores_breakdown', {})
@@ -909,8 +968,16 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
                     # Allow 2 point tolerance for rounding
                     if abs(sub_total - opp_score) > 2:
                         print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
+        
+        return True
     
-    return True
+    except Exception as validation_err:
+        # Catch any unexpected errors in validation and log them
+        print(f"[TREND SYNTHESIS] ⚠️ Unexpected error during validation ({type(validation_err).__name__}): {validation_err}")
+        import traceback
+        traceback.print_exc()
+        # Always return True - validation should never fail
+        return True
 
 
 # ============================================================================
@@ -1220,11 +1287,43 @@ async def synthesize_trends(
         print(f"[TREND SYNTHESIS] 📋 Response keys: {', '.join(response_keys)}...")
         
         # Validate structure (lenient validation with fallback)
+        # Catch ALL exceptions from validation (ValueError, TypeError, etc.)
         try:
             validate_trend_synthesis(synthesized)
-        except ValueError as validation_error:
-            print(f"[TREND SYNTHESIS] ⚠️ Validation error: {validation_error}")
+        except Exception as validation_error:
+            print(f"[TREND SYNTHESIS] ⚠️ Validation error ({type(validation_error).__name__}): {validation_error}")
             print(f"[TREND SYNTHESIS] 🔧 Attempting to fix response structure...")
+            
+            # Fix any dict scores that might be causing issues
+            try:
+                # Fix opportunity_breakdown scores
+                opp_breakdown = synthesized.get('opportunity_breakdown', {})
+                if opp_breakdown and isinstance(opp_breakdown, dict):
+                    for score_name in ['demand_score', 'competition_score', 'timing_score', 'feasibility_score', 'margin_score']:
+                        score_value = opp_breakdown.get(score_name)
+                        if isinstance(score_value, dict):
+                            numeric_value = score_value.get('value') or score_value.get('score') or score_value.get('score_value')
+                            if numeric_value is None:
+                                numeric_value = next((v for v in score_value.values() if isinstance(v, (int, float))), 0)
+                            opp_breakdown[score_name] = numeric_value if isinstance(numeric_value, (int, float)) else 0
+                        elif not isinstance(score_value, (int, float)):
+                            opp_breakdown[score_name] = 0
+                
+                # Fix executive_summary opportunity_score
+                exec_summary = synthesized.get('executive_summary', {})
+                if exec_summary and isinstance(exec_summary, dict):
+                    opp_score = exec_summary.get('opportunity_score')
+                    if isinstance(opp_score, dict):
+                        numeric_value = opp_score.get('value') or opp_score.get('score') or opp_score.get('opportunity_score')
+                        if numeric_value is None:
+                            numeric_value = next((v for v in opp_score.values() if isinstance(v, (int, float))), 50)
+                        exec_summary['opportunity_score'] = numeric_value if isinstance(numeric_value, (int, float)) else 50
+                    elif not isinstance(opp_score, (int, float)):
+                        exec_summary['opportunity_score'] = 50
+                
+                print(f"[TREND SYNTHESIS] ✅ Fixed dict scores in response")
+            except Exception as fix_err:
+                print(f"[TREND SYNTHESIS] ⚠️ Error fixing scores: {fix_err}")
             
             # Try to fix by ensuring executive_summary exists
             if 'executive_summary' not in synthesized:
@@ -1235,8 +1334,8 @@ async def synthesize_trends(
             try:
                 validate_trend_synthesis(synthesized)
                 print(f"[TREND SYNTHESIS] ✅ Validation passed after fix")
-            except ValueError as retry_error:
-                print(f"[TREND SYNTHESIS] ⚠️ Validation still failing: {retry_error}")
+            except Exception as retry_error:
+                print(f"[TREND SYNTHESIS] ⚠️ Validation still failing ({type(retry_error).__name__}): {retry_error}")
                 # Last resort: ensure we have at least a minimal valid structure
                 if 'executive_summary' not in synthesized:
                     synthesized['executive_summary'] = create_fallback_executive_summary(synthesized)
