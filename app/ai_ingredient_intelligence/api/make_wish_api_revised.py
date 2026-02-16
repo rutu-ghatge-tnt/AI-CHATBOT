@@ -14,13 +14,15 @@ The new flow features natural language parsing, complexity selection,
 ingredient alternatives, formula editing, and commercialization.
 """
 
-from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks, Body
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import time
 import json
 import uuid
+import httpx
+from pydantic import BaseModel, Field
 
 # Import authentication
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
@@ -60,11 +62,28 @@ from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_f
 
 # Import trend analyzer for market intelligence
 from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
-from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+# synthesize_trend_insights removed - not used (code is commented out in fetch_trend_data_for_ingredients)
 from app.ai_ingredient_intelligence.logic.market_trends_storage import (
     get_stored_trend_data_for_ingredients
 )
 from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
+
+# Import packaging data
+from app.ai_ingredient_intelligence.logic.packaging_data import (
+    get_all_packaging_options,
+    get_packaging_options_by_category,
+    get_packaging_by_size
+)
+
+# Import Gamma PPT and Claude prompt generators
+from app.ai_ingredient_intelligence.logic.gamma_ppt_generator import (
+    generate_ppt_from_data,
+    is_gamma_available
+)
+from app.ai_ingredient_intelligence.logic.claude_prompt_generator import (
+    generate_business_strategy_prompt,
+    get_default_business_strategy_prompt
+)
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -590,92 +609,7 @@ async def generate_formula_revised(
                     import traceback
                     traceback.print_exc()
             
-            # Fetch market trends data (formatted for frontend visualization)
-            market_trends = None
-            synthesis_data = {}  # Store synthesis for each ingredient
-            try:
-                print(f"📊 Fetching market trends data for frontend...")
-                trends_service = MarketTrendsService()
-                
-                # Extract benefits and product type from wish data
-                benefits = wish_data.get("benefits", [])
-                product_type = wish_data.get("productType") or wish_data.get("product_type")
-                category = wish_data.get("category", "skincare")
-                
-                market_trends = await trends_service.fetch_trends_for_wish(
-                    hero_ingredients=hero_ingredients,
-                    benefits=benefits,
-                    product_type=product_type,
-                    category=category,
-                    max_age_days=35,
-                    use_fallback=True
-                )
-                print(f"✅ Market trends fetched successfully")
-                
-                # Run synthesis for each hero ingredient using market trends data
-                if market_trends and hero_ingredients:
-                    print(f"🔬 Running synthesis for {len(hero_ingredients)} ingredients...")
-                    from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
-                    from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
-                    
-                    analyzer = TrendAnalyzer()
-                    ingredient_trends = market_trends.get("ingredient_trends", [])
-                    
-                    for ing in hero_ingredients[:5]:  # Limit to 5 to avoid rate limits
-                        try:
-                            # Find trend data for this ingredient from market trends
-                            ing_trend = next((t for t in ingredient_trends if t.get("ingredient_name") == ing), None)
-                            
-                            if ing_trend:
-                                # Extract trend data from market trends format
-                                trend_data_for_synthesis = {
-                                    "ingredient": ing,
-                                    "current_interest": ing_trend.get("current_score", 0),
-                                    "growth_rate_6mo": ing_trend.get("growth_6m", 0),
-                                    "trend_direction": ing_trend.get("trend_direction", "stable"),
-                                    "timeseries_chart": ing_trend.get("timeseries_chart", []),
-                                    "rising_queries": ing_trend.get("rising_queries", []),
-                                    "top_queries": ing_trend.get("top_queries", [])
-                                }
-                                
-                                # Get additional data for synthesis
-                                consumer_intent_data = None
-                                regional_data = None
-                                
-                                try:
-                                    consumer_intent_data = await analyzer.analyze_consumer_intent(ing)
-                                except:
-                                    pass
-                                
-                                try:
-                                    regional_data = await analyzer.analyze_regional_demand(ing)
-                                except:
-                                    pass
-                                
-                                # Run synthesis
-                                synthesis_result = await synthesize_trend_insights(
-                                    ingredient=ing,
-                                    trend_data=trend_data_for_synthesis,
-                                    consumer_intent_data=consumer_intent_data,
-                                    competitive_data=None,
-                                    regional_data=regional_data
-                                )
-                                
-                                synthesis_data[ing] = synthesis_result
-                                print(f"   ✅ Synthesis completed for {ing}")
-                            else:
-                                print(f"   ⚠️ No trend data found for {ing}, skipping synthesis")
-                        except Exception as synth_error:
-                            print(f"   ⚠️ Error synthesizing {ing}: {synth_error}")
-                            continue
-                    
-                    print(f"✅ Synthesis completed for {len(synthesis_data)} ingredients")
-            except Exception as e:
-                print(f"⚠️ Error fetching market trends: {e}")
-                import traceback
-                traceback.print_exc()
-                # Don't fail the request if trends fail
-                market_trends = None
+            # Market trends removed - use standalone /market-trends endpoint instead
             
             formula_id = str(uuid.uuid4())
             if not history_id:
@@ -693,8 +627,6 @@ async def generate_formula_revised(
                         "formula_data": None,
                         "basic_mode_result": basic_result,
                         "trend_data": trend_data,  # Store trend analysis data
-                        "market_trends": market_trends,  # Store market trends data
-                        "synthesis_data": synthesis_data,  # Store synthesis data
                         "status": "completed",
                         "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                         "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
@@ -711,8 +643,6 @@ async def generate_formula_revised(
                     update_doc = {
                         "basic_mode_result": basic_result,
                         "trend_data": trend_data,
-                        "market_trends": market_trends,
-                        "synthesis_data": synthesis_data,
                         "status": "completed",
                         "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
                     }
@@ -745,9 +675,7 @@ async def generate_formula_revised(
                 },
                 "manufacturing": basic_result.get("formula", {}).get("manufacturing", {}),
                 "compliance": basic_result.get("formula", {}).get("compliance", {}),
-                "trend_data": trend_data,  # Detailed trend analysis per ingredient
-                "market_trends": market_trends,  # Formatted market trends for frontend visualization
-                "synthesis_data": synthesis_data  # Synthesis insights per ingredient
+                "trend_data": trend_data  # Detailed trend analysis per ingredient
             }
     
     except HTTPException:
@@ -1640,4 +1568,666 @@ async def export_make_wish_revised_to_board(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Legacy /generate endpoint removed - use parse-wish -> generate-revised flow instead
+# ============================================================================
+# ADDITIONAL ENDPOINTS: Packaging, PPT Generation, Market Trends
+# ============================================================================
+
+@router.get("/packaging-options")
+async def get_packaging_options(
+    category: Optional[str] = Query(None, description="Filter by category: 'liquid' or 'solid'"),
+    size: Optional[str] = Query(None, description="Filter by size: e.g., '30g', '50g' (ALL SIZES IN GRAMS)"),
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Get all available packaging options for cost calculation.
+    
+    NOTE: All sizes are in GRAMS (g) only. No ml units.
+    For liquid products, 1ml ≈ 1g (standard approximation for cosmetics).
+    
+    This endpoint provides packaging data including:
+    - Bottle/jar cost
+    - Carton box cost
+    - Labeling cost
+    - Total packaging cost
+    
+    QUERY PARAMETERS:
+    - category: Optional filter by "liquid" or "solid"
+    - size: Optional filter by size (e.g., "30g", "50g") - ALL IN GRAMS
+    
+    RESPONSE:
+    {
+        "success": true,
+        "packaging_options": {
+            "dropper_bottle_30g": {
+                "type": "Dropper bottle 30g",
+                "category": "liquid",
+                "size": "30g",
+                "bottle_cost": 15.0,
+                "carton_box_cost": 7.0,
+                "labeling_cost": 4.0,
+                "total": 26.0
+            },
+            ...
+        },
+        "count": 10
+    }
+    """
+    try:
+        if category and size:
+            # Get options for specific category and size
+            options = get_packaging_by_size(size, category)
+            result = {}
+            for opt in options:
+                result[opt["key"]] = {
+                    "type": opt["type"],
+                    "category": opt["category"],
+                    "size": opt["size"],
+                    "bottle_cost": opt["bottle_cost"],
+                    "carton_box_cost": opt["carton_box_cost"],
+                    "labeling_cost": opt["labeling_cost"],
+                    "total": opt["total"]
+                }
+        elif category:
+            # Get options for category
+            options = get_packaging_options_by_category(category)
+            result = {}
+            for opt in options:
+                result[opt["key"]] = {
+                    "type": opt["type"],
+                    "category": opt["category"],
+                    "size": opt["size"],
+                    "bottle_cost": opt["bottle_cost"],
+                    "carton_box_cost": opt["carton_box_cost"],
+                    "labeling_cost": opt["labeling_cost"],
+                    "total": opt["total"]
+                }
+        else:
+            # Get all options
+            result = get_all_packaging_options()
+        
+        return {
+            "success": True,
+            "packaging_options": result,
+            "count": len(result)
+        }
+    except Exception as e:
+        print(f"❌ Error fetching packaging options: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching packaging options: {str(e)}"
+        )
+
+
+# ============================================================================
+# HELPER ENDPOINT: Check Gamma PPT Generation Status
+# ============================================================================
+
+@router.get("/check-ppt-status/{generation_id}", response_model=None)
+async def check_ppt_status(
+    generation_id: str,
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Check the status of a Gamma PPT generation.
+    
+    This endpoint allows you to check if a presentation generation is complete
+    and retrieve the download/edit URLs.
+    
+    PATH PARAMETER:
+    - generation_id: The Gamma generationId from the /generate-ppt response
+    
+    RESPONSE:
+    {
+        "success": true,
+        "status": "pending" | "completed" | "failed",
+        "download_url": "https://...",
+        "edit_url": "https://...",
+        "presentation_id": "...",
+        "message": "..."
+    }
+    """
+    print(f"\n{'='*80}")
+    print(f"[DEBUG] 🔍 Checking PPT status for generation_id: {generation_id}")
+    print(f"{'='*80}\n")
+    
+    try:
+        # Import Gamma API utilities
+        from app.ai_ingredient_intelligence.logic.gamma_ppt_generator import GAMMA_API_KEY, GAMMA_API_BASE_URL
+        
+        if not GAMMA_API_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="GAMMA_API_KEY not configured"
+            )
+        
+        # Check status via Gamma API
+        status_url = f"{GAMMA_API_BASE_URL}/generations/{generation_id}"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                status_url,
+                headers={
+                    "X-API-KEY": GAMMA_API_KEY,
+                    "accept": "application/json"
+                }
+            )
+            
+            if response.status_code == 401:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Invalid Gamma API key. Please check your GAMMA_API_KEY in .env file."
+                )
+            
+            if response.status_code != 200:
+                error_text = response.text[:200]
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Gamma API error: {error_text}"
+                )
+            
+            status_data = response.json()
+            print(f"[DEBUG] Gamma status response: {status_data}")
+            
+            status = status_data.get("status", "unknown")
+            
+            # Extract URLs if status is completed
+            download_url = None
+            edit_url = None
+            presentation_id = status_data.get("generationId") or generation_id
+            
+            if status == "completed":
+                # Per Gamma API docs, when status is "completed", response includes:
+                # - exportUrl: Direct download URL for PPTX/PDF
+                # - gammaUrl: URL to view/edit the presentation
+                # - gammaId: The presentation ID
+                
+                download_url = (
+                    status_data.get("exportUrl") or  # Primary field per Gamma API
+                    status_data.get("downloadUrl") or
+                    status_data.get("url") or
+                    status_data.get("presentationUrl") or
+                    status_data.get("file")
+                )
+                
+                edit_url = (
+                    status_data.get("gammaUrl") or  # Primary field per Gamma API
+                    status_data.get("editUrl") or
+                    status_data.get("editPath") or
+                    status_data.get("presentationUrl") or
+                    status_data.get("url")
+                )
+                
+                presentation_id = (
+                    status_data.get("gammaId") or  # Primary field per Gamma API
+                    status_data.get("id") or
+                    status_data.get("presentationId") or
+                    presentation_id
+                )
+                
+                # Check nested structures
+                if not download_url or not edit_url:
+                    for key in ["data", "presentation", "result", "gamma"]:
+                        if key in status_data and isinstance(status_data[key], dict):
+                            nested = status_data[key]
+                            download_url = download_url or nested.get("url") or nested.get("downloadUrl")
+                            edit_url = edit_url or nested.get("editUrl") or nested.get("editPath")
+                            if download_url or edit_url:
+                                break
+            
+            message = ""
+            if status == "pending":
+                message = "Presentation is still being generated. Please check again in a few moments."
+            elif status == "completed":
+                if download_url or edit_url:
+                    message = "Presentation is ready! Use the URLs above to access it."
+                else:
+                    message = "Presentation is completed but URLs not found in response. Check Gamma dashboard."
+            elif status == "failed":
+                message = "Presentation generation failed. Please try generating again."
+            else:
+                message = f"Unknown status: {status}"
+            
+            return {
+                "success": True,
+                "status": status,
+                "download_url": download_url,
+                "edit_url": edit_url,
+                "presentation_id": presentation_id,
+                "generation_id": generation_id,
+                "message": message,
+                "gamma_response": status_data
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DEBUG] ❌ Error checking PPT status: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error checking PPT status: {str(e)}"
+        )
+
+
+# ============================================================================
+# MARKET TRENDS ENDPOINT
+# ============================================================================
+
+class MarketTrendsRequest(BaseModel):
+    """Request schema for market trends fetching"""
+    hero_ingredients: Optional[List[str]] = Field(default_factory=list, description="List of hero ingredient names")
+    benefits: Optional[List[str]] = Field(default_factory=list, description="List of benefits")
+    product_type: Optional[str] = Field(None, description="Product type (serum, cream, etc.)")
+    category: str = Field("skincare", description="Category: skincare or haircare")
+    max_age_days: int = Field(35, description="Maximum age of cached data in days")
+    use_fallback: bool = Field(True, description="Whether to use SerpAPI if MongoDB has no data")
+    use_synthesis: bool = Field(True, description="Whether to use Claude synthesis (default: True, recommended)")
+    parsed_data: Optional[Dict[str, Any]] = Field(None, description="Parsed wish data from /parse-wish endpoint (required for synthesis)")
+
+
+@router.post("/market-trends", response_model=None)
+async def fetch_market_trends(
+    request: MarketTrendsRequest,
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Fetch market trends data for ingredients, benefits, and product type.
+    
+    This endpoint provides market intelligence data from MongoDB (batch data)
+    with SerpAPI fallback if needed. Uses Claude synthesis by default for structured intelligence.
+    
+    REQUEST BODY:
+    {
+        "hero_ingredients": ["Vitamin C", "Niacinamide"],
+        "benefits": ["brightening", "anti-aging"],
+        "product_type": "serum",
+        "category": "skincare",
+        "max_age_days": 35,
+        "use_fallback": true,
+        "use_synthesis": true,
+        "parsed_data": {
+            "category": "skincare",
+            "product_type": {"id": "serum", "name": "Serum"},
+            "detected_benefits": ["brightening"],
+            "detected_ingredients": [{"name": "Vitamin C"}],
+            "complexity": "medium"
+        }
+    }
+    
+    RESPONSE (if use_synthesis=true with parsed_data):
+    Synthesized structured intelligence:
+    - executive_summary: High-level overview
+    - opportunity_analysis: Market opportunities with scoring
+    - competitive_intelligence: Competitive landscape
+    - recommendations: Actionable recommendations
+    
+    RESPONSE (if use_synthesis=false or parsed_data missing):
+    Legacy formatted data:
+    - ingredient_trends: Timeseries data, growth rates, related queries
+    - benefit_trends: Competing approaches
+    - competitive_landscape: Brand trends
+    - regional_insights: Regional distribution
+    - shopping_insights: Price ranges
+    - key_insights: Generated insights
+    """
+    try:
+        trends_service = MarketTrendsService()
+        
+        trends_data = await trends_service.fetch_trends_for_wish(
+            hero_ingredients=request.hero_ingredients,
+            benefits=request.benefits,
+            product_type=request.product_type,
+            category=request.category,
+            max_age_days=request.max_age_days,
+            use_fallback=request.use_fallback,
+            use_synthesis=request.use_synthesis,
+            parsed_data=request.parsed_data
+        )
+        
+        return {
+            "success": True,
+            "data": trends_data,
+            "timestamp": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+        }
+    
+    except Exception as e:
+        print(f"❌ Error fetching market trends: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching market trends: {str(e)}"
+        )
+
+
+# ============================================================================
+# PPT GENERATION ENDPOINT
+# ============================================================================
+
+# Helper functions for PPT generation
+def _extract_ingredients_from_phases(phases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Extract flat list of ingredients from phases structure"""
+    ingredients = []
+    for phase in phases:
+        for ing in phase.get("ingredients", []):
+            ingredients.append({
+                "name": ing.get("name", ""),
+                "inci": ing.get("inci", ""),
+                "percent": ing.get("percent", 0),
+                "phase": phase.get("id", ""),
+                "function": ing.get("function", ""),
+                "cost_per_kg": ing.get("cost", 0) * 1000 if ing.get("cost") else 0,
+                "is_hero": ing.get("hero", False)
+            })
+    return ingredients
+
+
+def _check_cost_in_range(cost: float, cost_target: Dict[str, float]) -> bool:
+    """Check if cost is within target range"""
+    if not cost_target:
+        return True
+    min_cost = cost_target.get("min", 0)
+    max_cost = cost_target.get("max", float('inf'))
+    return min_cost <= cost <= max_cost
+
+
+def _extract_ingredients_from_basic_mode(basic_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract ingredients list from basic_mode_result structure"""
+    ingredients = []
+    formula_data = basic_result.get("formula", {})
+    technical_formula = formula_data.get("technicalFormula", {}) if isinstance(formula_data, dict) else {}
+    
+    # Extract from technical formula phases
+    phases = technical_formula.get("phases", [])
+    for phase in phases:
+        phase_id = phase.get("id") or phase.get("phase", "")
+        for ing in phase.get("ingredients", []):
+            percent = ing.get("percent") or ing.get("percentage", 0)
+            if isinstance(percent, str):
+                try:
+                    percent = float(percent.replace('%', '').strip())
+                except:
+                    percent = 0
+            percent = float(percent) if percent else 0
+            
+            ingredients.append({
+                "name": ing.get("name", ""),
+                "inci": ing.get("inci", ing.get("name", "")),
+                "percent": percent,
+                "phase": phase_id,
+                "function": ing.get("function", ""),
+                "is_hero": ing.get("hero", False) or ing.get("isHero", False)
+            })
+    
+    return ingredients
+
+
+def _extract_insights_from_basic_mode(basic_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract insights from basic_mode_result structure"""
+    insights = []
+    formula_data = basic_result.get("formula", {})
+    key_features = formula_data.get("keyFeatures", []) if isinstance(formula_data, dict) else []
+    
+    for feature in key_features:
+        insights.append({
+            "icon": feature.get("icon", "💡"),
+            "title": feature.get("title", ""),
+            "text": feature.get("explanation", "")
+        })
+    
+    return insights
+
+
+def _extract_warnings_from_basic_mode(basic_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract warnings from basic_mode_result structure"""
+    warnings = []
+    formula_data = basic_result.get("formula", {})
+    pro_tips = formula_data.get("proTips", []) if isinstance(formula_data, dict) else []
+    for tip in pro_tips:
+        if "warning" in tip.get("text", "").lower() or "caution" in tip.get("text", "").lower():
+            warnings.append({
+                "severity": "info",
+                "text": tip.get("text", "")
+            })
+    
+    return warnings
+
+
+def _extract_cost_analysis_from_basic_mode(basic_result: Dict[str, Any], business_numbers: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract cost analysis from basic_mode_result structure"""
+    formula_data = basic_result.get("formula", {})
+    technical_formula = formula_data.get("technicalFormula", {}) if isinstance(formula_data, dict) else {}
+    
+    cost_per_100g = technical_formula.get("totalCostPer100g", 0)
+    
+    return {
+        "raw_material_cost": {
+            "total_per_100g": cost_per_100g,
+            "total_per_unit": cost_per_100g  # Assuming 100g unit
+        },
+        "packaging_cost": business_numbers.get("packagingOptions", {}).get("total", 0) if business_numbers else 0,
+        "total_cost": cost_per_100g + (business_numbers.get("packagingOptions", {}).get("total", 0) if business_numbers else 0)
+    }
+
+
+# Note: format_wish_data_for_gamma function is defined above (full 1700+ line implementation)
+
+
+class GeneratePPTRequest(BaseModel):
+    """Request schema for PPT generation - only accepts history_id"""
+    history_id: str = Field(..., description="History ID to fetch wish data from database")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "history_id": "507f1f77bcf86cd799439011"
+            }
+        }
+
+
+@router.post("/generate-ppt", response_model=None)
+async def generate_wish_ppt(
+    request: GeneratePPTRequest = Body(...),
+    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
+):
+    """
+    Generate PowerPoint presentation from Make a Wish data using Gamma API.
+    
+    REQUEST BODY:
+       {
+           "history_id": "mongodb_object_id_here"
+       }
+    
+    All data will be retrieved from the database using the history_id.
+    Supports all formats:
+    - formula_result (old format with phases, insights, warnings, compliance)
+    - formula_data with formula/insights (new revised format)
+    - formula_data with ingredient_selection/optimized_formula (old format within formula_data)
+    - basic_mode_result (basic mode format)
+    
+    RESPONSE:
+    {
+        "success": true,
+        "presentation_id": "gamma_presentation_id",
+        "download_url": "https://...",
+        "edit_url": "https://...",
+        "message": "Presentation generated successfully"
+    }
+    """
+    print(f"\n{'='*80}")
+    print(f"[DEBUG] 🚀 API CALL: /api/make-wish/generate-ppt")
+    print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
+    print(f"{'='*80}\n")
+    
+    try:
+        # Extract user_id from JWT token
+        user_id_value = current_user.get("user_id") or current_user.get("_id")
+        if not user_id_value:
+            raise HTTPException(status_code=400, detail="User ID not found in JWT token")
+        
+        # Get wish data from database using history_id
+        history_id = request.history_id
+        if not history_id:
+            raise HTTPException(status_code=400, detail="history_id is required")
+        
+        # Validate ObjectId
+        if not ObjectId.is_valid(history_id):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid history_id format. Expected MongoDB ObjectId, got: {history_id[:50]}"
+            )
+        
+        # Fetch from database
+        history_doc = await wish_history_col.find_one({
+            "_id": ObjectId(history_id),
+            "user_id": user_id_value
+        })
+        
+        if not history_doc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"History item not found or doesn't belong to user"
+            )
+        
+        # Extract wish response data from history - supports all formats
+        if "formula_data" in history_doc:
+            formula_data = history_doc.get("formula_data") or {}
+            if not isinstance(formula_data, dict):
+                formula_data = {}
+            
+            if "formula" in formula_data or "insights" in formula_data:
+                wish_response_data = {
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "formula": formula_data.get("formula", {}) if isinstance(formula_data, dict) else {},
+                    "insights": formula_data.get("insights", {}) if isinstance(formula_data, dict) else {},
+                    "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                    "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                    "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
+                }
+            else:
+                wish_response_data = {
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "ingredient_selection": formula_data.get("ingredient_selection", {}) if isinstance(formula_data, dict) else {},
+                    "optimized_formula": formula_data.get("optimized_formula", {}) if isinstance(formula_data, dict) else {},
+                    "manufacturing": formula_data.get("manufacturing", {}) if isinstance(formula_data, dict) else {},
+                    "cost_analysis": formula_data.get("cost_analysis", {}) if isinstance(formula_data, dict) else {},
+                    "compliance": formula_data.get("compliance", {}) if isinstance(formula_data, dict) else {}
+                }
+            if "parsed_data" in history_doc:
+                wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+        elif "formula_result" in history_doc:
+            formula_result = history_doc.get("formula_result", {})
+            if not isinstance(formula_result, dict):
+                formula_result = {}
+            
+            wish_response_data = {
+                "wish_data": history_doc.get("wish_data") or {},
+                "formula_result": formula_result,
+                "optimized_formula": {
+                    "optimized_formula": {
+                        "name": formula_result.get("name", ""),
+                        "total_percentage": 100.0,
+                        "estimated_cost_per_g": formula_result.get("cost", 0) / 100 if formula_result.get("cost") else 0,
+                        "target_ph": formula_result.get("ph", {})
+                    },
+                    "ingredients": _extract_ingredients_from_phases(formula_result.get("phases", [])),
+                    "phases": formula_result.get("phases", []),
+                    "insights": formula_result.get("insights", []),
+                    "warnings": formula_result.get("warnings", []),
+                    "cost_breakdown": {
+                        "total_per_g": formula_result.get("cost", 0) / 100 if formula_result.get("cost") else 0,
+                        "cost_vs_target": "within_range" if _check_cost_in_range(
+                            formula_result.get("cost", 0),
+                            formula_result.get("costTarget", {})
+                        ) else "outside_range"
+                    }
+                },
+                "compliance": formula_result.get("compliance", {})
+            }
+        elif "basic_mode_result" in history_doc:
+            basic_result = history_doc.get("basic_mode_result") or {}
+            if not isinstance(basic_result, dict):
+                basic_result = {}
+            
+            formula_data = basic_result.get("formula", {})
+            technical_formula = formula_data.get("technicalFormula", {}) if isinstance(formula_data, dict) else {}
+            business_numbers = basic_result.get("businessNumbers", {}) if isinstance(basic_result, dict) else {}
+            
+            wish_response_data = {
+                "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                "basic_mode_result": basic_result,
+                "ingredient_selection": {
+                    "formula_name": formula_data.get("formulaName", ""),
+                    "formula_type": basic_result.get("extractedParameters", {}).get("productType", ""),
+                    "ingredients": _extract_ingredients_from_basic_mode(basic_result)
+                },
+                "optimized_formula": {
+                    "optimized_formula": {
+                        "name": formula_data.get("formulaName", ""),
+                        "total_percentage": 100.0,
+                        "estimated_cost_per_g": technical_formula.get("totalCostPer100g", 0) / 100 if technical_formula.get("totalCostPer100g") else 0
+                    },
+                    "ingredients": _extract_ingredients_from_basic_mode(basic_result),
+                    "phases": technical_formula.get("phases", []),
+                    "insights": _extract_insights_from_basic_mode(basic_result),
+                    "warnings": _extract_warnings_from_basic_mode(basic_result)
+                },
+                "manufacturing": basic_result.get("manufacturing", {}),
+                "cost_analysis": _extract_cost_analysis_from_basic_mode(basic_result, business_numbers),
+                "compliance": basic_result.get("compliance", {})
+            }
+            if "parsed_data" in history_doc:
+                wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+        else:
+            if "parsed_data" in history_doc or "wish_data" in history_doc:
+                wish_response_data = {
+                    "wish_data": history_doc.get("wish_data") or history_doc.get("parsed_data") or {},
+                    "ingredient_selection": {},
+                    "optimized_formula": {},
+                    "manufacturing": {},
+                    "cost_analysis": {},
+                    "compliance": {}
+                }
+                if "parsed_data" in history_doc:
+                    wish_response_data["parsed_data"] = history_doc.get("parsed_data")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="History item does not contain formula data or wish data. Please generate a formula first."
+                )
+        
+        # Format wish data for Gamma
+        formatted_wish_data = format_wish_data_for_gamma(wish_response_data)
+        
+        # Generate business strategy prompt with Claude
+        business_strategy_prompt = await generate_business_strategy_prompt(
+            data_text=formatted_wish_data,
+            data_type="cosmetic_formulation",
+            custom_instructions=None
+        )
+        
+        # Generate PPT using Gamma API
+        result = await generate_ppt_from_data(
+            data_text=formatted_wish_data,
+            prompt=business_strategy_prompt,
+            tone="professional, strategic, business-focused, investor-ready",
+            audience="business executives, investors, stakeholders, strategic planners, C-level executives",
+            num_slides=15,
+            export_format="pptx",
+            language="en"
+        )
+        
+        print(f"[DEBUG] ✅ PPT Generation complete!")
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Unexpected error generating PPT: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )

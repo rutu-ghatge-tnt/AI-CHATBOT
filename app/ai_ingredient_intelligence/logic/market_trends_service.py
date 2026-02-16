@@ -35,7 +35,9 @@ class MarketTrendsService:
         product_type: Optional[str] = None,
         category: str = "skincare",
         max_age_days: int = 35,
-        use_fallback: bool = True
+        use_fallback: bool = True,
+        use_synthesis: bool = True,
+        parsed_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Main function to fetch market trends for Make A Wish.
@@ -44,7 +46,8 @@ class MarketTrendsService:
         1. Try MongoDB first (batch data)
         2. If missing, fallback to SerpAPI (if use_fallback=True)
         3. Store SerpAPI results in MongoDB for future use
-        4. Format data for frontend visualization
+        4. If use_synthesis=True: Call Claude to synthesize into structured intelligence
+        5. Otherwise: Format data for frontend visualization (legacy format)
         
         Args:
             hero_ingredients: List of ingredient names
@@ -53,9 +56,12 @@ class MarketTrendsService:
             category: "skincare" or "haircare"
             max_age_days: Max age of cached data (default: 35 days)
             use_fallback: Whether to use SerpAPI if MongoDB has no data
+            use_synthesis: Whether to use Claude synthesis (default: True, recommended)
+            parsed_data: Parsed wish data from NLP stage (required if use_synthesis=True)
         
         Returns:
-            Formatted trends data ready for frontend
+            If use_synthesis=True: Structured synthesis JSON ready for frontend
+            Otherwise: Formatted trends data in legacy format
         """
         hero_ingredients = hero_ingredients or []
         benefits = benefits or []
@@ -130,16 +136,69 @@ class MarketTrendsService:
             else:
                 print(f"✅ MongoDB has sufficient data for all ingredients/benefits. No SerpAPI fallback needed.")
         
-        # Step 3: Format for frontend
-        formatted_data = self._format_for_frontend(
-            mongo_data,
-            hero_ingredients=hero_ingredients,
-            benefits=benefits,
-            product_type=product_type,
-            category=category
-        )
-        
-        return formatted_data
+        # Step 3: Synthesize with Claude OR format for frontend (legacy)
+        if use_synthesis:
+            # Use new synthesis approach
+            if not parsed_data:
+                print("⚠️ use_synthesis=True but parsed_data not provided. Falling back to legacy format.")
+                formatted_data = self._format_for_frontend(
+                    mongo_data,
+                    hero_ingredients=hero_ingredients,
+                    benefits=benefits,
+                    product_type=product_type,
+                    category=category
+                )
+                return formatted_data
+            
+            try:
+                # Import synthesis module
+                from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trends
+                
+                print(f"🧠 Using trend synthesis (Claude) to generate structured intelligence...")
+                
+                # Prepare matched_trends in the format expected by synthesis
+                matched_trends = {
+                    "level_1_ingredient_trends": mongo_data.get("level_1_ingredient_trends", {}),
+                    "level_2_competing_approaches": mongo_data.get("level_2_competing_approaches", []),
+                    "level_3_brand_trends": mongo_data.get("level_3_brand_trends", []),
+                    "comparison_data": mongo_data.get("comparison_data", []),
+                    "shopping_data": mongo_data.get("shopping_data"),
+                    "insights": mongo_data.get("insights", {})
+                }
+                
+                # Call synthesis
+                synthesized = await synthesize_trends(
+                    parsed_data=parsed_data,
+                    matched_trends=matched_trends
+                )
+                
+                print(f"✅ Trend synthesis complete!")
+                return synthesized
+                
+            except Exception as e:
+                print(f"⚠️ Trend synthesis failed: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"   Falling back to legacy format...")
+                # Fallback to legacy format if synthesis fails
+                formatted_data = self._format_for_frontend(
+                    mongo_data,
+                    hero_ingredients=hero_ingredients,
+                    benefits=benefits,
+                    product_type=product_type,
+                    category=category
+                )
+                return formatted_data
+        else:
+            # Use legacy format
+            formatted_data = self._format_for_frontend(
+                mongo_data,
+                hero_ingredients=hero_ingredients,
+                benefits=benefits,
+                product_type=product_type,
+                category=category
+            )
+            return formatted_data
     
     async def _fetch_from_serpapi_fallback(
         self,
