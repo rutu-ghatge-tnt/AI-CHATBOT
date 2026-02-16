@@ -31,7 +31,7 @@ except ImportError:
     anthropic = None
 
 claude_api_key = os.getenv("CLAUDE_API_KEY")
-claude_model = "claude-opus-4-5-20251101"  # Hardcoded for Make a Wish
+claude_model = "claude-opus-4-5-20251101"  # Hardcoded Opus model for all Make a Wish operations
 
 if not claude_api_key:
     raise RuntimeError("CLAUDE_API_KEY is required for Make a Wish feature")
@@ -515,13 +515,18 @@ async def call_ai_with_claude(
     cache_block_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Call Claude API for Make a Wish pipeline with prompt caching support.
-    Uses Claude as per project preference.
+    Call Claude Opus API for Make a Wish pipeline with prompt caching support.
+    
+    Uses claude-opus-4-5-20251101 for all Make a Wish operations including:
+    - Wish parsing
+    - Formula generation
+    - Ingredient selection
+    - Compliance checking
     
     Args:
         system_prompt: The system prompt (will be cached)
         user_prompt: The user prompt (dynamic content)
-        prompt_type: Type of prompt for cache tracking (e.g., "ingredient_selection")
+        prompt_type: Type of prompt for cache tracking (e.g., "parse_wish", "formula_generation")
         max_retries: Maximum number of retry attempts
     """
     
@@ -540,8 +545,9 @@ async def call_ai_with_claude(
     )
     
     # Prepare API call parameters
+    # Using claude-opus-4-5-20251101 for all Make a Wish operations
     api_params = {
-        "model": claude_model,
+        "model": claude_model,  # claude-opus-4-5-20251101
         "max_tokens": 16384,
         "temperature": 0.3,
         "system": system_prompt,

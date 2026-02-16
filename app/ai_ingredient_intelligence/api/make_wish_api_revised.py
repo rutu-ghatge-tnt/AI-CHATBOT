@@ -12,6 +12,8 @@ This module implements the new API endpoints for the revised Make A Wish flow:
 
 The new flow features natural language parsing, complexity selection, 
 ingredient alternatives, formula editing, and commercialization.
+
+All AI operations use Claude Opus (claude-opus-4-5-20251101) for optimal quality.
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks
@@ -67,6 +69,9 @@ from app.ai_ingredient_intelligence.logic.credit_service import (
     deduct_credits,
     CreditKey
 )
+
+# Import WebSocket notification helper
+from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -597,7 +602,18 @@ async def process_generate_revised_background(
         except Exception as notif_error:
             print(f"⚠️ [BACKGROUND] Failed to send success notification: {notif_error}")
         
-                except Exception as e:
+        # Send real-time WebSocket notification
+        try:
+            await notify_user(
+                user_id=user_id,
+                title="Formula Generated Successfully!",
+                message=f"Your formula '{name}' has been generated and is ready to view.",
+                data={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
+            )
+        except Exception as ws_error:
+            print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
+        
+    except Exception as e:
         processing_success = False
         error_message = str(e)
         print(f"❌ [BACKGROUND] Error processing wish {history_id}: {e}")
@@ -629,6 +645,17 @@ async def process_generate_revised_background(
             )
         except Exception as notif_error:
             print(f"⚠️ [BACKGROUND] Failed to send failure notification: {notif_error}")
+        
+        # Send real-time WebSocket notification
+        try:
+            await notify_user(
+                user_id=user_id,
+                title="Formula Generation Failed",
+                message=f"Sorry, we couldn't generate your formula '{name}'. Please try again.",
+                data={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message}
+            )
+        except Exception as ws_error:
+            print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
 
 
 # ============================================================================

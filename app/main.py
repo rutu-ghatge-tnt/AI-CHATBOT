@@ -302,6 +302,15 @@ if make_wish_router is not None:
 else:
     print("Warning: Make a Wish router not available, skipping registration")
 
+# ✅ Add WebSocket Routes for Real-time Notifications
+try:
+    from app.ai_ingredient_intelligence.api.websocket_routes import router as websocket_router
+    app.include_router(websocket_router, prefix="/api")
+    print("✅ WebSocket routes registered")
+except ImportError as e:
+    print(f"Warning: Could not import websocket routes: {e}")
+    print("   WebSocket notifications will not be available.")
+
 # ✅ Add Inspiration Boards API
 try:
     from app.ai_ingredient_intelligence.api.inspiration_boards import router as inspiration_boards_router
