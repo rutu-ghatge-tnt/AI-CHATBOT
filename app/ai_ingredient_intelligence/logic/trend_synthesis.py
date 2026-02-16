@@ -331,50 +331,106 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
     """
     Validate the synthesized trend data structure.
     
+    Supports both old format (related_keyword_trends, trend_by_ingredient) 
+    and new format (related_keywords, hero_ingredient_analysis, executive_summary).
+    
     Args:
         data: The synthesized JSON response
     
     Returns:
         True if valid, raises ValueError if invalid
     """
-    required_fields = [
-        'related_keyword_trends',
-        'competitive_landscape',
-        'trend_by_ingredient',
-        'insights_breakdown',
-        'marketing_angles',
-        'risks',
-        'next_steps',
-        'product_recommendations',
-        'key_insights',
-        'metadata'
-    ]
+    # Check for new format (based on system prompt)
+    has_new_format = any(key in data for key in [
+        'executive_summary', 'hero_ingredient_analysis', 'related_keywords',
+        'opportunity_breakdown', 'regional_intelligence'
+    ])
     
-    for field in required_fields:
-        if field not in data:
-            raise ValueError(f"Missing required field: {field}")
+    # Check for old format
+    has_old_format = any(key in data for key in [
+        'related_keyword_trends', 'trend_by_ingredient', 'insights_breakdown'
+    ])
     
-    # Validate opportunity scores are within bounds
-    for ingredient in data.get('trend_by_ingredient', []):
-        synthesis = ingredient.get('synthesis', {})
-        if synthesis:
-            opp_score = synthesis.get('opportunity_score', 0)
+    if not has_new_format and not has_old_format:
+        raise ValueError("Invalid response format: missing both new and old format fields")
+    
+    if has_new_format:
+        # Validate new format structure
+        required_fields = [
+            'executive_summary',
+            'hero_ingredient_analysis',
+            'competitive_landscape',
+            'related_keywords'  # Accept both related_keywords and related_keyword_trends
+        ]
+        
+        for field in required_fields:
+            if field not in data:
+                # Allow related_keyword_trends as alternative to related_keywords
+                if field == 'related_keywords' and 'related_keyword_trends' in data:
+                    continue
+                raise ValueError(f"Missing required field: {field}")
+        
+        # Validate executive_summary structure
+        exec_summary = data.get('executive_summary', {})
+        if exec_summary:
+            opp_score = exec_summary.get('opportunity_score', 0)
             if opp_score < 0 or opp_score > 100:
                 raise ValueError(f"Invalid opportunity score: {opp_score} (must be 0-100)")
+        
+        # Validate opportunity_breakdown if present
+        opp_breakdown = data.get('opportunity_breakdown', {})
+        if opp_breakdown:
+            demand_score = opp_breakdown.get('demand_score', 0)
+            competition_score = opp_breakdown.get('competition_score', 0)
+            timing_score = opp_breakdown.get('timing_score', 0)
+            feasibility_score = opp_breakdown.get('feasibility_score', 0)
+            margin_score = opp_breakdown.get('margin_score', 0)
             
-            # Validate sub-scores sum approximately equals opportunity score
-            breakdown = synthesis.get('scores_breakdown', {})
-            if breakdown:
-                sub_total = (
-                    breakdown.get('demand', {}).get('score', 0) +
-                    breakdown.get('competition', {}).get('score', 0) +
-                    breakdown.get('timing', {}).get('score', 0) +
-                    breakdown.get('feasibility', {}).get('score', 0) +
-                    breakdown.get('margin', {}).get('score', 0)
-                )
-                # Allow 2 point tolerance for rounding
-                if abs(sub_total - opp_score) > 2:
-                    print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
+            # Validate sub-scores are within bounds
+            for score_name, score_value in [
+                ('demand_score', demand_score),
+                ('competition_score', competition_score),
+                ('timing_score', timing_score),
+                ('feasibility_score', feasibility_score),
+                ('margin_score', margin_score)
+            ]:
+                if score_value < 0 or score_value > 25:
+                    print(f"⚠️ Warning: {score_name} out of expected range: {score_value}")
+    
+    else:
+        # Validate old format structure
+        required_fields = [
+            'related_keyword_trends',
+            'competitive_landscape',
+            'trend_by_ingredient',
+            'insights_breakdown'
+        ]
+        
+        for field in required_fields:
+            if field not in data:
+                raise ValueError(f"Missing required field: {field}")
+        
+        # Validate opportunity scores are within bounds
+        for ingredient in data.get('trend_by_ingredient', []):
+            synthesis = ingredient.get('synthesis', {})
+            if synthesis:
+                opp_score = synthesis.get('opportunity_score', 0)
+                if opp_score < 0 or opp_score > 100:
+                    raise ValueError(f"Invalid opportunity score: {opp_score} (must be 0-100)")
+                
+                # Validate sub-scores sum approximately equals opportunity score
+                breakdown = synthesis.get('scores_breakdown', {})
+                if breakdown:
+                    sub_total = (
+                        breakdown.get('demand', {}).get('score', 0) +
+                        breakdown.get('competition', {}).get('score', 0) +
+                        breakdown.get('timing', {}).get('score', 0) +
+                        breakdown.get('feasibility', {}).get('score', 0) +
+                        breakdown.get('margin', {}).get('score', 0)
+                    )
+                    # Allow 2 point tolerance for rounding
+                    if abs(sub_total - opp_score) > 2:
+                        print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
     
     return True
 
@@ -594,9 +650,13 @@ async def synthesize_trends(
         validate_trend_synthesis(synthesized)
         
         print(f"[TREND SYNTHESIS] ✅ Synthesis complete!")
-        print(f"[TREND SYNTHESIS]   Ingredients analyzed: {len(synthesized.get('trend_by_ingredient', []))}")
-        print(f"[TREND SYNTHESIS]   Keywords: {len(synthesized.get('related_keyword_trends', []))}")
-        print(f"[TREND SYNTHESIS]   Brands: {len(synthesized.get('competitive_landscape', []))}")
+        # Support both old and new formats
+        ingredients_count = len(synthesized.get('trend_by_ingredient', [])) or (1 if synthesized.get('hero_ingredient_analysis') else 0)
+        keywords_count = len(synthesized.get('related_keyword_trends', [])) or len(synthesized.get('related_keywords', []))
+        brands_count = len(synthesized.get('competitive_landscape', [])) if isinstance(synthesized.get('competitive_landscape'), list) else (1 if synthesized.get('competitive_landscape') else 0)
+        print(f"[TREND SYNTHESIS]   Ingredients analyzed: {ingredients_count}")
+        print(f"[TREND SYNTHESIS]   Keywords: {keywords_count}")
+        print(f"[TREND SYNTHESIS]   Brands: {brands_count}")
         
         return synthesized
         
