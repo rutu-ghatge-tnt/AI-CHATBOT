@@ -15,6 +15,8 @@ ingredient alternatives, formula editing, and commercialization.
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks
+import httpx
+import os
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
@@ -49,17 +51,22 @@ from app.ai_ingredient_intelligence.logic.make_wish_config import (
 from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon, replace_icon_emoji_values
 
 # Import AI prompts
-from app.ai_ingredient_intelligence.logic.make_wish_prompts_revised import (
+from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
     PARSE_WISH_PROMPT, INGREDIENT_SELECTION_COMPLEXITY_PROMPT,
     INSIGHTS_GENERATION_PROMPT, ALTERNATIVES_ANALYSIS_PROMPT,
     format_ingredients_list, format_alternatives_list
 )
 
-# Import existing generator for backward compatibility
+# Import existing generator
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     call_ai_with_claude, generate_formula_from_wish
 )
-from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_formula_basic_mode
+
+# Import credit service
+from app.ai_ingredient_intelligence.logic.credit_service import (
+    deduct_credits,
+    CreditKey
+)
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -250,6 +257,7 @@ async def parse_natural_language_wish(
 @router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
@@ -263,14 +271,21 @@ async def generate_formula_revised(
     - Parsed natural language wish
     - Selected complexity level (minimalist/classic/luxe)
     - Auto-detected texture
-    - Enhanced insights generation (advanced mode only)
+    - Active ingredient options with business context
+    
+    NOW WITH ASYNC PATTERN:
+    - Saves request to DB immediately
+    - Returns history_id instantly
+    - Processes in background
+    - Deducts credits on success
+    - Sends OneSignal notifications
     """
-    start_time = time.time()
+    request_received_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     
     # Extract user info for auto-save
     user_id = current_user.get("user_id") or current_user.get("_id")
     name = request.name.strip()
-    history_id = None
+    history_id = request.history_id
     
     # Validate required fields
     if not name:
@@ -293,326 +308,411 @@ async def generate_formula_revised(
         )
     
     try:
-        # --- BASIC MODE: simplified flow for layman users ---
-        if mode == "basic":
-            # Cost range from complexity: minimalist 30-40, classic 40-60, luxe 60-100
-            cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
-            cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
-            wish_data = {
-                "category": request.parsed_data.category,
-                "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
-                "benefits": request.parsed_data.detected_benefits,
-                "exclusions": request.parsed_data.detected_exclusions,
-                "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
-                "texture": request.parsed_data.auto_texture.label,
-                "costMin": cost_min,
-                "costMax": cost_max,
-                "claims": request.claims or [],
-                "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
-                "additionalNotes": request.additional_notes or "",
-                "mode": "basic",
-            }
-            basic_result = await generate_formula_basic_mode(wish_data)
-            basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names (like advanced)
-            formula_id = str(uuid.uuid4())
-            if not history_id:
-                try:
-                    history_doc = {
-                        "mode": "basic",
-                        "user_id": user_id,
-                        "name": name,
-                        "tag": request.tag,
-                        "notes": request.notes,
-                        "wish_text": request.wish_text,
-                        "parsed_data": request.parsed_data.model_dump(),
-                        "complexity": request.complexity,
-                        "formula_id": formula_id,
-                        "formula_data": None,
-                        "basic_mode_result": basic_result,
-                        "status": "completed",
-                        "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-                        "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-                    }
-                    result = await wish_history_col.insert_one(history_doc)
-                    history_id = str(result.inserted_id)
-                    print(f"[AUTO-SAVE] Created history record (basic mode): {history_id}")
-                except Exception as e:
-                    print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
-            return MakeWishBasicResponseRevised(
-                success=True,
-                formula_id=formula_id,
-                history_id=history_id or formula_id
-            )
+        # Prepare wish data for background processing
+        cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
+        cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
+        wish_data = {
+            "category": request.parsed_data.category,
+            "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
+            "benefits": request.parsed_data.detected_benefits,
+            "exclusions": request.parsed_data.detected_exclusions,
+            "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
+            "texture": request.parsed_data.auto_texture.label,
+            "costMin": cost_min,
+            "costMax": cost_max,
+            "claims": request.claims or [],
+            "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
+            "additionalNotes": request.additional_notes or "",
+            "mode": "basic",
+        }
         
-        # --- ADVANCED MODE: full multi-stage pipeline ---
-        print(f"🚀 Generating revised formula (ADVANCED MODE)...")
-        print(f"   Complexity: {request.complexity}")
-        print(f"   Product Type: {request.parsed_data.product_type.name}")
-        
-        # Get complexity configuration
-        complexity_config = get_complexity_config(request.complexity)
-        if not complexity_config:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid complexity level: {request.complexity}"
-            )
-        
-        # Stage 1: Ingredient Selection with Complexity
-        print("📋 Stage 1: Ingredient Selection with Complexity...")
-        
-        # Prepare ingredients list for prompt
-        detected_ingredients = request.parsed_data.detected_ingredients
-        
-        # Generate ingredient selection prompt
-        selection_prompt = INGREDIENT_SELECTION_COMPLEXITY_PROMPT.format(
-            wish_text=request.wish_text,
-            category=request.parsed_data.category,
-            product_type=request.parsed_data.product_type.name,
-            benefits=", ".join(request.parsed_data.detected_benefits),
-            exclusions=", ".join(request.parsed_data.detected_exclusions),
-            skin_type=", ".join(request.parsed_data.detected_skin_types),
-            detected_ingredients=[ing.name for ing in detected_ingredients],
-            texture=request.parsed_data.auto_texture.label,
-            complexity=request.complexity,
-            max_ingredients=complexity_config["max_ingredients"],
-            active_slots=complexity_config["active_slots"],
-            include_sensorials=complexity_config["include_sensorials"],
-            base_ingredients=", ".join(complexity_config["base_ingredients"]),
-            cost_multiplier=complexity_config["cost_target_multiplier"]
-        )
-        
-        # Call AI for ingredient selection
-        selected_ingredients = await call_ai_with_claude(
-            system_prompt="You are a cosmetic formulation expert. Select ingredients based on user requirements and complexity constraints.",
-            user_prompt=selection_prompt,
-            prompt_type="ingredient_selection_complexity"
-        )
-        
-        if not selected_ingredients or "selected_ingredients" not in selected_ingredients:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to select ingredients"
-            )
-        
-        print(f"✅ Selected {len(selected_ingredients['selected_ingredients'])} ingredients")
-        
-        # Stage 2: Formula Optimization
-        print("🔧 Stage 2: Formula Optimization...")
-        
-        # Simplified optimization prompt
-        optimization_prompt = f"""You are a cosmetic formulation expert. Optimize ingredient percentages for a balanced formula.
-
-## FORMULA REQUIREMENTS
-- Product: {request.parsed_data.product_type.name} ({request.parsed_data.category})
-- Texture Target: {request.parsed_data.auto_texture.label}
-- Complexity: {request.complexity}
-- Total Must Equal: 100.00%
-
-## SELECTED INGREDIENTS
-{format_ingredients_list(selected_ingredients['selected_ingredients'])}
-
-## OPTIMIZATION RULES
-
-1. **PERCENTAGE ALLOCATION**
-   - Total MUST equal exactly 100.00%
-   - Water/Aqua typically makes up 60-80% for water-based products
-   - Round all percentages to 2 decimal places
-
-2. **ACTIVE OPTIMIZATION**
-   - Hero ingredients at efficacious levels within their ranges
-   - Consider synergy between multiple actives
-   - Stay within safe usage limits
-
-3. **TEXTURE ACHIEVEMENT**
-   - "{request.parsed_data.auto_texture.label}" texture requires appropriate thickener levels
-   - Adjust emollients for cream vs gel textures
-   - Consider sensory modifiers for luxe products
-
-4. **STABILITY & SAFETY**
-   - Preservative at effective level (usually 0.8-1.2%)
-   - pH adjusters as needed (usually 0.1-0.5%)
-   - Antioxidants for oxidation protection
-
-5. **COST BALANCING**
-   - Higher percentages of expensive ingredients increase cost
-   - Balance efficacy with cost targets for {request.complexity} complexity
-
-## PHASE ORGANIZATION
-- Phase A: Water phase (water-soluble ingredients)
-- Phase B: Oil phase (oil-soluble ingredients)  
-- Phase C: Cool down phase (heat-sensitive ingredients)
-
-## RESPONSE FORMAT (JSON):
-{{
-    "optimized_formula": {{
-        "name": "Formula Name",
-        "complexity": "{request.complexity}",
-        "total_percentage": 100.0,
-        "target_ph": {{"min": 5.0, "max": 6.0}},
-        "texture_achieved": "texture_description"
-    }},
-    "ingredients": [
-        {{
-            "id": "ingredient_id",
-            "name": "Ingredient Name",
-            "inci": "INCI Name",
-            "percentage": "X.XX%",
-            "phase": "A|B|C",
-            "function": "Purpose",
-            "is_hero": true|false,
-            "is_base": true|false,
-            "cost_contribution": "₹X.XX per 100g"
-        }}
-    ],
-    "phase_summary": [
-        {{
-            "phase": "A",
-            "name": "Water Phase",
-            "total_percent": X.XX,
-            "temperature": "70-75°C"
-        }}
-    ],
-    "optimization_notes": [
-        "Key decisions made during optimization"
-    ],
-    "cost_estimate": {{
-        "raw_material_cost_per_100g": ₹XXX,
-        "cost_category": "low|medium|high",
-        "meets_complexity_target": true|false
-    }}
-}}
-
-Ensure percentages are realistic and formula is manufacturable. Return ONLY the JSON object above, no markdown formatting."""
-        
-        optimized_formula = await call_ai_with_claude(
-            system_prompt="You are a cosmetic formulation expert. Optimize ingredient percentages for balanced, stable formulas.",
-            user_prompt=optimization_prompt,
-            prompt_type="formula_optimization_revised"
-        )
-        
-        # Debug: Log the actual structure returned
-        print(f"🔍 Optimized formula structure: {type(optimized_formula)}")
-        if isinstance(optimized_formula, dict):
-            print(f"   Keys: {list(optimized_formula.keys())}")
-        
-        if not optimized_formula:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to optimize formula - empty response"
-            )
-        
-        # Check for multiple possible response formats
-        has_ingredients = "ingredients" in optimized_formula
-        has_optimized_formula = "optimized_formula" in optimized_formula
-        has_formula = "formula" in optimized_formula
-        
-        if not has_ingredients and not has_optimized_formula and not has_formula:
-            print(f"❌ Missing expected keys. Available keys: {list(optimized_formula.keys())}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to optimize formula - unexpected response format. Expected 'ingredients', 'optimized_formula', or 'formula' keys"
-            )
-        
-        print(f"✅ Optimized formula: {optimized_formula['optimized_formula']['total_percentage']}%")
-        
-        # Stage 3: Manufacturing Process (reuse existing) - COMMENTED FOR NOW
-        # print("🏭 Stage 3: Manufacturing Process...")
-        # from app.ai_ingredient_intelligence.logic.make_wish_generator import generate_manufacturing_prompt
-        # manufacturing_prompt = generate_manufacturing_prompt(optimized_formula)
-        # manufacturing = await call_ai_with_claude(
-        #     system_prompt="Generate detailed manufacturing instructions for cosmetic formulations.",
-        #     user_prompt=manufacturing_prompt,
-        #     prompt_type="manufacturing_process"
-        # )
-        manufacturing = {}  # Placeholder for future use
-        
-        # Stage 4: Compliance Check (reuse existing)
-        print("✅ Stage 4: Compliance Check...")
-        from app.ai_ingredient_intelligence.logic.make_wish_generator import generate_compliance_prompt
-        compliance_prompt = generate_compliance_prompt(optimized_formula)
-        compliance = await call_ai_with_claude(
-            system_prompt="Check regulatory compliance for cosmetic formulations.",
-            user_prompt=compliance_prompt,
-            prompt_type="compliance_check"
-        )
-        
-        # Stage 5: Insights Generation (NEW)
-        print("💡 Stage 5: Insights Generation...")
-        
-        # Get ingredients from the correct nested structure
-        ingredients_list = []
-        if "ingredients" in optimized_formula:
-            ingredients_list = optimized_formula["ingredients"]
-        elif "formula" in optimized_formula and "ingredients" in optimized_formula["formula"]:
-            ingredients_list = optimized_formula["formula"]["ingredients"]
-        
-        key_ingredients = [ing for ing in ingredients_list if ing.get("is_hero", False)]
-        
-        insights_prompt = INSIGHTS_GENERATION_PROMPT.format(
-            formula_name=optimized_formula["optimized_formula"]["name"],
-            product_type=request.parsed_data.product_type.name,
-            complexity=request.complexity,
-            key_ingredients=", ".join([ing["name"] for ing in key_ingredients]),
-            benefits=", ".join(request.parsed_data.detected_benefits),
-            target_audience=", ".join(request.parsed_data.detected_skin_types) or "General"
-        )
-        
-        insights = await call_ai_with_claude(
-            system_prompt="You are a cosmetic formulation expert and marketing strategist. Generate comprehensive insights for cosmetic formulas.",
-            user_prompt=insights_prompt,
-            prompt_type="insights_generation"
-        )
-        
-        # Generate unique IDs
+        # Save request to DB immediately with "in_progress" status
         formula_id = str(uuid.uuid4())
         if not history_id:
-            optimized_formula["insights"] = insights
-            optimized_formula["manufacturing"] = manufacturing
-            optimized_formula["compliance"] = compliance
-            # optimized_formula["complexity_config"] = complexity_config
-
-            # Create new history record
             try:
                 history_doc = {
-                    "mode": "advanced",
+                    "mode": "basic",
                     "user_id": user_id,
                     "name": name,
                     "tag": request.tag,
-                    "notes": request.notes,
+                    "additional_notes": request.additional_notes,
                     "wish_text": request.wish_text,
                     "parsed_data": request.parsed_data.model_dump(),
                     "complexity": request.complexity,
                     "formula_id": formula_id,
-                    "formula_data": optimized_formula,
+                    "formula_data": None,
                     "basic_mode_result": None,
-                    "status": "completed",
+                    "status": "in_progress",
+                    "request_received_at": request_received_at.isoformat(),
                     "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                     "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
                 }
                 result = await wish_history_col.insert_one(history_doc)
                 history_id = str(result.inserted_id)
-                print(f"[AUTO-SAVE] Created history record: {history_id}")
+                print(f"[AUTO-SAVE] Saved initial state with history_id: {history_id}")
             except Exception as e:
-                print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
+                print(f"[AUTO-SAVE] Error: Failed to save initial state: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to save request: {str(e)}"
+                )
+        else:
+            # Update existing history record to in_progress
+            try:
+                update_doc = {
+                    "status": "in_progress",
+                    "request_received_at": request_received_at.isoformat(),
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                }
+                await wish_history_col.update_one(
+                    {"_id": ObjectId(history_id), "user_id": user_id},
+                    {"$set": update_doc}
+                )
+                print(f"[AUTO-SAVE] Updated existing history {history_id} to in_progress")
+            except Exception as e:
+                print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
         
-        processing_time = time.time() - start_time
-        print(f"✅ Revised formula generated in {processing_time:.2f}s")
-        return MakeWishBasicResponseRevised(
-            success=True,
+        # Process in background
+        background_tasks.add_task(
+            process_generate_revised_background,
+            history_id=history_id,
+            user_id=user_id,
+            wish_data=wish_data,
+            request=request,
+            name=name,
             formula_id=formula_id,
-            history_id=history_id or formula_id
+            request_received_at=request_received_at
         )
+        
+        # Return immediate acknowledgment
+        print(f"[ACKNOWLEDGMENT] Returning immediate acknowledgment with history_id: {history_id}")
+        return {
+            "success": True,
+            "message": "Request received. Processing started.",
+            "history_id": history_id,
+            "formula_id": formula_id,
+            "status": "in_progress",
+            "request_received_at": request_received_at.isoformat()
+        }
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Unexpected error generating revised formula: {e}")
+        print(f"❌ Unexpected error in generate_formula_revised: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+# ============================================================================
+# BACKGROUND PROCESSING FUNCTION
+# ============================================================================
+
+async def process_generate_revised_background(
+    history_id: str,
+    user_id: str,
+    wish_data: Dict[str, Any],
+    request: MakeWishRequestRevised,
+    name: str,
+    formula_id: str,
+    request_received_at: datetime
+):
+    """
+    Background task to process revised Make a Wish formula generation.
+    Handles:
+    - Formula generation
+    - Trend analysis
+    - Market trends
+    - Synthesis
+    - Credit deduction (on success only)
+    - OneSignal push notifications (success/failure)
+    - Database updates
+    """
+    start_time = time.time()
+    processing_success = False
+    error_message = None
+    
+    try:
+        print(f"[BACKGROUND] Starting processing for history_id: {history_id}")
+        
+        # Generate formula
+        basic_result = await generate_formula_from_wish(wish_data)
+        basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names
+        
+        # Extract hero ingredients for trend analysis
+        hero_ingredients = []
+        try:
+            # Try to get from activeOptions -> recommendedFormula -> heroActives
+            active_options = basic_result.get("activeOptions", {})
+            recommended_formula = active_options.get("recommendedFormula", {})
+            hero_actives = recommended_formula.get("heroActives", [])
+            hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+            
+            # Fallback to detected ingredients from wish_data
+            if not hero_ingredients:
+                hero_ingredients = wish_data.get("heroIngredients", [])
+        except Exception as e:
+            print(f"⚠️ Error extracting hero ingredients: {e}")
+            hero_ingredients = wish_data.get("heroIngredients", [])
+        
+        # Fetch market trends data (formatted for frontend visualization)
+        market_trends = None
+        synthesis_data = {}  # Store synthesis for each ingredient
+        trend_data = {}  # Keep for backward compatibility (empty for now)
+        
+        try:
+            print(f"📊 Fetching market trends data for frontend...")
+            from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
+            trends_service = MarketTrendsService()
+            
+            # Extract benefits and product type from wish data
+            benefits = wish_data.get("benefits", [])
+            product_type = wish_data.get("productType") or wish_data.get("product_type")
+            category = wish_data.get("category", "skincare")
+            
+            market_trends = await trends_service.fetch_trends_for_wish(
+                hero_ingredients=hero_ingredients,
+                benefits=benefits,
+                product_type=product_type,
+                category=category,
+                max_age_days=35,
+                use_fallback=True
+            )
+            print(f"✅ Market trends fetched successfully")
+            
+            # Run synthesis for each hero ingredient using market trends data
+            if market_trends and hero_ingredients:
+                print(f"🔬 Running synthesis for {len(hero_ingredients)} ingredients...")
+                from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
+                from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
+                
+                analyzer = TrendAnalyzer()
+                ingredient_trends = market_trends.get("ingredient_trends", [])
+                
+                for ing in hero_ingredients[:5]:  # Limit to 5 to avoid rate limits
+                    try:
+                        # Find trend data for this ingredient from market trends
+                        ing_trend = next((t for t in ingredient_trends if t.get("ingredient_name") == ing), None)
+                        
+                        if ing_trend:
+                            # Extract trend data from market trends format
+                            trend_data_for_synthesis = {
+                                "ingredient": ing,
+                                "current_interest": ing_trend.get("current_score", 0),
+                                "growth_rate_6mo": ing_trend.get("growth_6m", 0),
+                                "trend_direction": ing_trend.get("trend_direction", "stable"),
+                                "timeseries_chart": ing_trend.get("timeseries_chart", []),
+                                "rising_queries": ing_trend.get("rising_queries", []),
+                                "top_queries": ing_trend.get("top_queries", [])
+                            }
+                            
+                            # Get additional data for synthesis
+                            consumer_intent_data = None
+                            regional_data = None
+                            
+                            try:
+                                consumer_intent_data = await analyzer.analyze_consumer_intent(ing)
+                            except:
+                                pass
+                            
+                            try:
+                                regional_data = await analyzer.analyze_regional_demand(ing)
+                            except:
+                                pass
+                            
+                            # Run synthesis
+                            synthesis_result = await synthesize_trend_insights(
+                                ingredient=ing,
+                                trend_data=trend_data_for_synthesis,
+                                consumer_intent_data=consumer_intent_data,
+                                competitive_data=None,
+                                regional_data=regional_data
+                            )
+                            
+                            synthesis_data[ing] = synthesis_result
+                            print(f"   ✅ Synthesis completed for {ing}")
+                        else:
+                            print(f"   ⚠️ No trend data found for {ing}, skipping synthesis")
+                    except Exception as synth_error:
+                        print(f"   ⚠️ Error synthesizing {ing}: {synth_error}")
+                        continue
+                
+                print(f"✅ Synthesis completed for {len(synthesis_data)} ingredients")
+        except Exception as e:
+            print(f"⚠️ Error fetching market trends: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the request if trends fail
+            market_trends = None
+        
+        processing_time = time.time() - start_time
+        processing_time_seconds = round(processing_time, 2)
+        print(f"✅ Make a Wish formula generated in {processing_time_seconds}s")
+        
+        # Update database with completed status
+        update_doc = {
+            "basic_mode_result": basic_result,
+            "trend_data": trend_data,
+            "market_trends": market_trends,
+            "synthesis_data": synthesis_data,
+            "status": "completed",
+            "processing_time": processing_time_seconds,
+            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+        }
+        
+        await wish_history_col.update_one(
+            {"_id": ObjectId(history_id), "user_id": user_id},
+            {"$set": update_doc}
+        )
+        
+        print(f"[BACKGROUND] ✅ Updated history {history_id} with completed status")
+        processing_success = True
+        
+        # Deduct credits on success
+        try:
+            await deduct_credits(
+                user_id=user_id,
+                reference_id=history_id,
+                credit_key=CreditKey.MAKE_WISH_GENERATE,
+                transaction_type="make_wish_generation_revised",
+                description=f"Make a Wish formula generation (revised) - {history_id}"
+            )
+        except Exception as credit_error:
+            print(f"⚠️ [BACKGROUND] Failed to deduct credits: {credit_error}")
+            # Don't fail the whole process if credit deduction fails
+        
+        # Send success notification via OneSignal
+        try:
+            await send_onesignal_notification(
+                user_id=user_id,
+                title="Formula Generated Successfully!",
+                message=f"Your formula '{name}' has been generated and is ready to view.",
+                data={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
+            )
+        except Exception as notif_error:
+            print(f"⚠️ [BACKGROUND] Failed to send success notification: {notif_error}")
+        
+                except Exception as e:
+        processing_success = False
+        error_message = str(e)
+        print(f"❌ [BACKGROUND] Error processing wish {history_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Update database with failed status
+        try:
+            update_doc = {
+                "status": "failed",
+                "error_message": error_message,
+                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+            }
+            
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id), "user_id": user_id},
+                {"$set": update_doc}
+            )
+        except Exception as db_error:
+            print(f"❌ [BACKGROUND] Failed to update failed status: {db_error}")
+        
+        # Send failure notification via OneSignal (don't deduct credits on failure)
+        try:
+            await send_onesignal_notification(
+                user_id=user_id,
+                title="Formula Generation Failed",
+                message=f"Sorry, we couldn't generate your formula '{name}'. Please try again.",
+                data={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message}
+            )
+        except Exception as notif_error:
+            print(f"⚠️ [BACKGROUND] Failed to send failure notification: {notif_error}")
+
+
+# ============================================================================
+# HELPER FUNCTIONS FOR CREDITS AND NOTIFICATIONS
+# ============================================================================
+
+# Credit deduction is now handled by the reusable credit_service
+# The deduct_credits function is imported above
+
+
+async def send_onesignal_notification(
+    user_id: str,
+    title: str,
+    message: str,
+    data: Optional[Dict[str, Any]] = None
+):
+    """
+    Send push notification via OneSignal.
+    """
+    onesignal_app_id = os.getenv("ONESIGNAL_APP_ID")
+    onesignal_api_key = os.getenv("ONESIGNAL_API_KEY")
+    onesignal_api_url = os.getenv("ONESIGNAL_API_URL", "https://onesignal.com/api/v1/notifications")
+    
+    if not onesignal_app_id or not onesignal_api_key:
+        print(f"⚠️ [ONESIGNAL] OneSignal credentials not configured, skipping notification")
+        return
+    
+    try:
+        # First, get the OneSignal player_id for this user from database
+        from app.ai_ingredient_intelligence.db.collections import users_col
+        
+        # Handle both ObjectId and string user_id
+        user_doc = None
+        if ObjectId.is_valid(user_id):
+            # Try as ObjectId first
+            user_doc = await users_col.find_one({"_id": ObjectId(user_id)})
+            if not user_doc:
+                # Try as user_id field
+                user_doc = await users_col.find_one({"user_id": user_id})
+        else:
+            # Try as string _id or user_id field
+            user_doc = await users_col.find_one({"_id": user_id})
+            if not user_doc:
+                user_doc = await users_col.find_one({"user_id": user_id})
+        
+        if not user_doc:
+            print(f"⚠️ [ONESIGNAL] User {user_id} not found")
+            return
+        
+        # Get player_id from user document (adjust field name as needed)
+        player_id = user_doc.get("onesignal_player_id") or user_doc.get("player_id")
+        
+        if not player_id:
+            print(f"⚠️ [ONESIGNAL] No OneSignal player_id found for user {user_id}")
+            return
+        
+        # Prepare OneSignal notification payload
+        payload = {
+            "app_id": onesignal_app_id,
+            "include_player_ids": [player_id],
+            "headings": {"en": title},
+            "contents": {"en": message},
+            "data": data or {}
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                onesignal_api_url,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Basic {onesignal_api_key}"
+                }
+            )
+            
+            if response.status_code == 200:
+                print(f"✅ [ONESIGNAL] Notification sent successfully to user {user_id}")
+            else:
+                print(f"⚠️ [ONESIGNAL] OneSignal API returned status {response.status_code}: {response.text}")
+                raise Exception(f"OneSignal notification failed: {response.status_code}")
+                
+    except Exception as e:
+        print(f"❌ [ONESIGNAL] Error sending notification: {e}")
+        raise
 
 
 # ============================================================================

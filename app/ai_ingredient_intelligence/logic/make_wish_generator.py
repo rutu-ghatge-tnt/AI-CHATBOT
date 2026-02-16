@@ -2,15 +2,9 @@
 Make a Wish - Formula Generator
 ================================
 
-This module implements the complete 5-stage AI pipeline for generating
-cosmetic formulations from user wishes.
-
-STAGES:
-1. Ingredient Selection
-2. Formula Optimization
-3. Manufacturing Process
-4. Cost Analysis
-5. Compliance Check
+This module implements the formula generation for Make a Wish feature.
+It follows the Formulynx flow with parameter extraction, active ingredient
+options, complete formula generation, business context, and supporting content.
 """
 
 import os
@@ -18,15 +12,6 @@ import json
 import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-
-# Import prompts
-from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
-    INGREDIENT_SELECTION_SYSTEM_PROMPT,
-    FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
-    MANUFACTURING_PROCESS_SYSTEM_PROMPT,
-    COST_ANALYSIS_SYSTEM_PROMPT,
-    COMPLIANCE_CHECK_SYSTEM_PROMPT
-)
 
 # Import cache manager
 from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_manager
@@ -689,34 +674,76 @@ async def call_ai_with_claude(
 # COMPLETE PIPELINE FUNCTION
 # ============================================================================
 
+# ============================================================================
+# SYSTEM PROMPT
+# ============================================================================
+
+SYSTEM_PROMPT = """You are Formulynx's AI Formulation Engine. Your job is to:
+
+1. Understand the user's product wish from natural language
+2. Extract structured parameters
+3. Present relevant ACTIVE INGREDIENT OPTIONS for their concern (BEFORE generating formula)
+4. Generate a complete, professional formula
+5. Output in a structured format for the UI to render
+
+You are operating in a simplified mode - this means:
+- Use simple, layman-friendly language
+- Explain ingredients in terms of benefits, not chemistry
+- Group ingredients by benefit (not by phase) for user view
+- Include business context (costs, profits, market comparison)
+- Provide Q&A, trends, and confidence-building content
+- Compare to known brands at every opportunity
+- Present active ingredient options FIRST, then generate formula
+
+You have access to a comprehensive ingredient database including:
+- Brightening/Hyperpigmentation actives (Vitamin C derivatives, Alpha Arbutin, Tranexamic Acid, Niacinamide, Kojic Acid, Azelaic Acid, etc.)
+- Anti-aging actives (Retinol, Bakuchiol, Peptides like Matrixyl, Argireline, Syn-Ake, etc.)
+- Hydration actives (Hyaluronic Acid, Glycerin, Squalane, Ceramides, Panthenol, etc.)
+- Acne/Oil control actives (Salicylic Acid, Niacinamide, Zinc PCA, Tea Tree Oil, Azelaic Acid, etc.)
+- Soothing/Sensitive skin actives (Centella Asiatica, Bisabolol, Allantoin, Aloe Vera, Oat Extract, etc.)
+- Eye-specific actives (Haloxyl, Eyeliss, Eyeseryl, Regu-Age, Caffeine, Vitamin K, etc.)
+
+For each ingredient, you know:
+- Typical concentration ranges
+- Efficacy ratings (1-5 stars)
+- Cost impact (Low/Medium/High/Very High)
+- Mechanism of action
+- Best use cases
+
+IMPORTANT RULES:
+1. Group ingredients by BENEFIT for user view, by PHASE for technical view
+2. No individual ingredient costs shown - only total formula cost
+3. Always explain WHY ingredients work, especially for premium actives
+4. Compare to known brands at every opportunity
+5. Segment-appropriate actives (don't suggest luxury peptides for mass market)
+6. Include myth busters where relevant
+7. Build confidence throughout
+8. Present 3-4 active ingredient options per concern BEFORE generating the final formula
+"""
+
+# ============================================================================
+# FORMULA GENERATION FUNCTION
+# ============================================================================
+
 async def generate_formula_from_wish(wish_data: dict) -> dict:
     """
-    Complete pipeline for generating a formula from user wish.
+    Generate formula from user wish data.
     
-    Supports two modes:
-    - "basic": Simplified flow for layman users (Formulynx Make a Wish flow)
-    - "advanced": Full 5-stage pipeline for formulators/scientists (default)
+    This follows the Formulynx Make a Wish flow:
+    1. Parameter Extraction
+    2. Active Ingredient Options Presentation
+    3. Complete Formula Generation
+    4. Business Context
+    5. Supporting Content
     
     Args:
         wish_data: Dictionary containing user requirements
-                  - mode: "basic" or "advanced" (default: "advanced")
         
     Returns:
         Complete formula with all analysis
     """
     
-    # Check mode and route accordingly
-    mode = wish_data.get("mode", "advanced").lower()
-    
-    if mode == "basic":
-        # Use basic mode generator
-        from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import (
-            generate_formula_basic_mode
-        )
-        return await generate_formula_basic_mode(wish_data)
-    
-    # Continue with advanced mode (existing flow)
-    print("🚀 Starting Make a Wish pipeline (ADVANCED MODE)...")
+    print("🚀 Starting Make a Wish pipeline...")
     
     # Validate and apply rules engine
     rules_engine = get_rules_engine()
@@ -737,93 +764,25 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     # Use fixed wish data (with auto-selections applied)
     wish_data = fixed_wish_data
     
-    # Stage 1: Ingredient Selection
-    print("📋 Stage 1: Ingredient Selection...")
-    selection_prompt = generate_ingredient_selection_prompt(wish_data)
-    selected_ingredients = await call_ai_with_claude(
-        system_prompt=INGREDIENT_SELECTION_SYSTEM_PROMPT,
-        user_prompt=selection_prompt,
-        prompt_type="ingredient_selection"
-    )
-    print(f"✅ Selected {len(selected_ingredients.get('ingredients', []))} ingredients")
+    # Generate complete formula response
+    print("📋 Generating complete formula...")
+    from app.ai_ingredient_intelligence.logic.make_wish_prompts import generate_basic_mode_prompt
+    user_prompt = generate_basic_mode_prompt(wish_data)
     
-    # Stage 2: Formula Optimization
-    print("🔧 Stage 2: Formula Optimization...")
-    optimization_prompt = generate_optimization_prompt(
-        wish_data,
-        selected_ingredients.get('ingredients', [])
-    )
-    optimized_formula = await call_ai_with_claude(
-        system_prompt=FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
-        user_prompt=optimization_prompt,
-        prompt_type="formula_optimization"
-    )
-    print(f"✅ Optimized formula: {optimized_formula.get('optimized_formula', {}).get('total_percentage', 0)}%")
-    
-    # Stages 3, 4, 5: Run in parallel for better performance
-    # These stages are independent and can run concurrently
-    print("🚀 Stages 3-5: Running Manufacturing, Cost Analysis, and Compliance in parallel...")
-    
-    import asyncio
-    
-    async def run_stage_3():
-        print("🏭 Stage 3: Manufacturing Process...")
-        manufacturing_prompt = generate_manufacturing_prompt(optimized_formula)
+    try:
         result = await call_ai_with_claude(
-            system_prompt=MANUFACTURING_PROCESS_SYSTEM_PROMPT,
-            user_prompt=manufacturing_prompt,
-            prompt_type="manufacturing_process"
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            prompt_type="formula_generation"
         )
-        print(f"✅ Generated {len(result.get('manufacturing_steps', []))} manufacturing steps")
+        
+        print("✅ Formula generated")
+        print("🎉 Make a Wish pipeline complete!")
         return result
-    
-    async def run_stage_4():
-        print("💰 Stage 4: Cost Analysis...")
-        cost_prompt = generate_cost_prompt(optimized_formula, wish_data)
-        result = await call_ai_with_claude(
-            system_prompt=COST_ANALYSIS_SYSTEM_PROMPT,
-            user_prompt=cost_prompt,
-            prompt_type="cost_analysis"
-        )
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('total_per_100g', 0)}/100g")
-        return result
-    
-    async def run_stage_5():
-        print("✅ Stage 5: Compliance Check...")
-        compliance_prompt = generate_compliance_prompt(optimized_formula)
-        result = await call_ai_with_claude(
-            system_prompt=COMPLIANCE_CHECK_SYSTEM_PROMPT,
-            user_prompt=compliance_prompt,
-            prompt_type="compliance_check"
-        )
-        print(f"✅ Compliance: {result.get('overall_status', 'UNKNOWN')}")
-        return result
-    
-    # Run stages 3, 4, and 5 in parallel
-    manufacturing_process, cost_analysis, compliance = await asyncio.gather(
-        run_stage_3(),
-        run_stage_4(),
-        run_stage_5()
-    )
-    
-    # Combine all results
-    result = {
-        "wish_data": wish_data,
-        "ingredient_selection": selected_ingredients,
-        "optimized_formula": optimized_formula,
-        "manufacturing": manufacturing_process,
-        "cost_analysis": cost_analysis,
-        "compliance": compliance,
-        "metadata": {
-            "generated_at": datetime.now().isoformat(),
-            "formula_version": "1.0",
-            "mode": "advanced",
-            "ai_model": claude_model or "claude-sonnet-4-5-20250929",
-            "cache_stats": get_cache_manager().get_cache_stats()
-        }
-    }
-    
-    print("🎉 Make a Wish pipeline complete (ADVANCED MODE)!")
-    
-    return result
+        
+    except Exception as e:
+        print(f"❌ Error in formula generation: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
