@@ -453,7 +453,7 @@ async def synthesize_trends(
     # Prepare API call (don't include cache_control - SDK version doesn't support it)
     api_params = {
         "model": CLAUDE_MODEL,
-        "max_tokens": 4000,
+        "max_tokens": 8000,  # Increased to handle large synthesis responses
         "temperature": 0.3,
         "system": system_prompt,
         "messages": [
@@ -478,12 +478,64 @@ async def synthesize_trends(
         if not content:
             raise ValueError("Empty text in Claude response")
         
+        # Check if response was truncated (Claude stops mid-sentence when hitting max_tokens)
+        stop_reason = getattr(response, 'stop_reason', None)
+        if stop_reason == "max_tokens":
+            print(f"[TREND SYNTHESIS] ⚠️ Response was truncated (hit max_tokens limit)")
+            print(f"[TREND SYNTHESIS]   Response length: {len(content)} chars")
+        
         # Extract JSON from response (handle markdown code blocks if present)
         json_content = content
         if "```json" in content:
             json_content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
             json_content = content.split("```")[1].split("```")[0].strip()
+        
+        # Check if JSON appears truncated (ends with incomplete string/object)
+        # Look for unterminated strings (odd number of unescaped quotes)
+        if json_content:
+            # Count unescaped quotes to detect unterminated strings
+            quote_count = 0
+            escaped = False
+            for char in json_content:
+                if char == '\\' and not escaped:
+                    escaped = True
+                    continue
+                if char == '"' and not escaped:
+                    quote_count += 1
+                escaped = False
+            
+            # If odd number of quotes, we likely have an unterminated string
+            if quote_count % 2 != 0:
+                print(f"[TREND SYNTHESIS] ⚠️ Detected unterminated string in JSON (odd quote count: {quote_count})")
+                # Try to fix by finding the last unclosed quote and closing it, then closing any open objects/arrays
+                last_quote_pos = json_content.rfind('"')
+                if last_quote_pos > 0:
+                    # Check if this quote is escaped
+                    before_quote = json_content[:last_quote_pos]
+                    escape_count = 0
+                    for i in range(len(before_quote) - 1, -1, -1):
+                        if before_quote[i] == '\\':
+                            escape_count += 1
+                        else:
+                            break
+                    
+                    # If not escaped, close the string
+                    if escape_count % 2 == 0:
+                        # Find the last complete object/array before this point
+                        # Close the string, then close any open structures
+                        fixed_json = json_content[:last_quote_pos+1] + '"'
+                        
+                        # Count open braces and brackets to close them
+                        open_braces = fixed_json.count('{') - fixed_json.count('}')
+                        open_brackets = fixed_json.count('[') - fixed_json.count(']')
+                        
+                        # Close brackets first, then braces
+                        fixed_json += ']' * open_brackets
+                        fixed_json += '}' * open_braces
+                        
+                        json_content = fixed_json
+                        print(f"[TREND SYNTHESIS]   Attempted to fix truncated JSON by closing string and structures")
         
         # Parse JSON with better error handling
         try:
