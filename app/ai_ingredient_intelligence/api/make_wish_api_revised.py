@@ -1819,15 +1819,13 @@ async def fetch_market_trends(
     history_id: str,
     max_age_days: int = Query(35, description="Maximum age of cached data in days"),
     use_fallback: bool = Query(True, description="Whether to use SerpAPI if MongoDB has no data"),
-    use_synthesis: bool = Query(True, description="Whether to use Claude synthesis (default: True, recommended)"),
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
     Fetch market trends data for a wish using history_id from route.
     
     This endpoint fetches wish data from the database using history_id, then provides
-    market intelligence data from MongoDB (batch data) with SerpAPI fallback if needed.
-    Uses Claude synthesis by default for structured intelligence.
+    market intelligence data using Claude synthesis for structured intelligence.
     
     The market trends data is automatically saved to wish_history for future reference.
     
@@ -1837,26 +1835,16 @@ async def fetch_market_trends(
     QUERY PARAMETERS (optional):
     - max_age_days: Maximum age of cached data in days (default: 35)
     - use_fallback: Whether to use SerpAPI if MongoDB has no data (default: true)
-    - use_synthesis: Whether to use Claude synthesis (default: true, recommended)
     
     EXAMPLE:
-    POST /api/make-wish/market-trends/507f1f77bcf86cd799439011?max_age_days=35&use_fallback=true&use_synthesis=true
+    POST /api/make-wish/market-trends/507f1f77bcf86cd799439011?max_age_days=35&use_fallback=true
     
-    RESPONSE (if use_synthesis=true with parsed_data):
+    RESPONSE:
     Synthesized structured intelligence:
     - executive_summary: High-level overview
     - opportunity_analysis: Market opportunities with scoring
     - competitive_intelligence: Competitive landscape
     - recommendations: Actionable recommendations
-    
-    RESPONSE (if use_synthesis=false or parsed_data missing):
-    Legacy formatted data:
-    - ingredient_trends: Timeseries data, growth rates, related queries
-    - benefit_trends: Competing approaches
-    - competitive_landscape: Brand trends
-    - regional_insights: Regional distribution
-    - shopping_insights: Price ranges
-    - key_insights: Generated insights
     """
     try:
         # Extract user_id from JWT token
@@ -1935,6 +1923,13 @@ async def fetch_market_trends(
             "skincare"
         )
         
+        # Validate that we have parsed_data (REQUIRED for synthesis)
+        if not parsed_data:
+            raise HTTPException(
+                status_code=400,
+                detail="parsed_data is required for market trends synthesis. Please ensure the wish has been parsed first using /parse-wish endpoint."
+            )
+        
         # Validate that we have at least hero_ingredients or benefits
         if not hero_ingredients and not benefits:
             raise HTTPException(
@@ -1942,19 +1937,28 @@ async def fetch_market_trends(
                 detail="No hero ingredients or benefits found in wish data. Please ensure the wish has been parsed first."
             )
         
-        # Fetch market trends
+        # Debug logging
+        print(f"[DEBUG] Market Trends Request:")
+        print(f"   hero_ingredients: {hero_ingredients}")
+        print(f"   benefits: {benefits}")
+        print(f"   product_type: {product_type}")
+        print(f"   category: {category}")
+        
+        # Fetch market trends (synthesis only - no legacy format)
         trends_service = MarketTrendsService()
         
-        trends_data = await trends_service.fetch_trends_for_wish(
-            hero_ingredients=hero_ingredients,
-            benefits=benefits,
-            product_type=product_type,
-            category=category,
-            max_age_days=max_age_days,
-            use_fallback=use_fallback,
-            use_synthesis=use_synthesis,
-            parsed_data=parsed_data if parsed_data else None
-        )
+        try:
+            trends_data = await trends_service.fetch_trends_for_wish(
+                hero_ingredients=hero_ingredients,
+                benefits=benefits,
+                product_type=product_type,
+                category=category,
+                max_age_days=max_age_days,
+                use_fallback=use_fallback,
+                parsed_data=parsed_data
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         
         # Save market trends data to wish_history
         update_data = {
