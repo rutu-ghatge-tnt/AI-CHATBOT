@@ -782,152 +782,48 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
             
             # Mark as new format now
             has_new_format = True
-    
-    if has_new_format:
-        # Validate new format structure (more lenient - only require executive_summary)
-        # Other fields may be missing if response was truncated
-        if 'executive_summary' not in data:
+        
+        if has_new_format:
+            # Validate new format structure (more lenient - only require executive_summary)
+            # Other fields may be missing if response was truncated
+            if 'executive_summary' not in data:
+                # Log what fields are present for debugging
+                present_fields = [key for key in data.keys() if not key.startswith('_')]
+                print(f"[TREND SYNTHESIS] ⚠️ Missing executive_summary. Present fields: {', '.join(present_fields)}")
+                
+                # Create a fallback executive_summary from available data
+                print(f"[TREND SYNTHESIS] 🔧 Creating fallback executive_summary...")
+                data['executive_summary'] = create_fallback_executive_summary(data)
+            
             # Log what fields are present for debugging
             present_fields = [key for key in data.keys() if not key.startswith('_')]
-            print(f"[TREND SYNTHESIS] ⚠️ Missing executive_summary. Present fields: {', '.join(present_fields)}")
+            print(f"[TREND SYNTHESIS] ✅ New format detected. Present fields: {', '.join(present_fields)}")
             
-            # Create a fallback executive_summary from available data
-            print(f"[TREND SYNTHESIS] 🔧 Creating fallback executive_summary...")
-            data['executive_summary'] = create_fallback_executive_summary(data)
-        
-        # Log what fields are present for debugging
-        present_fields = [key for key in data.keys() if not key.startswith('_')]
-        print(f"[TREND SYNTHESIS] ✅ New format detected. Present fields: {', '.join(present_fields)}")
-        
-        # Warn about missing optional fields but don't fail
-        optional_fields = {
-            'hero_ingredient_analysis': 'hero_ingredient_analysis',
-            'competitive_landscape': 'competitive_landscape',
-            'related_keywords': 'related_keywords',
-            'related_keyword_trends': 'related_keywords',  # Alternative name
-            'opportunity_breakdown': 'opportunity_breakdown',
-            'regional_intelligence': 'regional_intelligence'
-        }
-        
-        missing_fields = []
-        for field, display_name in optional_fields.items():
-            if field not in data:
-                # Check for alternative names
-                if field == 'related_keywords' and 'related_keyword_trends' in data:
-                    continue
-                missing_fields.append(display_name)
-        
-        if missing_fields:
-            print(f"[TREND SYNTHESIS] ⚠️ Missing optional fields (response may be truncated): {', '.join(missing_fields)}")
-        
-        # Validate executive_summary structure
-        exec_summary = data.get('executive_summary', {})
-        if exec_summary:
-            opp_score = exec_summary.get('opportunity_score', 0)
-            
-            # Handle case where opp_score might be a dict
-            if isinstance(opp_score, dict):
-                numeric_value = opp_score.get('value') or opp_score.get('score') or opp_score.get('opportunity_score')
-                if numeric_value is None:
-                    numeric_value = next((v for v in opp_score.values() if isinstance(v, (int, float))), 0)
-                opp_score = numeric_value if isinstance(numeric_value, (int, float)) else 0
-                print(f"[TREND SYNTHESIS] ⚠️ opportunity_score was a dict, extracted value: {opp_score}")
-            
-            # Ensure opp_score is numeric
-            if not isinstance(opp_score, (int, float)):
-                print(f"[TREND SYNTHESIS] ⚠️ opportunity_score is not numeric ({type(opp_score).__name__}), defaulting to 50")
-                opp_score = 50
-            
-            if opp_score < 0 or opp_score > 100:
-                print(f"[TREND SYNTHESIS] ⚠️ Invalid opportunity score: {opp_score}. Clamping to valid range.")
-                # Clamp to valid range instead of raising error
-                exec_summary['opportunity_score'] = max(0, min(100, opp_score))
-                # Update tier based on corrected score
-                corrected_score = exec_summary['opportunity_score']
-                if corrected_score >= 80:
-                    exec_summary['tier'] = "Pursue"
-                elif corrected_score >= 60:
-                    exec_summary['tier'] = "Consider"
-                elif corrected_score >= 40:
-                    exec_summary['tier'] = "Monitor"
-                elif corrected_score >= 20:
-                    exec_summary['tier'] = "Caution"
-                else:
-                    exec_summary['tier'] = "Avoid"
-        
-        # Validate opportunity_breakdown if present
-        opp_breakdown = data.get('opportunity_breakdown', {})
-        if opp_breakdown and isinstance(opp_breakdown, dict):
-            # Validate and clamp sub-scores to valid ranges
-            score_ranges = {
-                'demand_score': (0, 25),
-                'competition_score': (0, 25),
-                'timing_score': (0, 20),
-                'feasibility_score': (0, 15),
-                'margin_score': (0, 15)
+            # Warn about missing optional fields but don't fail
+            optional_fields = {
+                'hero_ingredient_analysis': 'hero_ingredient_analysis',
+                'competitive_landscape': 'competitive_landscape',
+                'related_keywords': 'related_keywords',
+                'related_keyword_trends': 'related_keywords',  # Alternative name
+                'opportunity_breakdown': 'opportunity_breakdown',
+                'regional_intelligence': 'regional_intelligence'
             }
             
-            for score_name, (min_val, max_val) in score_ranges.items():
-                score_value = opp_breakdown.get(score_name, 0)
-                
-                # Handle case where score_value might be a dict (e.g., {"value": 10, "reason": "..."})
-                if isinstance(score_value, dict):
-                    # Try to extract numeric value from dict
-                    numeric_value = score_value.get('value') or score_value.get('score') or score_value.get('score_value')
-                    if numeric_value is None:
-                        # If no numeric field found, use first numeric value in dict
-                        numeric_value = next((v for v in score_value.values() if isinstance(v, (int, float))), 0)
-                    score_value = numeric_value if isinstance(numeric_value, (int, float)) else 0
-                    print(f"[TREND SYNTHESIS] ⚠️ {score_name} was a dict, extracted value: {score_value}")
-                
-                # Ensure score_value is numeric
-                if not isinstance(score_value, (int, float)):
-                    print(f"[TREND SYNTHESIS] ⚠️ {score_name} is not numeric ({type(score_value).__name__}), defaulting to 0")
-                    score_value = 0
-                
-                if score_value < min_val or score_value > max_val:
-                    print(f"[TREND SYNTHESIS] ⚠️ {score_name} out of range ({score_value}). Clamping to [{min_val}, {max_val}].")
-                    opp_breakdown[score_name] = max(min_val, min(max_val, score_value))
-                else:
-                    # Ensure the value is stored as a number (not dict)
-                    opp_breakdown[score_name] = score_value
-    
-    else:
-        # Validate old format structure (more lenient - allow missing fields)
-        print(f"[TREND SYNTHESIS] ✅ Old format detected")
-        present_fields = [key for key in data.keys() if not key.startswith('_')]
-        print(f"[TREND SYNTHESIS]   Present fields: {', '.join(present_fields)}")
-        
-        # Check for at least one key field to confirm old format
-        old_format_fields = [
-            'related_keyword_trends',
-            'competitive_landscape',
-            'trend_by_ingredient',
-            'insights_breakdown'
-        ]
-        
-        has_any_old_field = any(field in data for field in old_format_fields)
-        if not has_any_old_field:
-            # If no old format fields, try to create a minimal structure
-            print(f"[TREND SYNTHESIS] ⚠️ No standard old format fields found, creating minimal structure...")
-            if 'related_keyword_trends' not in data:
-                data['related_keyword_trends'] = []
-            if 'competitive_landscape' not in data:
-                data['competitive_landscape'] = []
-            if 'trend_by_ingredient' not in data:
-                data['trend_by_ingredient'] = []
-            if 'insights_breakdown' not in data:
-                data['insights_breakdown'] = {
-                    "market_opportunity": "Analysis completed",
-                    "competitive_landscape": "Data available",
-                    "recommendations": "Review available data"
-                }
-        
-        # Validate opportunity scores are within bounds
-        for ingredient in data.get('trend_by_ingredient', []):
-            synthesis = ingredient.get('synthesis', {})
-            if synthesis:
-                opp_score = synthesis.get('opportunity_score', 0)
+            missing_fields = []
+            for field, display_name in optional_fields.items():
+                if field not in data:
+                    # Check for alternative names
+                    if field == 'related_keywords' and 'related_keyword_trends' in data:
+                        continue
+                    missing_fields.append(display_name)
+            
+            if missing_fields:
+                print(f"[TREND SYNTHESIS] ⚠️ Missing optional fields (response may be truncated): {', '.join(missing_fields)}")
+            
+            # Validate executive_summary structure
+            exec_summary = data.get('executive_summary', {})
+            if exec_summary:
+                opp_score = exec_summary.get('opportunity_score', 0)
                 
                 # Handle case where opp_score might be a dict
                 if isinstance(opp_score, dict):
@@ -943,25 +839,129 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
                     opp_score = 50
                 
                 if opp_score < 0 or opp_score > 100:
-                    print(f"[TREND SYNTHESIS] ⚠️ Invalid opportunity score for ingredient: {opp_score}. Clamping to [0, 100].")
-                    synthesis['opportunity_score'] = max(0, min(100, opp_score))
-                else:
-                    # Ensure the value is stored as a number (not dict)
-                    synthesis['opportunity_score'] = opp_score
+                    print(f"[TREND SYNTHESIS] ⚠️ Invalid opportunity score: {opp_score}. Clamping to valid range.")
+                    # Clamp to valid range instead of raising error
+                    exec_summary['opportunity_score'] = max(0, min(100, opp_score))
+                    # Update tier based on corrected score
+                    corrected_score = exec_summary['opportunity_score']
+                    if corrected_score >= 80:
+                        exec_summary['tier'] = "Pursue"
+                    elif corrected_score >= 60:
+                        exec_summary['tier'] = "Consider"
+                    elif corrected_score >= 40:
+                        exec_summary['tier'] = "Monitor"
+                    elif corrected_score >= 20:
+                        exec_summary['tier'] = "Caution"
+                    else:
+                        exec_summary['tier'] = "Avoid"
+            
+            # Validate opportunity_breakdown if present
+            opp_breakdown = data.get('opportunity_breakdown', {})
+            if opp_breakdown and isinstance(opp_breakdown, dict):
+                # Validate and clamp sub-scores to valid ranges
+                score_ranges = {
+                    'demand_score': (0, 25),
+                    'competition_score': (0, 25),
+                    'timing_score': (0, 20),
+                    'feasibility_score': (0, 15),
+                    'margin_score': (0, 15)
+                }
                 
-                # Validate sub-scores sum approximately equals opportunity score
-                breakdown = synthesis.get('scores_breakdown', {})
-                if breakdown:
-                    sub_total = (
-                        breakdown.get('demand', {}).get('score', 0) +
-                        breakdown.get('competition', {}).get('score', 0) +
-                        breakdown.get('timing', {}).get('score', 0) +
-                        breakdown.get('feasibility', {}).get('score', 0) +
-                        breakdown.get('margin', {}).get('score', 0)
-                    )
-                    # Allow 2 point tolerance for rounding
-                    if abs(sub_total - opp_score) > 2:
-                        print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
+                for score_name, (min_val, max_val) in score_ranges.items():
+                    score_value = opp_breakdown.get(score_name, 0)
+                    
+                    # Handle case where score_value might be a dict (e.g., {"value": 10, "reason": "..."})
+                    if isinstance(score_value, dict):
+                        # Try to extract numeric value from dict
+                        numeric_value = score_value.get('value') or score_value.get('score') or score_value.get('score_value')
+                        if numeric_value is None:
+                            # If no numeric field found, use first numeric value in dict
+                            numeric_value = next((v for v in score_value.values() if isinstance(v, (int, float))), 0)
+                        score_value = numeric_value if isinstance(numeric_value, (int, float)) else 0
+                        print(f"[TREND SYNTHESIS] ⚠️ {score_name} was a dict, extracted value: {score_value}")
+                    
+                    # Ensure score_value is numeric
+                    if not isinstance(score_value, (int, float)):
+                        print(f"[TREND SYNTHESIS] ⚠️ {score_name} is not numeric ({type(score_value).__name__}), defaulting to 0")
+                        score_value = 0
+                    
+                    if score_value < min_val or score_value > max_val:
+                        print(f"[TREND SYNTHESIS] ⚠️ {score_name} out of range ({score_value}). Clamping to [{min_val}, {max_val}].")
+                        opp_breakdown[score_name] = max(min_val, min(max_val, score_value))
+                    else:
+                        # Ensure the value is stored as a number (not dict)
+                        opp_breakdown[score_name] = score_value
+        
+        else:
+            # Validate old format structure (more lenient - allow missing fields)
+            print(f"[TREND SYNTHESIS] ✅ Old format detected")
+            present_fields = [key for key in data.keys() if not key.startswith('_')]
+            print(f"[TREND SYNTHESIS]   Present fields: {', '.join(present_fields)}")
+            
+            # Check for at least one key field to confirm old format
+            old_format_fields = [
+                'related_keyword_trends',
+                'competitive_landscape',
+                'trend_by_ingredient',
+                'insights_breakdown'
+            ]
+            
+            has_any_old_field = any(field in data for field in old_format_fields)
+            if not has_any_old_field:
+                # If no old format fields, try to create a minimal structure
+                print(f"[TREND SYNTHESIS] ⚠️ No standard old format fields found, creating minimal structure...")
+                if 'related_keyword_trends' not in data:
+                    data['related_keyword_trends'] = []
+                if 'competitive_landscape' not in data:
+                    data['competitive_landscape'] = []
+                if 'trend_by_ingredient' not in data:
+                    data['trend_by_ingredient'] = []
+                if 'insights_breakdown' not in data:
+                    data['insights_breakdown'] = {
+                        "market_opportunity": "Analysis completed",
+                        "competitive_landscape": "Data available",
+                        "recommendations": "Review available data"
+                    }
+            
+            # Validate opportunity scores are within bounds
+            for ingredient in data.get('trend_by_ingredient', []):
+                synthesis = ingredient.get('synthesis', {})
+                if synthesis:
+                    opp_score = synthesis.get('opportunity_score', 0)
+                    
+                    # Handle case where opp_score might be a dict
+                    if isinstance(opp_score, dict):
+                        numeric_value = opp_score.get('value') or opp_score.get('score') or opp_score.get('opportunity_score')
+                        if numeric_value is None:
+                            numeric_value = next((v for v in opp_score.values() if isinstance(v, (int, float))), 0)
+                        opp_score = numeric_value if isinstance(numeric_value, (int, float)) else 0
+                        print(f"[TREND SYNTHESIS] ⚠️ opportunity_score was a dict, extracted value: {opp_score}")
+                    
+                    # Ensure opp_score is numeric
+                    if not isinstance(opp_score, (int, float)):
+                        print(f"[TREND SYNTHESIS] ⚠️ opportunity_score is not numeric ({type(opp_score).__name__}), defaulting to 50")
+                        opp_score = 50
+                    
+                    if opp_score < 0 or opp_score > 100:
+                        print(f"[TREND SYNTHESIS] ⚠️ Invalid opportunity score for ingredient: {opp_score}. Clamping to [0, 100].")
+                        synthesis['opportunity_score'] = max(0, min(100, opp_score))
+                    else:
+                        # Ensure the value is stored as a number (not dict)
+                        synthesis['opportunity_score'] = opp_score
+                    
+                    # Validate sub-scores sum approximately equals opportunity score
+                    breakdown = synthesis.get('scores_breakdown', {})
+                    if breakdown:
+                        sub_total = (
+                            breakdown.get('demand', {}).get('score', 0) +
+                            breakdown.get('competition', {}).get('score', 0) +
+                            breakdown.get('timing', {}).get('score', 0) +
+                            breakdown.get('feasibility', {}).get('score', 0) +
+                            breakdown.get('margin', {}).get('score', 0)
+                        )
+                        # Allow 2 point tolerance for rounding
+                        if abs(sub_total - opp_score) > 2:
+                            print(f"⚠️ Warning: Score mismatch for {ingredient.get('ingredient_name')}: sum={sub_total}, reported={opp_score}")
         
         return True
     
