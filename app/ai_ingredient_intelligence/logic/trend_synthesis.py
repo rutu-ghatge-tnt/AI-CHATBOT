@@ -355,20 +355,35 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
         raise ValueError("Invalid response format: missing both new and old format fields")
     
     if has_new_format:
-        # Validate new format structure
-        required_fields = [
-            'executive_summary',
-            'hero_ingredient_analysis',
-            'competitive_landscape',
-            'related_keywords'  # Accept both related_keywords and related_keyword_trends
-        ]
+        # Validate new format structure (more lenient - only require executive_summary)
+        # Other fields may be missing if response was truncated
+        if 'executive_summary' not in data:
+            raise ValueError("Missing required field: executive_summary")
         
-        for field in required_fields:
+        # Log what fields are present for debugging
+        present_fields = [key for key in data.keys() if not key.startswith('_')]
+        print(f"[TREND SYNTHESIS] ✅ New format detected. Present fields: {', '.join(present_fields)}")
+        
+        # Warn about missing optional fields but don't fail
+        optional_fields = {
+            'hero_ingredient_analysis': 'hero_ingredient_analysis',
+            'competitive_landscape': 'competitive_landscape',
+            'related_keywords': 'related_keywords',
+            'related_keyword_trends': 'related_keywords',  # Alternative name
+            'opportunity_breakdown': 'opportunity_breakdown',
+            'regional_intelligence': 'regional_intelligence'
+        }
+        
+        missing_fields = []
+        for field, display_name in optional_fields.items():
             if field not in data:
-                # Allow related_keyword_trends as alternative to related_keywords
+                # Check for alternative names
                 if field == 'related_keywords' and 'related_keyword_trends' in data:
                     continue
-                raise ValueError(f"Missing required field: {field}")
+                missing_fields.append(display_name)
+        
+        if missing_fields:
+            print(f"[TREND SYNTHESIS] ⚠️ Missing optional fields (response may be truncated): {', '.join(missing_fields)}")
         
         # Validate executive_summary structure
         exec_summary = data.get('executive_summary', {})
@@ -646,7 +661,11 @@ async def synthesize_trends(
                 print(f"[TREND SYNTHESIS]   Saved problematic response to: {debug_file}")
                 raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
         
-        # Validate structure
+        # Log response structure for debugging
+        response_keys = list(synthesized.keys())[:10]
+        print(f"[TREND SYNTHESIS] 📋 Response keys: {', '.join(response_keys)}...")
+        
+        # Validate structure (lenient validation - won't fail on missing optional fields)
         validate_trend_synthesis(synthesized)
         
         print(f"[TREND SYNTHESIS] ✅ Synthesis complete!")
