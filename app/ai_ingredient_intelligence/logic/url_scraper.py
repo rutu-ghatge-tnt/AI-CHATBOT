@@ -3087,9 +3087,9 @@ Return only the JSON array with ALL ingredients:"""
             # Get Claude client (lazy-loaded)
             claude_client = self._get_claude_client()
             
-            # Get cache_control for prompt caching to reduce token costs
-            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
-            cache_control = get_cache_control_for_prompt(
+            # Format system prompt with cache_control (GA approach - SDK 0.34.0+)
+            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
+            formatted_system = format_system_prompt_with_cache(
                 system_prompt=system_prompt,
                 prompt_type="url_ingredient_extraction",
                 claude_client=claude_client,
@@ -3107,7 +3107,7 @@ Return only the JSON array with ALL ingredients:"""
                 "model": model_name,
                 "max_tokens": max_tokens,
                 "temperature": 0.1,
-                "system": system_prompt,
+                "system": formatted_system,  # Can be string or list of content blocks with cache_control
                 "messages": [
                     {
                         "role": "user",
@@ -3115,8 +3115,6 @@ Return only the JSON array with ALL ingredients:"""
                     }
                 ]
             }
-            if cache_control:
-                api_params["cache_control"] = cache_control
             
             response = claude_client.messages.create(**api_params)
             

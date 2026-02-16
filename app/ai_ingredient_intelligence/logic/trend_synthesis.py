@@ -507,34 +507,35 @@ async def synthesize_trends(
     print(f"[TREND SYNTHESIS]   System prompt length: {len(system_prompt)} chars")
     print(f"[TREND SYNTHESIS]   User prompt length: {len(user_prompt)} chars")
     
-    # Get cache control if caching enabled
-    cache_control = None
+    # Format system prompt with cache_control if caching enabled (GA approach)
+    formatted_system = system_prompt
     if use_cache:
         try:
-            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
-            cache_control = get_cache_control_for_prompt(
+            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
+            formatted_system = format_system_prompt_with_cache(
                 system_prompt=system_prompt,
                 prompt_type="trend_synthesis",
                 claude_client=claude_client,
                 ttl="1h"
             )
+            if isinstance(formatted_system, list):
+                print(f"[TREND SYNTHESIS] ✅ Using prompt caching (GA) - system prompt formatted as content blocks")
+            else:
+                print(f"[TREND SYNTHESIS] ⚠️ Caching disabled or failed - using plain system prompt")
         except Exception as e:
-            print(f"[TREND SYNTHESIS] ⚠️ Could not get cache control: {e}")
+            print(f"[TREND SYNTHESIS] ⚠️ Could not format system prompt with cache: {e}")
+            formatted_system = system_prompt
     
-    # Prepare API call (don't include cache_control - SDK version doesn't support it)
+    # Prepare API call with properly formatted system prompt (content blocks with cache_control)
     api_params = {
         "model": CLAUDE_MODEL,
         "max_tokens": 8000,  # Increased to handle large synthesis responses
         "temperature": 0.3,
-        "system": system_prompt,
+        "system": formatted_system,  # Can be string or list of content blocks
         "messages": [
                 {"role": "user", "content": user_prompt}
             ]
     }
-    
-    # Note: cache_control is available but not used due to SDK compatibility
-    if cache_control:
-        print(f"[TREND SYNTHESIS] ⚠️ Cache control available but not using (SDK compatibility)")
     
     try:
         # Call Claude API
@@ -678,61 +679,6 @@ async def synthesize_trends(
         print(f"[TREND SYNTHESIS]   Brands: {brands_count}")
         
         return synthesized
-        
-    except (TypeError, AttributeError) as cache_error:
-        # Retry without cache_control if SDK doesn't support it
-        error_str = str(cache_error).lower()
-        if "cache_control" in error_str or "unexpected keyword" in error_str:
-            # SDK version doesn't support cache_control - this is normal for older SDK versions
-            print(f"[TREND SYNTHESIS] ⚠️ Cache control not supported, retrying without it...")
-            api_params_clean = {k: v for k, v in api_params.items() if k != "cache_control"}
-            if "extra_body" in api_params_clean:
-                api_params_clean["extra_body"] = {k: v for k, v in api_params_clean["extra_body"].items() if k != "cache_control"}
-                if not api_params_clean["extra_body"]:
-                    del api_params_clean["extra_body"]
-            
-            response = claude_client.messages.create(**api_params_clean)
-            content = response.content[0].text.strip()
-            
-            # Extract and parse JSON with same error handling
-            json_content = content
-            if "```json" in content:
-                json_content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                json_content = content.split("```")[1].split("```")[0].strip()
-            
-            try:
-                synthesized = json.loads(json_content)
-            except json.JSONDecodeError as json_err:
-                print(f"[TREND SYNTHESIS] ❌ JSON parse error (retry): {json_err}")
-                # Try same fixes as above
-                fixed = False
-                try:
-                    json_content_fixed = json_content.replace(',\n}', '\n}').replace(',\n]', '\n]')
-                    synthesized = json.loads(json_content_fixed)
-                    fixed = True
-                except:
-                    pass
-                
-                if not fixed:
-                    try:
-                        first_brace = json_content.find('{')
-                        last_brace = json_content.rfind('}')
-                        if first_brace >= 0 and last_brace > first_brace:
-                            json_content_fixed = json_content[first_brace:last_brace+1]
-                            synthesized = json.loads(json_content_fixed)
-                            fixed = True
-                    except:
-                        pass
-                
-                if not fixed:
-                    raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
-            
-            validate_trend_synthesis(synthesized)
-            print(f"[TREND SYNTHESIS] ✅ Synthesis complete (without cache)!")
-            return synthesized
-        else:
-            raise
         
     except Exception as e:
         print(f"[TREND SYNTHESIS] ❌ Error during synthesis: {e}")

@@ -593,70 +593,35 @@ async def call_ai_with_claude(
     if not claude_model:
         raise RuntimeError("Claude model not configured. Check CLAUDE_MODEL environment variable.")
     
-    # Get cache manager and get cache_control config
-    cache_manager = get_cache_manager(claude_client)
-    cache_control = cache_manager.get_cache_control_config(
-        prompt_type=prompt_type,
+    # Format system prompt with cache_control (GA approach - SDK 0.34.0+)
+    from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
+    formatted_system = format_system_prompt_with_cache(
         system_prompt=system_prompt,
+        prompt_type=prompt_type,
+        claude_client=claude_client,
         ttl="1h"  # 1 hour ephemeral cache
     )
     
-    # Prepare API call parameters
+    if isinstance(formatted_system, list):
+        print(f"💾 Using prompt caching (GA) for {prompt_type} - system prompt formatted as content blocks")
+    else:
+        print(f"📝 Using plain system prompt for {prompt_type} (caching disabled or failed)")
+    
+    # Prepare API call parameters with properly formatted system prompt
     api_params = {
         "model": claude_model,
         "max_tokens": 16384,
         "temperature": 0.3,
-        "system": system_prompt,
+        "system": formatted_system,  # Can be string or list of content blocks with cache_control
         "messages": [
             {"role": "user", "content": user_prompt}
         ]
     }
     
-    # Add cache_control if caching is enabled
-    # Claude's ephemeral cache automatically caches system prompts when cache_control is used
-    # This reduces costs by ~90% on system prompt tokens after the first call
-    # Cached tokens are charged at only 20% of normal input token rate
-    # Note: SDK 0.75.0 may not support cache_control - we'll try extra_body as fallback
-    use_cache = False
-    if cache_control:
-        use_cache = True
-        # Try to add cache_control - SDK version determines how to pass it
-        try:
-            # First try as top-level parameter (newer SDK versions)
-            api_params["cache_control"] = cache_control
-        except:
-            # If that fails, try via extra_body (SDK 0.75.0 workaround)
-            if "extra_body" not in api_params:
-                api_params["extra_body"] = {}
-            api_params["extra_body"]["cache_control"] = cache_control
-        
-        if cache_manager.should_use_cache(prompt_type, system_prompt):
-            print(f"💾 Using cached system prompt for {prompt_type} (saving ~90% on system prompt tokens)")
-        else:
-            print(f"📝 First call for {prompt_type} - will cache system prompt for 1 hour")
-    else:
-        print(f"⚠️ Caching disabled for {prompt_type}")
-    
     for attempt in range(max_retries):
         try:
-            # Call Claude API with caching support
-            # If cache_control fails, retry without it
-            try:
-                response = claude_client.messages.create(**api_params)
-            except (TypeError, AttributeError) as cache_error:
-                error_str = str(cache_error).lower()
-                if "cache_control" in error_str or "unexpected keyword" in error_str:
-                    # Remove cache_control and retry
-                    print(f"⚠️ Cache control not supported in this SDK version, retrying without it...")
-                    api_params_clean = {k: v for k, v in api_params.items() if k != "cache_control"}
-                    if "extra_body" in api_params_clean:
-                        api_params_clean["extra_body"] = {k: v for k, v in api_params_clean["extra_body"].items() if k != "cache_control"}
-                        if not api_params_clean["extra_body"]:
-                            del api_params_clean["extra_body"]
-                    response = claude_client.messages.create(**api_params_clean)
-                    use_cache = False  # Mark that caching didn't work
-                else:
-                    raise  # Re-raise if it's a different error
+            # Call Claude API with caching support (GA - no workarounds needed)
+            response = claude_client.messages.create(**api_params)
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:

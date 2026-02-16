@@ -151,11 +151,25 @@ Return ONLY the prompt text that should be sent to Gamma API's additionalInstruc
         print(f"[CLAUDE] System prompt length: {len(BUSINESS_STRATEGY_SYSTEM_PROMPT)} characters")
         print(f"[CLAUDE] User prompt length: {len(user_prompt)} characters")
         
+        # Format system prompt with cache_control (GA approach - SDK 0.34.0+)
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
+        formatted_system = format_system_prompt_with_cache(
+            system_prompt=BUSINESS_STRATEGY_SYSTEM_PROMPT,
+            prompt_type="business_strategy_prompt",
+            claude_client=claude_client,
+            ttl="1h"  # 1 hour ephemeral cache
+        )
+        
+        if isinstance(formatted_system, list):
+            print(f"[CLAUDE] [CACHE] Using prompt caching (GA) - system prompt formatted as content blocks")
+        else:
+            print(f"[CLAUDE] Using plain system prompt (caching disabled or failed)")
+        
         claude_response = claude_client.messages.create(
             model=claude_model,
             max_tokens=4096,
             temperature=0.3,
-            system=BUSINESS_STRATEGY_SYSTEM_PROMPT,
+            system=formatted_system,  # Can be string or list of content blocks with cache_control
             messages=[
                 {"role": "user", "content": user_prompt}
             ]
