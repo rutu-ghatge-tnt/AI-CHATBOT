@@ -2103,7 +2103,246 @@ def _extract_cost_analysis_from_basic_mode(basic_result: Dict[str, Any], busines
     }
 
 
-# Note: format_wish_data_for_gamma function is defined above (full 1700+ line implementation)
+def format_wish_data_for_gamma(wish_data: Dict[str, Any]) -> str:
+    """
+    Format wish data dictionary into a readable text string for Gamma PPT generation.
+    
+    This function converts the structured wish data (formula, ingredients, costs, etc.)
+    into a comprehensive text format that Gamma API can use to generate a presentation.
+    
+    Args:
+        wish_data: Dictionary containing wish data, formula, ingredients, costs, etc.
+        
+    Returns:
+        Formatted text string ready for Gamma API
+    """
+    import json
+    
+    sections = []
+    
+    # 1. Wish Data / Product Overview
+    wish_info = wish_data.get("wish_data") or wish_data.get("parsed_data") or {}
+    if wish_info:
+        sections.append("=" * 80)
+        sections.append("PRODUCT OVERVIEW")
+        sections.append("=" * 80)
+        if isinstance(wish_info, dict):
+            for key, value in wish_info.items():
+                if value and key not in ["_id", "created_at", "updated_at"]:
+                    sections.append(f"{key.replace('_', ' ').title()}: {value}")
+        else:
+            sections.append(str(wish_info))
+        sections.append("")
+    
+    # 2. Ingredient Selection
+    ingredient_selection = wish_data.get("ingredient_selection", {})
+    if ingredient_selection:
+        sections.append("=" * 80)
+        sections.append("INGREDIENT SELECTION")
+        sections.append("=" * 80)
+        
+        formula_name = ingredient_selection.get("formula_name") or ingredient_selection.get("formulaName", "")
+        if formula_name:
+            sections.append(f"Formula Name: {formula_name}")
+        
+        formula_type = ingredient_selection.get("formula_type") or ingredient_selection.get("formulaType", "")
+        if formula_type:
+            sections.append(f"Product Type: {formula_type}")
+        
+        ingredients = ingredient_selection.get("ingredients", [])
+        if ingredients:
+            sections.append("\nSelected Ingredients:")
+            for idx, ing in enumerate(ingredients, 1):
+                if isinstance(ing, dict):
+                    name = ing.get("name") or ing.get("ingredient", "")
+                    percentage = ing.get("percentage") or ing.get("concentration", "")
+                    category = ing.get("category") or ing.get("functional_category", "")
+                    if name:
+                        ing_text = f"  {idx}. {name}"
+                        if percentage:
+                            ing_text += f" ({percentage}%)"
+                        if category:
+                            ing_text += f" - {category}"
+                        sections.append(ing_text)
+                else:
+                    sections.append(f"  {idx}. {ing}")
+        sections.append("")
+    
+    # 3. Optimized Formula
+    optimized_formula = wish_data.get("optimized_formula", {})
+    if optimized_formula:
+        sections.append("=" * 80)
+        sections.append("OPTIMIZED FORMULA")
+        sections.append("=" * 80)
+        
+        formula_details = optimized_formula.get("optimized_formula", {})
+        if formula_details:
+            name = formula_details.get("name", "")
+            total_pct = formula_details.get("total_percentage", "")
+            cost_per_g = formula_details.get("estimated_cost_per_g", "")
+            target_ph = formula_details.get("target_ph", "")
+            
+            if name:
+                sections.append(f"Formula Name: {name}")
+            if total_pct:
+                sections.append(f"Total Percentage: {total_pct}%")
+            if cost_per_g:
+                sections.append(f"Estimated Cost per Gram: ₹{cost_per_g:.4f}")
+            if target_ph:
+                sections.append(f"Target pH: {target_ph}")
+        
+        # Formula ingredients
+        formula_ingredients = optimized_formula.get("ingredients", [])
+        if formula_ingredients:
+            sections.append("\nFormula Ingredients:")
+            for idx, ing in enumerate(formula_ingredients, 1):
+                if isinstance(ing, dict):
+                    name = ing.get("name") or ing.get("ingredient", "")
+                    percentage = ing.get("percentage") or ing.get("concentration", "")
+                    phase = ing.get("phase", "")
+                    if name:
+                        ing_text = f"  {idx}. {name}"
+                        if percentage:
+                            ing_text += f" - {percentage}%"
+                        if phase:
+                            ing_text += f" (Phase: {phase})"
+                        sections.append(ing_text)
+                else:
+                    sections.append(f"  {idx}. {ing}")
+        
+        # Phases
+        phases = optimized_formula.get("phases", [])
+        if phases:
+            sections.append("\nFormula Phases:")
+            for phase in phases:
+                if isinstance(phase, dict):
+                    phase_name = phase.get("name") or phase.get("phase", "")
+                    phase_ingredients = phase.get("ingredients", [])
+                    if phase_name:
+                        sections.append(f"  {phase_name}:")
+                        for ing in phase_ingredients:
+                            if isinstance(ing, dict):
+                                ing_name = ing.get("name", "")
+                                ing_pct = ing.get("percentage", "")
+                                if ing_name:
+                                    sections.append(f"    - {ing_name}: {ing_pct}%")
+                            else:
+                                sections.append(f"    - {ing}")
+        
+        # Insights
+        insights = optimized_formula.get("insights", [])
+        if insights:
+            sections.append("\nFormula Insights:")
+            for insight in insights:
+                if isinstance(insight, dict):
+                    text = insight.get("text") or insight.get("insight", "")
+                    if text:
+                        sections.append(f"  • {text}")
+                else:
+                    sections.append(f"  • {insight}")
+        
+        # Warnings
+        warnings = optimized_formula.get("warnings", [])
+        if warnings:
+            sections.append("\nWarnings:")
+            for warning in warnings:
+                if isinstance(warning, dict):
+                    text = warning.get("text") or warning.get("warning", "")
+                    if text:
+                        sections.append(f"  ⚠ {text}")
+                else:
+                    sections.append(f"  ⚠ {warning}")
+        
+        sections.append("")
+    
+    # 4. Manufacturing Process
+    manufacturing = wish_data.get("manufacturing", {})
+    if manufacturing:
+        sections.append("=" * 80)
+        sections.append("MANUFACTURING PROCESS")
+        sections.append("=" * 80)
+        
+        if isinstance(manufacturing, dict):
+            process = manufacturing.get("process") or manufacturing.get("steps", [])
+            if process:
+                if isinstance(process, list):
+                    sections.append("Manufacturing Steps:")
+                    for idx, step in enumerate(process, 1):
+                        if isinstance(step, dict):
+                            step_text = step.get("step") or step.get("description", "")
+                            if step_text:
+                                sections.append(f"  {idx}. {step_text}")
+                        else:
+                            sections.append(f"  {idx}. {step}")
+                else:
+                    sections.append(str(process))
+            
+            temperature = manufacturing.get("temperature", "")
+            mixing_time = manufacturing.get("mixing_time", "")
+            if temperature:
+                sections.append(f"Temperature: {temperature}")
+            if mixing_time:
+                sections.append(f"Mixing Time: {mixing_time}")
+        else:
+            sections.append(str(manufacturing))
+        sections.append("")
+    
+    # 5. Cost Analysis
+    cost_analysis = wish_data.get("cost_analysis", {})
+    if cost_analysis:
+        sections.append("=" * 80)
+        sections.append("COST ANALYSIS")
+        sections.append("=" * 80)
+        
+        if isinstance(cost_analysis, dict):
+            total_cost = cost_analysis.get("total_cost") or cost_analysis.get("totalCost", "")
+            cost_per_g = cost_analysis.get("cost_per_g") or cost_analysis.get("costPerGram", "")
+            cost_per_100g = cost_analysis.get("cost_per_100g") or cost_analysis.get("costPer100g", "")
+            packaging_cost = cost_analysis.get("packaging_cost") or cost_analysis.get("packagingCost", "")
+            
+            if cost_per_100g:
+                sections.append(f"Cost per 100g: ₹{cost_per_100g:.2f}")
+            if cost_per_g:
+                sections.append(f"Cost per gram: ₹{cost_per_g:.4f}")
+            if packaging_cost:
+                sections.append(f"Packaging Cost: ₹{packaging_cost:.2f}")
+            if total_cost:
+                sections.append(f"Total Cost: ₹{total_cost:.2f}")
+            
+            # Cost breakdown
+            cost_breakdown = cost_analysis.get("cost_breakdown", {})
+            if cost_breakdown:
+                sections.append("\nCost Breakdown:")
+                for key, value in cost_breakdown.items():
+                    if value:
+                        sections.append(f"  {key.replace('_', ' ').title()}: ₹{value:.2f}")
+        else:
+            sections.append(str(cost_analysis))
+        sections.append("")
+    
+    # 6. Compliance
+    compliance = wish_data.get("compliance", {})
+    if compliance:
+        sections.append("=" * 80)
+        sections.append("COMPLIANCE & REGULATIONS")
+        sections.append("=" * 80)
+        
+        if isinstance(compliance, dict):
+            for key, value in compliance.items():
+                if value and key not in ["_id"]:
+                    sections.append(f"{key.replace('_', ' ').title()}: {value}")
+        else:
+            sections.append(str(compliance))
+        sections.append("")
+    
+    # Join all sections
+    formatted_text = "\n".join(sections)
+    
+    # If we have very little content, try to format the entire dict as JSON
+    if len(formatted_text.strip()) < 100 and wish_data:
+        formatted_text = json.dumps(wish_data, indent=2, default=str)
+    
+    return formatted_text
 
 
 class GeneratePPTRequest(BaseModel):
