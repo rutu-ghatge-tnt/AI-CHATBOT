@@ -235,7 +235,7 @@ def build_trend_synthesis_user_prompt(
     Args:
         parsed_data: Parsed wish data from NLP stage
         matched_trends: MongoDB trend records organized by level (L1-L5)
-    
+        
     Returns:
         Formatted user prompt string
     """
@@ -457,8 +457,8 @@ async def synthesize_trends(
         "temperature": 0.3,
         "system": system_prompt,
         "messages": [
-            {"role": "user", "content": user_prompt}
-        ]
+                {"role": "user", "content": user_prompt}
+            ]
     }
     
     if cache_control:
@@ -532,7 +532,7 @@ async def synthesize_trends(
             return synthesized
         else:
             raise
-    
+        
     except Exception as e:
         print(f"[TREND SYNTHESIS] ❌ Error during synthesis: {e}")
         import traceback

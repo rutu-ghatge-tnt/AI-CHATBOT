@@ -1815,44 +1815,33 @@ async def check_ppt_status(
 # ============================================================================
 
 class MarketTrendsRequest(BaseModel):
-    """Request schema for market trends fetching"""
-    hero_ingredients: Optional[List[str]] = Field(default_factory=list, description="List of hero ingredient names")
-    benefits: Optional[List[str]] = Field(default_factory=list, description="List of benefits")
-    product_type: Optional[str] = Field(None, description="Product type (serum, cream, etc.)")
-    category: str = Field("skincare", description="Category: skincare or haircare")
+    """Request schema for market trends fetching - accepts history_id to fetch data from database"""
+    history_id: str = Field(..., description="History ID to fetch wish data from database")
     max_age_days: int = Field(35, description="Maximum age of cached data in days")
     use_fallback: bool = Field(True, description="Whether to use SerpAPI if MongoDB has no data")
     use_synthesis: bool = Field(True, description="Whether to use Claude synthesis (default: True, recommended)")
-    parsed_data: Optional[Dict[str, Any]] = Field(None, description="Parsed wish data from /parse-wish endpoint (required for synthesis)")
 
 
 @router.post("/market-trends", response_model=None)
 async def fetch_market_trends(
-    request: MarketTrendsRequest,
+    request: MarketTrendsRequest = Body(...),
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
-    Fetch market trends data for ingredients, benefits, and product type.
+    Fetch market trends data for a wish using history_id.
     
-    This endpoint provides market intelligence data from MongoDB (batch data)
-    with SerpAPI fallback if needed. Uses Claude synthesis by default for structured intelligence.
+    This endpoint fetches wish data from the database using history_id, then provides
+    market intelligence data from MongoDB (batch data) with SerpAPI fallback if needed.
+    Uses Claude synthesis by default for structured intelligence.
+    
+    The market trends data is automatically saved to wish_history for future reference.
     
     REQUEST BODY:
     {
-        "hero_ingredients": ["Vitamin C", "Niacinamide"],
-        "benefits": ["brightening", "anti-aging"],
-        "product_type": "serum",
-        "category": "skincare",
+        "history_id": "507f1f77bcf86cd799439011",
         "max_age_days": 35,
         "use_fallback": true,
-        "use_synthesis": true,
-        "parsed_data": {
-            "category": "skincare",
-            "product_type": {"id": "serum", "name": "Serum"},
-            "detected_benefits": ["brightening"],
-            "detected_ingredients": [{"name": "Vitamin C"}],
-            "complexity": "medium"
-        }
+        "use_synthesis": true
     }
     
     RESPONSE (if use_synthesis=true with parsed_data):
@@ -1872,25 +1861,131 @@ async def fetch_market_trends(
     - key_insights: Generated insights
     """
     try:
+        # Extract user_id from JWT token
+        user_id_value = current_user.get("user_id") or current_user.get("_id")
+        if not user_id_value:
+            raise HTTPException(status_code=400, detail="User ID not found in JWT token")
+        
+        # Validate history_id
+        history_id = request.history_id
+        if not history_id:
+            raise HTTPException(status_code=400, detail="history_id is required")
+        
+        # Validate ObjectId
+        if not ObjectId.is_valid(history_id):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid history_id format. Expected MongoDB ObjectId, got: {history_id[:50]}"
+            )
+        
+        # Fetch wish data from database
+        history_doc = await wish_history_col.find_one({
+            "_id": ObjectId(history_id),
+            "user_id": user_id_value
+        })
+        
+        if not history_doc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"History item not found or doesn't belong to user"
+            )
+        
+        # Extract data from wish_history document
+        parsed_data = history_doc.get("parsed_data") or {}
+        wish_data = history_doc.get("wish_data") or {}
+        
+        # Extract hero_ingredients from parsed_data or wish_data
+        hero_ingredients = []
+        detected_ingredients = parsed_data.get("detected_ingredients", [])
+        if detected_ingredients:
+            hero_ingredients = [
+                ing.get("name", str(ing)) if isinstance(ing, dict) else str(ing)
+                for ing in detected_ingredients
+            ]
+        else:
+            # Fallback to wish_data or direct field
+            hero_ingredients = (
+                parsed_data.get("hero_ingredients") or
+                wish_data.get("hero_ingredients") or
+                history_doc.get("hero_ingredients") or
+                []
+            )
+        
+        # Extract benefits
+        benefits = (
+            parsed_data.get("detected_benefits") or
+            parsed_data.get("benefits") or
+            wish_data.get("benefits") or
+            history_doc.get("benefits") or
+            []
+        )
+        
+        # Extract product_type
+        product_type_obj = parsed_data.get("product_type", {})
+        if isinstance(product_type_obj, dict):
+            product_type = product_type_obj.get("id") or product_type_obj.get("name") or None
+        else:
+            product_type = str(product_type_obj) if product_type_obj else None
+        
+        if not product_type:
+            product_type = (
+                wish_data.get("product_type") or
+                history_doc.get("product_type") or
+                None
+            )
+        
+        # Extract category
+        category = (
+            parsed_data.get("category") or
+            wish_data.get("category") or
+            history_doc.get("category") or
+            "skincare"
+        )
+        
+        # Validate that we have at least hero_ingredients or benefits
+        if not hero_ingredients and not benefits:
+            raise HTTPException(
+                status_code=400,
+                detail="No hero ingredients or benefits found in wish data. Please ensure the wish has been parsed first."
+            )
+        
+        # Fetch market trends
         trends_service = MarketTrendsService()
         
         trends_data = await trends_service.fetch_trends_for_wish(
-            hero_ingredients=request.hero_ingredients,
-            benefits=request.benefits,
-            product_type=request.product_type,
-            category=request.category,
+            hero_ingredients=hero_ingredients,
+            benefits=benefits,
+            product_type=product_type,
+            category=category,
             max_age_days=request.max_age_days,
             use_fallback=request.use_fallback,
             use_synthesis=request.use_synthesis,
-            parsed_data=request.parsed_data
+            parsed_data=parsed_data if parsed_data else None
         )
+        
+        # Save market trends data to wish_history
+        update_data = {
+            "market_trends": trends_data,
+            "market_trends_fetched_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+        }
+        
+        await wish_history_col.update_one(
+            {"_id": ObjectId(history_id)},
+            {"$set": update_data}
+        )
+        
+        print(f"[DEBUG] ✅ Market trends fetched and saved to wish_history: {history_id}")
         
         return {
             "success": True,
             "data": trends_data,
+            "history_id": history_id,
             "timestamp": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
         }
     
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error fetching market trends: {e}")
         import traceback
