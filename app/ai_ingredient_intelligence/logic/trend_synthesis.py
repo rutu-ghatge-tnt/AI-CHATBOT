@@ -324,6 +324,296 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
 
 
 # ============================================================================
+# DATA TRUNCATION FUNCTIONS
+# ============================================================================
+
+def truncate_trend_data_for_prompt(
+    matched_trends: Dict[str, Any],
+    parsed_data: Optional[Dict[str, Any]] = None,
+    max_tokens: int = 180000  # Leave room for system prompt and safety margin
+) -> Dict[str, Any]:
+    """
+    Truncate and filter trend data to fit within token limits.
+    
+    Filters by:
+    - Category (skincare vs haircare) - must match
+    - Product format/type - should match (keeps records without format as fallback)
+    
+    Removes:
+    - Full timeline arrays (keeps only summaries)
+    - Excessive related queries
+    - Low-significance records
+    - Redundant data
+    - Records that don't match category/product_format
+    
+    Args:
+        matched_trends: Full trend data from MongoDB
+        parsed_data: Parsed wish data to filter by category and product_format
+        max_tokens: Maximum tokens allowed (default: 180k to leave room for system prompt)
+    
+    Returns:
+        Truncated and filtered trend data optimized for prompt size
+    """
+    # Extract filtering criteria from parsed_data
+    wish_category = None
+    wish_product_format = None
+    
+    if parsed_data:
+        wish_category = parsed_data.get("category", "").lower()
+        product_type_obj = parsed_data.get("product_type", {})
+        wish_product_type = product_type_obj.get("id") or product_type_obj.get("name") if isinstance(product_type_obj, dict) else str(product_type_obj) if product_type_obj else None
+        wish_product_format = parsed_data.get("product_format") or wish_product_type
+        if wish_product_format:
+            wish_product_format = str(wish_product_format).lower().strip()
+    
+    print(f"[TREND FILTER] Filtering by category='{wish_category}', product_format='{wish_product_format}'")
+    
+    def matches_category_and_format(record: Dict[str, Any]) -> bool:
+        """Check if a trend record matches the wish's category and product format"""
+        if not wish_category:
+            return True  # No filter if category not specified
+        
+        record_category = str(record.get("category", "")).lower().strip() if record.get("category") else ""
+        record_format = str(record.get("product_format", "")).lower().strip() if record.get("product_format") else ""
+        
+        # Category must match (if record has a category)
+        # If record has no category, allow it as fallback
+        if record_category:
+            if record_category != wish_category:
+                return False
+        
+        # Product format should match (but keep records without format as fallback)
+        if wish_product_format and record_format:
+            # Normalize formats for comparison (handle variations like "serum" vs "serums")
+            if record_format != wish_product_format:
+                # Check if formats are similar (e.g., "serum" matches "serums")
+                format_base = wish_product_format.rstrip('s')  # Remove plural
+                record_base = record_format.rstrip('s')
+                if format_base != record_base:
+                    return False
+        
+        return True
+    
+    truncated = {}
+    
+    # L1: Hero Ingredient Trends - filter and limit to top 5 ingredients, remove full timelines
+    l1_trends = matched_trends.get("level_1_ingredient_trends", {}) or matched_trends.get("hero_ingredient_trends", {})
+    truncated_l1 = {}
+    count = 0
+    for ing_name, ing_data in l1_trends.items():
+        if count >= 5:  # Limit to top 5 ingredients
+            break
+        
+        if not ing_data or not isinstance(ing_data, dict):
+            continue
+        
+        # Extract trend_data
+        trend_data = ing_data.get("trend_data", {})
+        if not trend_data:
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(trend_data):
+            print(f"[TREND FILTER] Skipping L1 ingredient '{ing_name}' - category/format mismatch")
+            continue
+        
+        # Create truncated version - remove full timeline, keep summaries
+        # Extract values list safely
+        values_list = trend_data.get("interest_over_time", {}).get("values", [])
+        
+        truncated_ing_data = {
+            "query_text": ing_data.get("query_text", ""),
+            "match_type": ing_data.get("match_type", ""),
+            "confidence": ing_data.get("confidence", ""),
+            "trend_data": {
+                "query_text": trend_data.get("query_text", ""),
+                "current_score": trend_data.get("current_score", 0),
+                "peak_score": trend_data.get("peak_score", 0),
+                "peak_month": trend_data.get("peak_month", ""),
+                "growth_pct_3m": trend_data.get("growth_pct_3m", 0),
+                "growth_pct_6m": trend_data.get("growth_pct_6m", 0),
+                "growth_pct_12m": trend_data.get("growth_pct_12m", 0),
+                "trend_direction": trend_data.get("trend_direction", ""),
+                "query_level": trend_data.get("query_level", ""),
+                "category": trend_data.get("category", ""),
+                "product_format": trend_data.get("product_format", ""),
+                # Keep only summary of timeline (first, last, peak values)
+                "interest_over_time_summary": {
+                    "total_data_points": len(values_list),
+                    "first_value": values_list[0] if values_list and len(values_list) > 0 else 0,
+                    "last_value": values_list[-1] if values_list and len(values_list) > 0 else 0,
+                    "peak_value": trend_data.get("peak_score", 0),
+                    "peak_date": trend_data.get("peak_month", ""),
+                },
+                # Limit related queries
+                "related_queries_rising": trend_data.get("related_queries_rising", [])[:5],  # Top 5 only
+                "related_queries_top": trend_data.get("related_queries_top", [])[:5],  # Top 5 only
+                # Limit regional data
+                "regional_interest": trend_data.get("regional_interest", [])[:10],  # Top 10 only
+            }
+        }
+        
+        truncated_l1[ing_name] = truncated_ing_data
+        count += 1
+    
+    truncated["level_1_ingredient_trends"] = truncated_l1
+    print(f"[TREND FILTER] L1: Kept {count} ingredients after filtering")
+    
+    # L2: Competitive Landscape - filter and limit to top 10, remove full timelines
+    l2_trends = matched_trends.get("level_2_competing_approaches", []) or matched_trends.get("competitive_landscape", [])
+    truncated_l2 = []
+    count = 0
+    for item in l2_trends:
+        if count >= 10:  # Limit to top 10
+            break
+        
+        if not isinstance(item, dict):
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(item):
+            continue
+        
+        truncated_item = {
+            "query_text": item.get("query_text", ""),
+            "current_score": item.get("current_score", 0),
+            "peak_score": item.get("peak_score", 0),
+            "peak_month": item.get("peak_month", ""),
+            "growth_pct_3m": item.get("growth_pct_3m", 0),
+            "growth_pct_6m": item.get("growth_pct_6m", 0),
+            "trend_direction": item.get("trend_direction", ""),
+            "query_level": item.get("query_level", ""),
+            "category": item.get("category", ""),
+            "product_format": item.get("product_format", ""),
+            "benefit_tag": item.get("benefit_tag", ""),
+            # Summary only
+            "interest_over_time_summary": {
+                "total_data_points": len(item.get("interest_over_time", {}).get("values", [])),
+                "current_score": item.get("current_score", 0),
+                "peak_score": item.get("peak_score", 0),
+            },
+            "related_queries_rising": item.get("related_queries_rising", [])[:3],  # Top 3 only
+            "related_queries_top": item.get("related_queries_top", [])[:3],  # Top 3 only
+            "regional_interest": item.get("regional_interest", [])[:5],  # Top 5 only
+        }
+        truncated_l2.append(truncated_item)
+        count += 1
+    
+    truncated["level_2_competing_approaches"] = truncated_l2
+    print(f"[TREND FILTER] L2: Kept {count} competing approaches after filtering")
+    
+    # L3: Brand Intelligence - filter and limit to top 8
+    l3_trends = matched_trends.get("level_3_brand_trends", []) or matched_trends.get("brand_intelligence", [])
+    truncated_l3 = []
+    count = 0
+    for item in l3_trends:
+        if count >= 8:  # Limit to top 8
+            break
+        
+        if not isinstance(item, dict):
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(item):
+            continue
+        
+        truncated_item = {
+            "query_text": item.get("query_text", ""),
+            "current_score": item.get("current_score", 0),
+            "peak_score": item.get("peak_score", 0),
+            "growth_pct_3m": item.get("growth_pct_3m", 0),
+            "growth_pct_6m": item.get("growth_pct_6m", 0),
+            "trend_direction": item.get("trend_direction", ""),
+            "brand_tag": item.get("brand_tag", ""),
+            "product_format": item.get("product_format", ""),
+            "interest_over_time_summary": {
+                "total_data_points": len(item.get("interest_over_time", {}).get("values", [])),
+                "current_score": item.get("current_score", 0),
+            },
+            "regional_interest": item.get("regional_interest", [])[:5],  # Top 5 only
+        }
+        truncated_l3.append(truncated_item)
+        count += 1
+    
+    truncated["level_3_brand_trends"] = truncated_l3
+    print(f"[TREND FILTER] L3: Kept {count} brand trends after filtering")
+    
+    # L4: Head-to-Head Comparisons - filter and limit to top 5
+    l4_trends = matched_trends.get("comparison_data", []) or matched_trends.get("head_to_head", [])
+    truncated_l4 = []
+    count = 0
+    for item in l4_trends:
+        if count >= 5:  # Limit to top 5
+            break
+        
+        if not isinstance(item, dict):
+            continue
+        
+        # Filter by category and product format
+        if not matches_category_and_format(item):
+            continue
+        
+        truncated_item = {
+            "query_text": item.get("query_text", ""),
+            "current_score": item.get("current_score", 0),
+            "comparison_group": item.get("comparison_group", ""),
+            "trend_direction": item.get("trend_direction", ""),
+        }
+        truncated_l4.append(truncated_item)
+        count += 1
+    
+    truncated["comparison_data"] = truncated_l4
+    print(f"[TREND FILTER] L4: Kept {count} comparisons after filtering")
+    
+    # L5: Derivative Trends - filter and limit to top 5
+    l5_trends = matched_trends.get("derivative_trends", [])
+    truncated_l5 = []
+    count = 0
+    if isinstance(l5_trends, list):
+        for item in l5_trends:
+            if count >= 5:  # Limit to top 5
+                break
+            
+            if not isinstance(item, dict):
+                continue
+            
+            # Filter by category and product format
+            if not matches_category_and_format(item):
+                continue
+            
+            truncated_l5.append(item)
+            count += 1
+    
+    truncated["derivative_trends"] = truncated_l5
+    print(f"[TREND FILTER] L5: Kept {count} derivative trends after filtering")
+    
+    # Shopping data - keep only summary
+    shopping_data = matched_trends.get("shopping_data")
+    if shopping_data and isinstance(shopping_data, dict):
+        truncated["shopping_data"] = {
+            "avg_price": shopping_data.get("avg_price"),
+            "price_range": shopping_data.get("price_range"),
+            "total_products": shopping_data.get("total_products", 0),
+            # Remove full product lists
+        }
+    else:
+        truncated["shopping_data"] = None
+    
+    # Insights - keep as is (usually small)
+    truncated["insights"] = matched_trends.get("insights", {})
+    
+    return truncated
+
+
+def estimate_tokens_approximate(text: str) -> int:
+    """
+    Rough token estimation (Anthropic uses ~4 chars per token on average).
+    This is a quick check before calling the actual API.
+    """
+    return len(text) // 4
+
+
+# ============================================================================
 # VALIDATION FUNCTIONS
 # ============================================================================
 
@@ -500,15 +790,55 @@ async def synthesize_trends(
     print(f"[TREND SYNTHESIS]   Parsed data keys: {list(parsed_data.keys())}")
     print(f"[TREND SYNTHESIS]   Matched trends keys: {list(matched_trends.keys())}")
     
-    # Build prompts
+    # Truncate and filter trend data to prevent token limit issues
+    print(f"[TREND SYNTHESIS] ✂️ Truncating and filtering trend data by category/product_format...")
+    truncated_trends = truncate_trend_data_for_prompt(matched_trends, parsed_data=parsed_data, max_tokens=180000)
+    
+    # Build prompts with truncated data
     system_prompt = TREND_SYNTHESIS_SYSTEM_PROMPT
-    user_prompt = build_trend_synthesis_user_prompt(parsed_data, matched_trends)
+    user_prompt = build_trend_synthesis_user_prompt(parsed_data, truncated_trends)
     
     print(f"[TREND SYNTHESIS]   System prompt length: {len(system_prompt)} chars")
     print(f"[TREND SYNTHESIS]   User prompt length: {len(user_prompt)} chars")
     
     # Format system prompt with cache_control if caching enabled (GA approach)
     formatted_system = system_prompt
+    # Estimate tokens and check limit
+    estimated_system_tokens = estimate_tokens_approximate(system_prompt)
+    estimated_user_tokens = estimate_tokens_approximate(user_prompt)
+    estimated_total = estimated_system_tokens + estimated_user_tokens
+    
+    print(f"[TREND SYNTHESIS]   Estimated tokens - System: ~{estimated_system_tokens}, User: ~{estimated_user_tokens}, Total: ~{estimated_total}")
+    
+    # Use actual token counting if available
+    try:
+        token_count = claude_client.messages.count_tokens(
+            model=CLAUDE_MODEL,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        actual_tokens = token_count.input_tokens
+        print(f"[TREND SYNTHESIS]   Actual token count: {actual_tokens} tokens")
+        
+        if actual_tokens > 200000:
+            raise ValueError(
+                f"Prompt is too long: {actual_tokens} tokens > 200000 maximum. "
+                f"Please reduce the amount of trend data or contact support."
+            )
+        elif actual_tokens > 190000:
+            print(f"[TREND SYNTHESIS] ⚠️ WARNING: Prompt is very close to limit ({actual_tokens}/200000 tokens)")
+    except Exception as e:
+        print(f"[TREND SYNTHESIS] ⚠️ Could not count tokens exactly: {e}")
+        # Fall back to estimation
+        if estimated_total > 200000:
+            raise ValueError(
+                f"Estimated prompt is too long: ~{estimated_total} tokens > 200000 maximum. "
+                f"Please reduce the amount of trend data or contact support."
+            )
+        actual_tokens = estimated_total
+    
+    # Get cache control if caching enabled
+    cache_control = None
     if use_cache:
         try:
             from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
