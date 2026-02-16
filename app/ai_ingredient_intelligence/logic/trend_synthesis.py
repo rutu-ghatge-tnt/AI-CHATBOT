@@ -450,7 +450,7 @@ async def synthesize_trends(
         except Exception as e:
             print(f"[TREND SYNTHESIS] ⚠️ Could not get cache control: {e}")
     
-    # Prepare API call
+    # Prepare API call (don't include cache_control - SDK version doesn't support it)
     api_params = {
         "model": CLAUDE_MODEL,
         "max_tokens": 4000,
@@ -461,13 +461,14 @@ async def synthesize_trends(
             ]
     }
     
+    # Note: cache_control is available but not used due to SDK compatibility
     if cache_control:
-        api_params["cache_control"] = cache_control
+        print(f"[TREND SYNTHESIS] ⚠️ Cache control available but not using (SDK compatibility)")
     
     try:
         # Call Claude API
         print(f"[TREND SYNTHESIS] 📡 Calling Claude API...")
-        response = claude_client.messages.create(**api_params)
+        response = claude_client.messages.create(**api_params_final)
         
         if not response.content or len(response.content) == 0:
             raise ValueError("Empty response from Claude API")
@@ -484,13 +485,52 @@ async def synthesize_trends(
         elif "```" in content:
             json_content = content.split("```")[1].split("```")[0].strip()
         
-        # Parse JSON
+        # Parse JSON with better error handling
         try:
             synthesized = json.loads(json_content)
-        except json.JSONDecodeError as e:
-            print(f"[TREND SYNTHESIS] ❌ JSON parse error: {e}")
-            print(f"[TREND SYNTHESIS]   Response preview: {content[:500]}")
-            raise ValueError(f"Invalid JSON in Claude response: {str(e)}")
+        except json.JSONDecodeError as json_err:
+            print(f"[TREND SYNTHESIS] ❌ JSON parse error: {json_err}")
+            print(f"[TREND SYNTHESIS]   Error at position: {json_err.pos if hasattr(json_err, 'pos') else 'unknown'}")
+            print(f"[TREND SYNTHESIS]   Response length: {len(json_content)} chars")
+            
+            # Try to extract the problematic section
+            if hasattr(json_err, 'pos') and json_err.pos:
+                error_pos = json_err.pos
+                start = max(0, error_pos - 200)
+                end = min(len(json_content), error_pos + 200)
+                print(f"[TREND SYNTHESIS]   Problematic section: {json_content[start:end]}")
+            
+            # Try to fix common JSON issues
+            try:
+                # Try removing trailing commas
+                json_content_fixed = json_content.replace(',\n}', '\n}').replace(',\n]', '\n]')
+                synthesized = json.loads(json_content_fixed)
+                print(f"[TREND SYNTHESIS] ✅ Fixed JSON by removing trailing commas")
+            except:
+                # Try to extract JSON from a larger context
+                try:
+                    # Find the first { and last } to extract valid JSON
+                    first_brace = json_content.find('{')
+                    last_brace = json_content.rfind('}')
+                    if first_brace >= 0 and last_brace > first_brace:
+                        json_content_fixed = json_content[first_brace:last_brace+1]
+                        synthesized = json.loads(json_content_fixed)
+                        print(f"[TREND SYNTHESIS] ✅ Fixed JSON by extracting from braces")
+                    else:
+                        raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
+                except Exception as fix_err:
+                    print(f"[TREND SYNTHESIS] ❌ Could not fix JSON: {fix_err}")
+                    # Save problematic response for debugging
+                    import os
+                    debug_dir = "debug_responses"
+                    os.makedirs(debug_dir, exist_ok=True)
+                    debug_file = os.path.join(debug_dir, f"trend_synthesis_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        f.write(f"Error: {json_err}\n\n")
+                        f.write(f"Full response:\n{content}\n\n")
+                        f.write(f"Extracted JSON:\n{json_content}\n")
+                    print(f"[TREND SYNTHESIS]   Saved problematic response to: {debug_file}")
+                    raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
         
         # Validate structure
         validate_trend_synthesis(synthesized)
@@ -507,8 +547,7 @@ async def synthesize_trends(
         error_str = str(cache_error).lower()
         if "cache_control" in error_str or "unexpected keyword" in error_str:
             # SDK version doesn't support cache_control - this is normal for older SDK versions
-            # The request will work fine without caching, just won't benefit from cost savings
-            print(f"[TREND SYNTHESIS] ⚠️ Cache control not supported in this SDK version, retrying without it (this is normal)...")
+            print(f"[TREND SYNTHESIS] ⚠️ Cache control not supported, retrying without it...")
             api_params_clean = {k: v for k, v in api_params.items() if k != "cache_control"}
             if "extra_body" in api_params_clean:
                 api_params_clean["extra_body"] = {k: v for k, v in api_params_clean["extra_body"].items() if k != "cache_control"}
@@ -518,16 +557,31 @@ async def synthesize_trends(
             response = claude_client.messages.create(**api_params_clean)
             content = response.content[0].text.strip()
             
-            # Extract and parse JSON
+            # Extract and parse JSON with same error handling
             json_content = content
             if "```json" in content:
                 json_content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
                 json_content = content.split("```")[1].split("```")[0].strip()
             
-            synthesized = json.loads(json_content)
-            validate_trend_synthesis(synthesized)
+            try:
+                synthesized = json.loads(json_content)
+            except json.JSONDecodeError as json_err:
+                print(f"[TREND SYNTHESIS] ❌ JSON parse error (retry): {json_err}")
+                # Try same fixes as above
+                try:
+                    json_content_fixed = json_content.replace(',\n}', '\n}').replace(',\n]', '\n]')
+                    synthesized = json.loads(json_content_fixed)
+                except:
+                    first_brace = json_content.find('{')
+                    last_brace = json_content.rfind('}')
+                    if first_brace >= 0 and last_brace > first_brace:
+                        json_content_fixed = json_content[first_brace:last_brace+1]
+                        synthesized = json.loads(json_content_fixed)
+                    else:
+                        raise ValueError(f"Invalid JSON in Claude response: {str(json_err)}")
             
+            validate_trend_synthesis(synthesized)
             print(f"[TREND SYNTHESIS] ✅ Synthesis complete (without cache)!")
             return synthesized
         else:
