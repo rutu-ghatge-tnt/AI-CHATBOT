@@ -324,6 +324,193 @@ Return ONLY valid JSON. No markdown, no explanation, no preamble.
 
 
 # ============================================================================
+# DATA TRUNCATION FUNCTIONS
+# ============================================================================
+
+def truncate_trend_data_for_prompt(
+    matched_trends: Dict[str, Any],
+    max_tokens: int = 180000  # Leave room for system prompt and safety margin
+) -> Dict[str, Any]:
+    """
+    Truncate and filter trend data to fit within token limits.
+    
+    Removes:
+    - Full timeline arrays (keeps only summaries)
+    - Excessive related queries
+    - Low-significance records
+    - Redundant data
+    
+    Args:
+        matched_trends: Full trend data from MongoDB
+        max_tokens: Maximum tokens allowed (default: 180k to leave room for system prompt)
+    
+    Returns:
+        Truncated trend data optimized for prompt size
+    """
+    truncated = {}
+    
+    # L1: Hero Ingredient Trends - limit to top 5 ingredients, remove full timelines
+    l1_trends = matched_trends.get("level_1_ingredient_trends", {}) or matched_trends.get("hero_ingredient_trends", {})
+    truncated_l1 = {}
+    for idx, (ing_name, ing_data) in enumerate(l1_trends.items()):
+        if idx >= 5:  # Limit to top 5 ingredients
+            break
+        
+        if not ing_data or not isinstance(ing_data, dict):
+            continue
+        
+        # Extract trend_data
+        trend_data = ing_data.get("trend_data", {})
+        if not trend_data:
+            continue
+        
+        # Create truncated version - remove full timeline, keep summaries
+        # Extract values list safely
+        values_list = trend_data.get("interest_over_time", {}).get("values", [])
+        
+        truncated_ing_data = {
+            "query_text": ing_data.get("query_text", ""),
+            "match_type": ing_data.get("match_type", ""),
+            "confidence": ing_data.get("confidence", ""),
+            "trend_data": {
+                "query_text": trend_data.get("query_text", ""),
+                "current_score": trend_data.get("current_score", 0),
+                "peak_score": trend_data.get("peak_score", 0),
+                "peak_month": trend_data.get("peak_month", ""),
+                "growth_pct_3m": trend_data.get("growth_pct_3m", 0),
+                "growth_pct_6m": trend_data.get("growth_pct_6m", 0),
+                "growth_pct_12m": trend_data.get("growth_pct_12m", 0),
+                "trend_direction": trend_data.get("trend_direction", ""),
+                "query_level": trend_data.get("query_level", ""),
+                "category": trend_data.get("category", ""),
+                "product_format": trend_data.get("product_format", ""),
+                # Keep only summary of timeline (first, last, peak values)
+                "interest_over_time_summary": {
+                    "total_data_points": len(values_list),
+                    "first_value": values_list[0] if values_list and len(values_list) > 0 else 0,
+                    "last_value": values_list[-1] if values_list and len(values_list) > 0 else 0,
+                    "peak_value": trend_data.get("peak_score", 0),
+                    "peak_date": trend_data.get("peak_month", ""),
+                },
+                # Limit related queries
+                "related_queries_rising": trend_data.get("related_queries_rising", [])[:5],  # Top 5 only
+                "related_queries_top": trend_data.get("related_queries_top", [])[:5],  # Top 5 only
+                # Limit regional data
+                "regional_interest": trend_data.get("regional_interest", [])[:10],  # Top 10 only
+            }
+        }
+        
+        truncated_l1[ing_name] = truncated_ing_data
+    
+    truncated["level_1_ingredient_trends"] = truncated_l1
+    
+    # L2: Competitive Landscape - limit to top 10, remove full timelines
+    l2_trends = matched_trends.get("level_2_competing_approaches", []) or matched_trends.get("competitive_landscape", [])
+    truncated_l2 = []
+    for idx, item in enumerate(l2_trends[:10]):  # Limit to top 10
+        if not isinstance(item, dict):
+            continue
+        
+        truncated_item = {
+            "query_text": item.get("query_text", ""),
+            "current_score": item.get("current_score", 0),
+            "peak_score": item.get("peak_score", 0),
+            "peak_month": item.get("peak_month", ""),
+            "growth_pct_3m": item.get("growth_pct_3m", 0),
+            "growth_pct_6m": item.get("growth_pct_6m", 0),
+            "trend_direction": item.get("trend_direction", ""),
+            "query_level": item.get("query_level", ""),
+            "category": item.get("category", ""),
+            "product_format": item.get("product_format", ""),
+            "benefit_tag": item.get("benefit_tag", ""),
+            # Summary only
+            "interest_over_time_summary": {
+                "total_data_points": len(item.get("interest_over_time", {}).get("values", [])),
+                "current_score": item.get("current_score", 0),
+                "peak_score": item.get("peak_score", 0),
+            },
+            "related_queries_rising": item.get("related_queries_rising", [])[:3],  # Top 3 only
+            "related_queries_top": item.get("related_queries_top", [])[:3],  # Top 3 only
+            "regional_interest": item.get("regional_interest", [])[:5],  # Top 5 only
+        }
+        truncated_l2.append(truncated_item)
+    
+    truncated["level_2_competing_approaches"] = truncated_l2
+    
+    # L3: Brand Intelligence - limit to top 8
+    l3_trends = matched_trends.get("level_3_brand_trends", []) or matched_trends.get("brand_intelligence", [])
+    truncated_l3 = []
+    for idx, item in enumerate(l3_trends[:8]):  # Limit to top 8
+        if not isinstance(item, dict):
+            continue
+        
+        truncated_item = {
+            "query_text": item.get("query_text", ""),
+            "current_score": item.get("current_score", 0),
+            "peak_score": item.get("peak_score", 0),
+            "growth_pct_3m": item.get("growth_pct_3m", 0),
+            "growth_pct_6m": item.get("growth_pct_6m", 0),
+            "trend_direction": item.get("trend_direction", ""),
+            "brand_tag": item.get("brand_tag", ""),
+            "product_format": item.get("product_format", ""),
+            "interest_over_time_summary": {
+                "total_data_points": len(item.get("interest_over_time", {}).get("values", [])),
+                "current_score": item.get("current_score", 0),
+            },
+            "regional_interest": item.get("regional_interest", [])[:5],  # Top 5 only
+        }
+        truncated_l3.append(truncated_item)
+    
+    truncated["level_3_brand_trends"] = truncated_l3
+    
+    # L4: Head-to-Head Comparisons - limit to top 5
+    l4_trends = matched_trends.get("comparison_data", []) or matched_trends.get("head_to_head", [])
+    truncated_l4 = []
+    for idx, item in enumerate(l4_trends[:5]):  # Limit to top 5
+        if not isinstance(item, dict):
+            continue
+        
+        truncated_item = {
+            "query_text": item.get("query_text", ""),
+            "current_score": item.get("current_score", 0),
+            "comparison_group": item.get("comparison_group", ""),
+            "trend_direction": item.get("trend_direction", ""),
+        }
+        truncated_l4.append(truncated_item)
+    
+    truncated["comparison_data"] = truncated_l4
+    
+    # L5: Derivative Trends - limit to top 5
+    l5_trends = matched_trends.get("derivative_trends", [])
+    truncated["derivative_trends"] = l5_trends[:5] if isinstance(l5_trends, list) else []
+    
+    # Shopping data - keep only summary
+    shopping_data = matched_trends.get("shopping_data")
+    if shopping_data and isinstance(shopping_data, dict):
+        truncated["shopping_data"] = {
+            "avg_price": shopping_data.get("avg_price"),
+            "price_range": shopping_data.get("price_range"),
+            "total_products": shopping_data.get("total_products", 0),
+            # Remove full product lists
+        }
+    else:
+        truncated["shopping_data"] = None
+    
+    # Insights - keep as is (usually small)
+    truncated["insights"] = matched_trends.get("insights", {})
+    
+    return truncated
+
+
+def estimate_tokens_approximate(text: str) -> int:
+    """
+    Rough token estimation (Anthropic uses ~4 chars per token on average).
+    This is a quick check before calling the actual API.
+    """
+    return len(text) // 4
+
+
+# ============================================================================
 # VALIDATION FUNCTIONS
 # ============================================================================
 
@@ -500,12 +687,50 @@ async def synthesize_trends(
     print(f"[TREND SYNTHESIS]   Parsed data keys: {list(parsed_data.keys())}")
     print(f"[TREND SYNTHESIS]   Matched trends keys: {list(matched_trends.keys())}")
     
-    # Build prompts
+    # Truncate trend data to prevent token limit issues
+    print(f"[TREND SYNTHESIS] ✂️ Truncating trend data to fit token limits...")
+    truncated_trends = truncate_trend_data_for_prompt(matched_trends, max_tokens=180000)
+    
+    # Build prompts with truncated data
     system_prompt = TREND_SYNTHESIS_SYSTEM_PROMPT
-    user_prompt = build_trend_synthesis_user_prompt(parsed_data, matched_trends)
+    user_prompt = build_trend_synthesis_user_prompt(parsed_data, truncated_trends)
     
     print(f"[TREND SYNTHESIS]   System prompt length: {len(system_prompt)} chars")
     print(f"[TREND SYNTHESIS]   User prompt length: {len(user_prompt)} chars")
+    
+    # Estimate tokens and check limit
+    estimated_system_tokens = estimate_tokens_approximate(system_prompt)
+    estimated_user_tokens = estimate_tokens_approximate(user_prompt)
+    estimated_total = estimated_system_tokens + estimated_user_tokens
+    
+    print(f"[TREND SYNTHESIS]   Estimated tokens - System: ~{estimated_system_tokens}, User: ~{estimated_user_tokens}, Total: ~{estimated_total}")
+    
+    # Use actual token counting if available
+    try:
+        token_count = claude_client.messages.count_tokens(
+            model=CLAUDE_MODEL,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        actual_tokens = token_count.input_tokens
+        print(f"[TREND SYNTHESIS]   Actual token count: {actual_tokens} tokens")
+        
+        if actual_tokens > 200000:
+            raise ValueError(
+                f"Prompt is too long: {actual_tokens} tokens > 200000 maximum. "
+                f"Please reduce the amount of trend data or contact support."
+            )
+        elif actual_tokens > 190000:
+            print(f"[TREND SYNTHESIS] ⚠️ WARNING: Prompt is very close to limit ({actual_tokens}/200000 tokens)")
+    except Exception as e:
+        print(f"[TREND SYNTHESIS] ⚠️ Could not count tokens exactly: {e}")
+        # Fall back to estimation
+        if estimated_total > 200000:
+            raise ValueError(
+                f"Estimated prompt is too long: ~{estimated_total} tokens > 200000 maximum. "
+                f"Please reduce the amount of trend data or contact support."
+            )
+        actual_tokens = estimated_total
     
     # Get cache control if caching enabled
     cache_control = None
