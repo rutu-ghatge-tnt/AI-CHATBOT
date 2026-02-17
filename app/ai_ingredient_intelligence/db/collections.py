@@ -36,3 +36,10 @@ quotes_col = db["quotes"]
 
 # Ingredient alternatives cache collection
 ingredient_alternatives_cache_col = db["ingredient_alternatives_cache"]
+
+# ============================================================================
+# NOTIFICATION COLLECTION
+# ============================================================================
+
+# Formulynx notifications collection for storing user notifications
+notifications_col = db["formulynx_notifications"]

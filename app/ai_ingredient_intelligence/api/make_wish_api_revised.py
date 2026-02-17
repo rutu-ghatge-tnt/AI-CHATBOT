@@ -70,8 +70,9 @@ from app.ai_ingredient_intelligence.logic.credit_service import (
     CreditKey
 )
 
-# Import WebSocket notification helper
-from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user
+# Import WebSocket notification helper (enhanced version)
+from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user_enhanced
+from app.ai_ingredient_intelligence.models.notification_schemas import NotificationAction
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
@@ -602,13 +603,20 @@ async def process_generate_revised_background(
         except Exception as notif_error:
             print(f"⚠️ [BACKGROUND] Failed to send success notification: {notif_error}")
         
-        # Send real-time WebSocket notification
+        # Send real-time WebSocket notification using enhanced notification module
         try:
-            await notify_user(
+            await notify_user_enhanced(
                 user_id=user_id,
+                module="make-wish",
+                notification_type="success",
                 title="Formula Generated Successfully!",
                 message=f"Your formula '{name}' has been generated and is ready to view.",
-                data={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
+                action=NotificationAction(
+                    label="View Formula",
+                    kind="route",
+                    to=f"/make-wish/{history_id}"
+                ),
+                meta={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
             )
         except Exception as ws_error:
             print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
@@ -646,13 +654,15 @@ async def process_generate_revised_background(
         except Exception as notif_error:
             print(f"⚠️ [BACKGROUND] Failed to send failure notification: {notif_error}")
         
-        # Send real-time WebSocket notification
+        # Send real-time WebSocket notification using enhanced notification module
         try:
-            await notify_user(
+            await notify_user_enhanced(
                 user_id=user_id,
+                module="make-wish",
+                notification_type="error",
                 title="Formula Generation Failed",
                 message=f"Sorry, we couldn't generate your formula '{name}'. Please try again.",
-                data={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message}
+                meta={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message}
             )
         except Exception as ws_error:
             print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")

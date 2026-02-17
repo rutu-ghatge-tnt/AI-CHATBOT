@@ -66,6 +66,14 @@ except ImportError as e:
     print(f"Warning: Could not import make_wish router: {e}")
     print("   Make a Wish API will not be available. This is not critical.")
     make_wish_router = None
+
+# Import Notifications router
+try:
+    from app.ai_ingredient_intelligence.api.notifications import router as notifications_router
+except ImportError as e:
+    print(f"Warning: Could not import notifications router: {e}")
+    print("   Notifications API will not be available. This is not critical.")
+    notifications_router = None
 # from app.product_listing_image_extraction.route import router as image_extractor_router  # Commented out - module doesn't exist
 from pathlib import Path
 
@@ -302,6 +310,12 @@ if make_wish_router is not None:
 else:
     print("Warning: Make a Wish router not available, skipping registration")
 
+# ✅ Add Notifications API
+if notifications_router is not None:
+    app.include_router(notifications_router, prefix="/api")
+else:
+    print("Warning: Notifications router not available, skipping registration")
+
 # ✅ Add WebSocket Routes for Real-time Notifications
 try:
     from app.ai_ingredient_intelligence.api.websocket_routes import router as websocket_router
@@ -389,6 +403,16 @@ async def create_indexes():
         await inspiration_products_col.create_index([("board_id", 1), ("decoded", 1)])
         await inspiration_products_col.create_index([("user_id", 1), ("created_at", -1)])
         print("Inspiration boards collection indexes created successfully")
+        
+        # Create indexes for formulynx_notifications collection
+        from app.ai_ingredient_intelligence.db.collections import notifications_col
+        await notifications_col.create_index("user_id")
+        await notifications_col.create_index("createdAt")
+        await notifications_col.create_index([("user_id", 1), ("createdAt", -1)])
+        await notifications_col.create_index([("user_id", 1), ("read", 1)])
+        await notifications_col.create_index([("user_id", 1), ("module", 1)])
+        await notifications_col.create_index("id", unique=True)
+        print("Formulynx notifications collection indexes created successfully")
         
         # Initialize endpoint timing Excel file if it doesn't exist
         from app.ai_ingredient_intelligence.middleware.timing_middleware import TIMING_EXCEL_FILE
