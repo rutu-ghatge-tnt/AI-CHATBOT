@@ -1976,7 +1976,7 @@ async def fetch_market_trends(
         
         return {
             "success": True,
-            "data": trends_data,
+            "market_trends": trends_data,
             "history_id": history_id,
             "timestamp": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
         }
