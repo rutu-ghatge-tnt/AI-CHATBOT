@@ -352,3 +352,169 @@ async def create_query_from_payment(
 # All commercialization requests are now created directly as QMS queries
 
 
+
+            "quantity_interest": quantity_interest,
+
+            "additional_notes": additional_notes if isinstance(additional_notes, str) else (", ".join(additional_notes) if isinstance(additional_notes, list) else str(additional_notes) if additional_notes else None),
+            "status": QueryStatus.NEW.value,
+
+            "queue_number": int(queue_number) if queue_number else None,  # Store as integer for easy sorting
+
+            # Store payment_id only if provided (MongoDB doesn't store None fields)
+            **({"payment_id": payment_id} if payment_id else {}),
+            # Store user info from form as fallback (in case users collection doesn't have it)
+
+            "user_name": user_name,  # From get-this-made form
+
+            "user_phone": user_phone,  # From get-this-made form
+
+            "user_city": user_city,  # From get-this-made form
+
+            "user_email": user_email,  # From get-this-made form
+
+            "user_pincode": user_pincode,  # From get-this-made form
+
+            "created_at": now,
+
+            "updated_at": now
+
+        }
+
+        
+
+        result = await qms_queries_col.insert_one(query_doc)
+
+        query_id = str(result.inserted_id)
+
+        
+
+        print(f"✅ Created QMS query: {display_id} (ID: {query_id})")
+
+        print(f"   Formula: {formula_name}")
+
+        print(f"   Experience Level: {experience_level}")
+
+        print(f"   Timeline: {timeline}")
+
+        if queue_number:
+
+            print(f"   Queue Number: {queue_number}")
+
+        print(f"   Status: {QueryStatus.NEW.value}")
+
+        print(f"   Payment ID: {payment_id} (stored: {query_doc.get('payment_id')})")
+        
+
+        return query_id
+
+    
+
+    except Exception as e:
+
+        print(f"❌ Error creating query from commercialization: {e}")
+
+        import traceback
+
+        traceback.print_exc()
+
+        raise
+
+
+
+
+
+async def create_query_from_payment(
+
+    user_id: str,
+
+    payment_id: str,
+
+    wish_history_id: str,
+
+    formula_id: str,
+
+    formula_name: str,
+
+    experience_level: str,
+
+    timeline: str,
+
+    quantity_interest: Optional[str] = None,
+
+    additional_notes: Optional[str] = None
+
+) -> str:
+
+    """
+
+    Create a QMS query from a successful payment.
+
+    
+
+    This is a wrapper around create_query_from_commercialization that requires payment_id.
+
+    Use this when payment is verified.
+
+    
+
+    Args:
+
+        user_id: User ID from JWT token
+
+        payment_id: Payment record ID (required)
+
+        wish_history_id: Make A Wish history ID
+
+        formula_id: Formula ID
+
+        formula_name: Formula name
+
+        experience_level: Experience level
+
+        timeline: Timeline
+
+        quantity_interest: Optional quantity interest
+
+        notes: Optional notes
+
+    
+
+    Returns:
+
+        Query ID (MongoDB ObjectId as string)
+
+    """
+
+    return await create_query_from_commercialization(
+
+        user_id=user_id,
+
+        wish_history_id=wish_history_id,
+
+        formula_id=formula_id,
+
+        formula_name=formula_name,
+
+        experience_level=experience_level,
+
+        timeline=timeline,
+
+        quantity_interest=quantity_interest,
+
+        additional_notes=additional_notes,
+
+        payment_id=payment_id
+
+    )
+
+
+
+
+
+# REMOVED: create_query_from_commercialization_request function
+
+# No longer needed since commercialization_requests collection was removed
+
+# All commercialization requests are now created directly as QMS queries
+
+

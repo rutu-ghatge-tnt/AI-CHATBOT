@@ -756,13 +756,42 @@ async def validate_and_enrich_claude_ingredients(
             continue
         
         # Get cost from database if available
+        # Priority: ingredient_costs (avg_cost) > distributor > Claude's estimate
         db_cost_per_kg = None
-        supplier_id = db_ingredient.get("supplier_id")
-        if supplier_id:
-            from app.ai_ingredient_intelligence.db.collections import distributor_col
-            supplier_doc = await distributor_col.find_one({"_id": supplier_id})
-            if supplier_doc:
-                db_cost_per_kg = supplier_doc.get("cost_per_kg")
+        
+        # First, try to get cost from ingredient_costs collection using INCI name
+        from app.ai_ingredient_intelligence.db.collections import ingredient_costs_col, distributor_col
+        INGREDIENT_COST_MARKUP_PERCENT = 35  # 35% markup on database costs
+        INGREDIENT_COST_MARKUP_MULTIPLIER = 1 + (INGREDIENT_COST_MARKUP_PERCENT / 100.0)  # 1.35
+        
+        # Try ingredient_costs collection by INCI name
+        for inci_name in inci_names:
+            if inci_name:
+                # Try normalized INCI name match
+                ingredient_cost_doc = await ingredient_costs_col.find_one(
+                    {"inci_name_normalized": inci_name.strip().lower()}
+                )
+                if not ingredient_cost_doc:
+                    # Try exact INCI name match
+                    ingredient_cost_doc = await ingredient_costs_col.find_one(
+                        {"inci_name": inci_name.strip()}
+                    )
+                
+                if ingredient_cost_doc and ingredient_cost_doc.get("avg_cost"):
+                    # Apply 35% markup to avg_cost from ingredient_costs collection
+                    db_cost_per_kg = float(ingredient_cost_doc.get("avg_cost", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
+                    break
+        
+        # If not found in ingredient_costs, try distributor collection
+        if not db_cost_per_kg:
+            supplier_id = db_ingredient.get("supplier_id")
+            if supplier_id:
+                supplier_doc = await distributor_col.find_one({"_id": supplier_id})
+                if supplier_doc:
+                    cost_from_dist = supplier_doc.get("cost_per_kg") or supplier_doc.get("pricePerKg")
+                    if cost_from_dist:
+                        # Apply 35% markup to cost from distributor collection
+                        db_cost_per_kg = float(cost_from_dist) * INGREDIENT_COST_MARKUP_MULTIPLIER
         
         # Use database cost if available, otherwise use Claude's estimate
         cost_per_kg = db_cost_per_kg if db_cost_per_kg else ing.get("estimated_cost_per_kg", 3000)
