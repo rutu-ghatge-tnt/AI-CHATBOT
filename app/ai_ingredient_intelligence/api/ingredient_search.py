@@ -28,6 +28,10 @@ from app.ai_ingredient_intelligence.models.schemas import (
 
 router = APIRouter(prefix="/ingredients", tags=["Ingredient Search"])
 
+# Markup percentage to add to ingredient costs from database
+INGREDIENT_COST_MARKUP_PERCENT = 35  # 35% markup on database costs
+INGREDIENT_COST_MARKUP_MULTIPLIER = 1 + (INGREDIENT_COST_MARKUP_PERCENT / 100.0)  # 1.35
+
 
 @router.get("/search")
 async def search_ingredients(
@@ -101,7 +105,8 @@ async def search_ingredients(
                     sort=[("createdAt", -1)]
                 )
                 if distributor_doc and distributor_doc.get("pricePerKg"):
-                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                    # Apply 35% markup to cost from database
+                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
             
             # If not found, try ingredientIds
             if not cost_per_kg:
@@ -110,7 +115,8 @@ async def search_ingredients(
                     sort=[("createdAt", -1)]
                 )
                 if distributor_doc and distributor_doc.get("pricePerKg"):
-                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                    # Apply 35% markup to cost from database
+                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
             
             # Default cost based on category
             if not cost_per_kg:
@@ -190,7 +196,8 @@ async def get_ingredient_by_name(
                 sort=[("createdAt", -1)]
             )
             if distributor_doc and distributor_doc.get("pricePerKg"):
-                cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                # Apply 35% markup to cost from database
+                cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
         
         # If not found, try ingredientIds
         if not cost_per_kg:
@@ -199,7 +206,8 @@ async def get_ingredient_by_name(
                 sort=[("createdAt", -1)]
             )
             if distributor_doc and distributor_doc.get("pricePerKg"):
-                cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                # Apply 35% markup to cost from database
+                cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
         
         # Default cost based on category
         if not cost_per_kg:
@@ -323,7 +331,8 @@ async def get_ingredients_by_supplier(
                     sort=[("createdAt", -1)]
                 )
                 if distributor_doc and distributor_doc.get("pricePerKg"):
-                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                    # Apply 35% markup to cost from database
+                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
             
             # If not found, try ingredientIds
             if not cost_per_kg:
@@ -332,7 +341,8 @@ async def get_ingredients_by_supplier(
                     sort=[("createdAt", -1)]
                 )
                 if distributor_doc and distributor_doc.get("pricePerKg"):
-                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                    # Apply 35% markup to cost from database
+                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
             
             # Default cost based on category
             if not cost_per_kg:
@@ -516,7 +526,8 @@ async def get_ingredients_by_supplier_id(
             try:
                 price = supplier_distributor_doc.get("pricePerKg")
                 if price is not None:
-                    supplier_distributor = float(price)
+                    # Apply 35% markup to cost from database
+                    supplier_distributor = float(price) * INGREDIENT_COST_MARKUP_MULTIPLIER
             except (ValueError, TypeError):
                 pass
         
@@ -532,7 +543,8 @@ async def get_ingredients_by_supplier_id(
                 price = dist_doc.get("pricePerKg")
                 if price is not None:
                     try:
-                        cost = float(price)
+                        # Apply 35% markup to cost from database
+                        cost = float(price) * INGREDIENT_COST_MARKUP_MULTIPLIER
                         # Map each ingredientId to this cost (latest wins due to sort)
                         for ing_id in dist_doc.get("ingredientIds", []):
                             if ing_id not in ingredient_distributors:
@@ -933,7 +945,8 @@ async def get_ingredients_info(
                 )
                 if dist_doc and dist_doc.get("pricePerKg") is not None:
                     try:
-                        supplier_distributor_map[str(sup_id)] = float(dist_doc.get("pricePerKg", 0))
+                        # Apply 35% markup to cost from database
+                        supplier_distributor_map[str(sup_id)] = float(dist_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
                     except (ValueError, TypeError):
                         pass
         
@@ -949,7 +962,8 @@ async def get_ingredients_info(
                 price = dist_doc.get("pricePerKg")
                 if price is not None:
                     try:
-                        cost = float(price)
+                        # Apply 35% markup to cost from database
+                        cost = float(price) * INGREDIENT_COST_MARKUP_MULTIPLIER
                         for ing_id in dist_doc.get("ingredientIds", []):
                             if ing_id not in ingredient_distributor_map:
                                 ingredient_distributor_map[ing_id] = cost
