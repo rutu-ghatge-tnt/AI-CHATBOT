@@ -12,6 +12,7 @@ chemical_classes_col = db["ingre_chemical_classes"]
 documents_col = db["ingre_documents"]
 formulations_col = db["ingre_formulations"]
 distributor_col = db["distributor"]
+ingredient_costs_col = db["ingredient_costs"]  # Collection with avg_cost for ingredients
 decode_history_col = db["decode_history"]
 compare_history_col = db["compare_history"]
 market_research_history_col = db["market_research_history"]
