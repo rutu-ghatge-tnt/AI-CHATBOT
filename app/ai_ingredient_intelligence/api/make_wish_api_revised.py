@@ -28,6 +28,18 @@ import uuid
 import asyncio
 import logging
 
+# Semaphore to limit concurrent background tasks and prevent event loop blocking
+# Initialize lazily in async context to ensure event loop exists
+_background_task_semaphore = None
+
+async def get_background_task_semaphore():
+    """Get or create the background task semaphore (must be called in async context)."""
+    global _background_task_semaphore
+    if _background_task_semaphore is None:
+        # Increased to 10 to allow more concurrent tasks without blocking other API calls
+        _background_task_semaphore = asyncio.Semaphore(10)
+    return _background_task_semaphore
+
 # Import authentication
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
 
@@ -315,29 +327,18 @@ async def generate_formula_revised(
         )
     
     try:
-        # Prepare wish data for background processing
-        cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
-        cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
-        wish_data = {
-            "category": request.parsed_data.category,
-            "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
-            "benefits": request.parsed_data.detected_benefits,
-            "exclusions": request.parsed_data.detected_exclusions,
-            "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
-            "texture": request.parsed_data.auto_texture.label,
-            "costMin": cost_min,
-            "costMax": cost_max,
-            "claims": request.claims or [],
-            "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
-            "additionalNotes": request.additional_notes or "",
-            "mode": "basic",
-        }
-        
-        # Save request to DB immediately with "in_progress" status
+        # Generate IDs immediately
         formula_id = str(uuid.uuid4())
         if not history_id:
+            # Generate MongoDB ObjectId upfront
+            history_id = str(ObjectId())
+        
+        # CRITICAL: Save to DB FIRST so detail API can find it immediately
+        # This is a quick operation and ensures the record exists
+        if not request.history_id:
             try:
                 history_doc = {
+                    "_id": ObjectId(history_id),
                     "mode": "basic",
                     "user_id": user_id,
                     "name": name,
@@ -354,8 +355,7 @@ async def generate_formula_revised(
                     "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
                     "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
                 }
-                result = await wish_history_col.insert_one(history_doc)
-                history_id = str(result.inserted_id)
+                await wish_history_col.insert_one(history_doc)
                 print(f"[AUTO-SAVE] Saved initial state with history_id: {history_id}")
             except Exception as e:
                 print(f"[AUTO-SAVE] Error: Failed to save initial state: {e}")
@@ -381,29 +381,28 @@ async def generate_formula_revised(
             except Exception as e:
                 print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
         
-        # Process in background using asyncio.create_task for true concurrency
-        # Wrap in error handler to prevent unhandled exceptions
-        background_coro = process_generate_revised_background(
+        # NOW start background task for heavy processing (formula generation, trends, etc.)
+        background_coro = process_generate_revised_background_with_semaphore(
             history_id=history_id,
             user_id=user_id,
-            wish_data=wish_data,
             request=request,
             name=name,
             formula_id=formula_id,
-            request_received_at=request_received_at
+            request_received_at=request_received_at,
+            is_new_history=not bool(request.history_id)
         )
+        # Fire and forget - don't await, don't store reference
         asyncio.create_task(handle_background_task_safely(background_coro))
         
-        # Return immediate acknowledgment
-        print(f"[ACKNOWLEDGMENT] Returning immediate acknowledgment with history_id: {history_id}")
-        return {
-            "success": True,
-            "message": "Request received. Processing started.",
-            "history_id": history_id,
-            "formula_id": formula_id,
-            "status": "in_progress",
-            "request_received_at": request_received_at.isoformat()
-        }
+        # Return immediate acknowledgment (DB already saved, processing in background)
+        # Response model requires: success, formula_id, history_id
+        # Note: success=True means "request accepted", NOT "formula completed"
+        # The actual completion notification is sent via WebSocket when background task finishes
+        return MakeWishBasicResponseRevised(
+            success=True,
+            formula_id=formula_id,
+            history_id=history_id
+        )
     
     except HTTPException:
         raise
@@ -432,6 +431,34 @@ async def handle_background_task_safely(coro):
         logger.error(f"❌ Unhandled exception in background task: {e}", exc_info=True)
 
 
+async def process_generate_revised_background_with_semaphore(
+    history_id: str,
+    user_id: str,
+    request: MakeWishRequestRevised,
+    name: str,
+    formula_id: str,
+    request_received_at: datetime,
+    is_new_history: bool = True
+):
+    """
+    Wrapper that acquires semaphore before running background task.
+    This prevents too many concurrent tasks from blocking the event loop.
+    """
+    semaphore = await get_background_task_semaphore()
+    async with semaphore:
+        # Yield control to event loop before starting heavy work
+        await asyncio.sleep(0)
+        await process_generate_revised_background(
+            history_id=history_id,
+            user_id=user_id,
+            request=request,
+            name=name,
+            formula_id=formula_id,
+            request_received_at=request_received_at,
+            is_new_history=is_new_history
+        )
+
+
 # ============================================================================
 # BACKGROUND PROCESSING FUNCTION
 # ============================================================================
@@ -439,15 +466,17 @@ async def handle_background_task_safely(coro):
 async def process_generate_revised_background(
     history_id: str,
     user_id: str,
-    wish_data: Dict[str, Any],
     request: MakeWishRequestRevised,
     name: str,
     formula_id: str,
-    request_received_at: datetime
+    request_received_at: datetime,
+    is_new_history: bool = True
 ):
     """
     Background task to process revised Make a Wish formula generation.
     Handles:
+    - Prepare wish_data (moved from main endpoint for speed)
+    - Database save/update (first thing, to get real MongoDB ObjectId if needed)
     - Formula generation
     - Trend analysis
     - Market trends
@@ -463,9 +492,37 @@ async def process_generate_revised_background(
     try:
         print(f"[BACKGROUND] Starting processing for history_id: {history_id}")
         
+        # Prepare wish data (moved here from main endpoint to return ASAP)
+        cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
+        cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
+        wish_data = {
+            "category": request.parsed_data.category,
+            "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
+            "benefits": request.parsed_data.detected_benefits,
+            "exclusions": request.parsed_data.detected_exclusions,
+            "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
+            "texture": request.parsed_data.auto_texture.label,
+            "costMin": cost_min,
+            "costMax": cost_max,
+            "claims": request.claims or [],
+            "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
+            "additionalNotes": request.additional_notes or "",
+            "mode": "basic",
+        }
+        
+        # DB is already saved in main endpoint, so we can skip saving here
+        # Just log that we're starting processing
+        print(f"[BACKGROUND] Starting processing for history_id: {history_id} (DB already saved)")
+        
+        # Yield control to event loop before starting heavy work
+        await asyncio.sleep(0)
+        
         # Generate formula
         basic_result = await generate_formula_from_wish(wish_data)
         basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names
+        
+        # Yield control after formula generation
+        await asyncio.sleep(0)
         
         # Extract hero ingredients for trend analysis
         hero_ingredients = []
@@ -518,6 +575,9 @@ async def process_generate_revised_background(
                 ingredient_trends = market_trends.get("ingredient_trends", [])
                 
                 for ing in hero_ingredients[:5]:  # Limit to 5 to avoid rate limits
+                    # Yield control to event loop periodically during synthesis
+                    await asyncio.sleep(0)
+                    
                     try:
                         # Find trend data for this ingredient from market trends
                         ing_trend = next((t for t in ingredient_trends if t.get("ingredient_name") == ing), None)
@@ -596,6 +656,12 @@ async def process_generate_revised_background(
         print(f"[BACKGROUND] ✅ Updated history {history_id} with completed status")
         processing_success = True
         
+        # Verify the status was actually updated to "completed" before sending notifications
+        verify_doc = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+        if not verify_doc or verify_doc.get("status") != "completed":
+            print(f"⚠️ [BACKGROUND] Status not confirmed as 'completed', skipping notifications")
+            return
+        
         # Deduct credits on success
         try:
             await deduct_credits(
@@ -609,7 +675,7 @@ async def process_generate_revised_background(
             print(f"⚠️ [BACKGROUND] Failed to deduct credits: {credit_error}")
             # Don't fail the whole process if credit deduction fails
         
-        # Send success notification via OneSignal
+        # Send success notification via OneSignal (ONLY after status is confirmed as "completed")
         try:
             await send_onesignal_notification(
                 user_id=user_id,
@@ -617,10 +683,11 @@ async def process_generate_revised_background(
                 message=f"Your formula '{name}' has been generated and is ready to view.",
                 data={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
             )
+            print(f"✅ [BACKGROUND] Success notification sent via OneSignal")
         except Exception as notif_error:
             print(f"⚠️ [BACKGROUND] Failed to send success notification: {notif_error}")
         
-        # Send real-time WebSocket notification using enhanced notification module
+        # Send real-time WebSocket notification using enhanced notification module (ONLY after completion)
         try:
             await notify_user_enhanced(
                 user_id=user_id,
@@ -635,6 +702,7 @@ async def process_generate_revised_background(
                 ),
                 meta={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
             )
+            print(f"✅ [BACKGROUND] Success notification sent via WebSocket")
         except Exception as ws_error:
             print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
         
@@ -1416,7 +1484,6 @@ async def submit_commercialization_request(
 @router.post("/export-to-inspiration-board")
 async def export_make_wish_revised_to_board(
     request: dict,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)
 ):
     """Export revised make a wish formulations to inspiration board"""
@@ -1453,7 +1520,7 @@ async def export_make_wish_revised_to_board(
         
         # Call the inspiration boards export endpoint
         from app.ai_ingredient_intelligence.api.inspiration_boards import export_to_board_endpoint
-        result = await export_to_board_endpoint(export_request, background_tasks, current_user)
+        result = await export_to_board_endpoint(export_request, current_user)
         
         return result
         

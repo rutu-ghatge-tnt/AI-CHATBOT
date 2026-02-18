@@ -10,6 +10,7 @@ options, complete formula generation, business context, and supporting content.
 import os
 import json
 import re
+import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
@@ -567,11 +568,16 @@ async def call_ai_with_claude(
     for attempt in range(max_retries):
         try:
             # Call Claude API with caching support
-            response = claude_client.messages.create(**api_params)
+            # Run in thread pool to prevent blocking the event loop
+            # This allows other API requests (like wish-history) to be processed concurrently
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: claude_client.messages.create(**api_params)
+            )
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:
-                    import asyncio
                     await asyncio.sleep(1)
                     continue
                 raise ValueError("Empty response from Claude API")
@@ -580,7 +586,6 @@ async def call_ai_with_claude(
             
             if not content:
                 if attempt < max_retries - 1:
-                    import asyncio
                     await asyncio.sleep(1)
                     continue
                 raise ValueError("Empty text in Claude response")
@@ -658,7 +663,6 @@ async def call_ai_with_claude(
                         pass
                 
                 if attempt < max_retries - 1:
-                    import asyncio
                     await asyncio.sleep(1)
                     continue
                 else:
@@ -666,7 +670,6 @@ async def call_ai_with_claude(
         
         except Exception as e:
             if attempt < max_retries - 1:
-                import asyncio
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
                 continue
             else:

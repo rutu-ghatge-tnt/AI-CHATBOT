@@ -28,6 +28,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import time
+import asyncio
 
 # Import authentication
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
@@ -881,16 +882,9 @@ async def get_wish_history_detail(
     - User ID is automatically extracted from the JWT token
     - Only returns items belonging to the authenticated user
     """
-    print(f"\n{'='*80}")
-    print(f"[DEBUG] 🚀 API CALL: /api/formula/wish-history/{history_id}/details")
-    print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
-    print(f"[DEBUG] History ID: {history_id}")
-    print(f"{'='*80}\n")
-    
     try:
         # Extract user_id from JWT token (already verified by verify_jwt_token)
         user_id = current_user.get("user_id") or current_user.get("_id")
-        print(f"[DEBUG] User ID extracted: {user_id}")
         if not user_id:
             raise HTTPException(
                 status_code=400,
@@ -915,7 +909,7 @@ async def get_wish_history_detail(
                 detail=f"Invalid history ID format. Expected MongoDB ObjectId (24 hex characters), got: {history_id[:50]}"
             )
         
-        # Fetch full item (including large fields)
+        # Fetch full item (including large fields) - optimized query
         doc = await wish_history_col.find_one({
             "_id": ObjectId(history_id),
             "user_id": user_id
@@ -924,27 +918,42 @@ async def get_wish_history_detail(
         if not doc:
             raise HTTPException(status_code=404, detail="History item not found")
         
-        # Check if commercialization request exists for this formula
+        # Fetch commercialization request with timeout to prevent blocking
+        # This is optional data, so we don't want it to slow down the main response
         formula_id = doc.get("formula_id", "")
         commercialization_request = None
         
         if formula_id:
-            commercialization_request = await commercialization_requests_col.find_one({
-                "user_id": user_id,
-                "formula_id": formula_id,
-                "history_id": history_id,
-                "status": {"$in": ["submitted", "in_progress", "review", "completed"]}
-            })
-            
-            # If found, format the response
-            if commercialization_request:
-                commercialization_request = {
-                    "_id": str(commercialization_request.get("_id")),
-                    "queue_number": commercialization_request.get("queue_number"),
-                    "status": commercialization_request.get("status"),
-                    "created_at": commercialization_request.get("created_at"),
-                    "additional_notes": commercialization_request.get("additional_notes"),
-                }
+            try:
+                # Use asyncio.wait_for to timeout after 2 seconds
+                # If it takes longer, we'll just return None for quote_data
+                commercialization_doc = await asyncio.wait_for(
+                    commercialization_requests_col.find_one({
+                        "user_id": user_id,
+                        "formula_id": formula_id,
+                        "history_id": history_id,
+                        "status": {"$in": ["submitted", "in_progress", "review", "completed"]}
+                    }),
+                    timeout=2.0
+                )
+                
+                # If found, format the response
+                if commercialization_doc:
+                    commercialization_request = {
+                        "_id": str(commercialization_doc.get("_id")),
+                        "queue_number": commercialization_doc.get("queue_number"),
+                        "status": commercialization_doc.get("status"),
+                        "created_at": commercialization_doc.get("created_at"),
+                        "additional_notes": commercialization_doc.get("additional_notes"),
+                    }
+            except asyncio.TimeoutError:
+                # Commercialization query timed out - just skip it, don't block response
+                print(f"[WARNING] Commercialization query timed out for formula_id: {formula_id}")
+                commercialization_request = None
+            except Exception as e:
+                # Don't fail the whole request if commercialization query fails
+                print(f"[WARNING] Error fetching commercialization request: {e}")
+                commercialization_request = None
         
         # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs
         basic_mode_result = doc.get("basic_mode_result")
