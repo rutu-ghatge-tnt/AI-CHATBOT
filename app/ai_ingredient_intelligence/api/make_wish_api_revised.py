@@ -16,7 +16,7 @@ ingredient alternatives, formula editing, and commercialization.
 All AI operations use Claude Opus (claude-opus-4-5-20251101) for optimal quality.
 """
 
-from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Header, Depends, Query
 import httpx
 import os
 from typing import Dict, Any, Optional, List
@@ -25,6 +25,8 @@ from bson import ObjectId
 import time
 import json
 import uuid
+import asyncio
+import logging
 
 # Import authentication
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
@@ -263,7 +265,6 @@ async def parse_natural_language_wish(
 @router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)
 ):
     """
@@ -380,9 +381,9 @@ async def generate_formula_revised(
             except Exception as e:
                 print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
         
-        # Process in background
-        background_tasks.add_task(
-            process_generate_revised_background,
+        # Process in background using asyncio.create_task for true concurrency
+        # Wrap in error handler to prevent unhandled exceptions
+        background_coro = process_generate_revised_background(
             history_id=history_id,
             user_id=user_id,
             wish_data=wish_data,
@@ -391,6 +392,7 @@ async def generate_formula_revised(
             formula_id=formula_id,
             request_received_at=request_received_at
         )
+        asyncio.create_task(handle_background_task_safely(background_coro))
         
         # Return immediate acknowledgment
         print(f"[ACKNOWLEDGMENT] Returning immediate acknowledgment with history_id: {history_id}")
@@ -413,6 +415,21 @@ async def generate_formula_revised(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+# ============================================================================
+# BACKGROUND TASK ERROR HANDLER
+# ============================================================================
+
+async def handle_background_task_safely(coro):
+    """
+    Wrapper to safely execute background tasks and catch any unhandled exceptions.
+    """
+    try:
+        await coro
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ Unhandled exception in background task: {e}", exc_info=True)
 
 
 # ============================================================================

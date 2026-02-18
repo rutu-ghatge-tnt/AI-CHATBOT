@@ -1,7 +1,7 @@
 """
 Inspiration Boards API Endpoints
 """
-from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 import asyncio
 from datetime import datetime
@@ -203,7 +203,6 @@ async def delete_board_endpoint(
 async def add_product_from_url_endpoint(
     board_id: str,
     request: AddProductFromURLRequest,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """Add product to board from URL - requires pre-fetched data from /fetch-product endpoint"""
@@ -253,7 +252,7 @@ async def add_product_from_url_endpoint(
             # Trigger background task to fetch platforms
             product_id = result.get("product_id")
             if product_id:
-                background_tasks.add_task(fetch_platforms_for_product_background, product_id, user_id)
+                asyncio.create_task(fetch_platforms_for_product_background(product_id, user_id))
             
             return result
         except Exception as e:
@@ -279,7 +278,6 @@ async def add_product_from_url_endpoint(
 async def add_product_manual_endpoint(
     board_id: str,
     request: AddProductManualRequest,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """Add product to board manually"""
@@ -354,7 +352,6 @@ async def get_product_endpoint(
 async def update_product_endpoint(
     product_id: str,
     request: UpdateProductRequest,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """Update product (notes, tags, myRating)"""
@@ -484,7 +481,6 @@ async def analyze_competitors_endpoint(
 @router.post("/export-to-board", response_model=ExportToBoardResponse)
 async def export_to_board_endpoint(
     request: ExportToBoardRequest,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """Export products from multiple features to an inspiration board"""
