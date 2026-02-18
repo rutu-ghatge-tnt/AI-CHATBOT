@@ -12,7 +12,7 @@ import json
 import re
 import asyncio
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Import cache manager
 from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_manager
@@ -565,16 +565,56 @@ async def call_ai_with_claude(
     else:
         print(f"📝 Using uncached system prompt for {prompt_type} (first call)")
     
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🌐 [CLAUDE] [{timestamp}] Starting Claude API call (attempt {1}/{max_retries})...")
+    print(f"🌐 [CLAUDE] [{timestamp}] Model: {claude_model}, Prompt type: {prompt_type}")
+    
     for attempt in range(max_retries):
         try:
             # Call Claude API with caching support
             # Run in thread pool to prevent blocking the event loop
             # This allows other API requests (like wish-history) to be processed concurrently
+            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"🌐 [CLAUDE] [{timestamp}] Executing API call in thread pool (attempt {attempt + 1})...")
+            print(f"⏳ [CLAUDE] [{timestamp}] This may take 30-120 seconds for complex formulas...")
+            
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: claude_client.messages.create(**api_params)
-            )
+            # Add timeout of 180 seconds (3 minutes) to prevent hanging forever
+            # Also add a background task to log progress every 30 seconds
+            async def log_progress():
+                elapsed = 0
+                while elapsed < 180:
+                    await asyncio.sleep(30)  # Log every 30 seconds
+                    elapsed += 30
+                    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"⏳ [CLAUDE] [{timestamp}] Still waiting for Claude API response... ({elapsed}s elapsed)")
+            
+            progress_task = asyncio.create_task(log_progress())
+            
+            try:
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: claude_client.messages.create(**api_params)
+                    ),
+                    timeout=180.0  # 3 minute timeout
+                )
+                progress_task.cancel()  # Stop progress logging
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"✅ [CLAUDE] [{timestamp}] Claude API call completed successfully!")
+            except asyncio.TimeoutError:
+                progress_task.cancel()  # Stop progress logging
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"⏰ [CLAUDE] [{timestamp}] Claude API call timed out after 180 seconds!")
+                if attempt < max_retries - 1:
+                    print(f"🔄 [CLAUDE] [{timestamp}] Retrying... (attempt {attempt + 2}/{max_retries})")
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    raise Exception("Claude API call timed out after all retry attempts")
+            except Exception as e:
+                progress_task.cancel()  # Stop progress logging on any error
+                raise
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:
@@ -751,8 +791,9 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     Returns:
         Complete formula with all analysis
     """
-    
-    print("🚀 Starting Make a Wish pipeline...")
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🚀 [FORMULA_GEN] [{timestamp}] Starting Make a Wish pipeline...")
+    print(f"📋 [FORMULA_GEN] [{timestamp}] Wish data: category={wish_data.get('category')}, productType={wish_data.get('productType')}")
     
     # Validate and apply rules engine
     rules_engine = get_rules_engine()
@@ -774,19 +815,25 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     wish_data = fixed_wish_data
     
     # Generate complete formula response
-    print("📋 Generating complete formula...")
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"📋 [FORMULA_GEN] [{timestamp}] Generating complete formula...")
     from app.ai_ingredient_intelligence.logic.make_wish_prompts import generate_basic_mode_prompt
     user_prompt = generate_basic_mode_prompt(wish_data)
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"📝 [FORMULA_GEN] [{timestamp}] Prompt generated, calling Claude AI...")
     
     try:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🤖 [FORMULA_GEN] [{timestamp}] Calling call_ai_with_claude...")
         result = await call_ai_with_claude(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
             prompt_type="formula_generation"
         )
         
-        print("✅ Formula generated")
-        print("🎉 Make a Wish pipeline complete!")
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [FORMULA_GEN] [{timestamp}] Formula generated successfully!")
+        print(f"🎉 [FORMULA_GEN] [{timestamp}] Make a Wish pipeline complete!")
         return result
         
     except Exception as e:

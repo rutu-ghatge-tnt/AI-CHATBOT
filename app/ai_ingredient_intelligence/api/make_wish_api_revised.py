@@ -299,12 +299,26 @@ async def generate_formula_revised(
     - Deducts credits on success
     - Sends OneSignal notifications
     """
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"\n{'='*80}")
+    print(f"🚀 [MAIN] [{timestamp}] ========================================")
+    print(f"🚀 [MAIN] [{timestamp}] /generate-revised ENDPOINT CALLED")
+    print(f"🚀 [MAIN] [{timestamp}] ========================================")
+    
     request_received_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     
     # Extract user info for auto-save
     user_id = current_user.get("user_id") or current_user.get("_id")
     name = request.name.strip()
     history_id = request.history_id
+    
+    print(f"📋 [MAIN] [{timestamp}] Request details:")
+    print(f"   - User ID: {user_id}")
+    print(f"   - Name: {name}")
+    print(f"   - History ID: {history_id}")
+    print(f"   - Complexity: {request.complexity}")
+    print(f"   - Mode: {request.mode or request.parsed_data.mode}")
+    print(f"{'='*80}\n")
     
     # Validate required fields
     if not name:
@@ -327,11 +341,14 @@ async def generate_formula_revised(
         )
     
     try:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔑 [MAIN] [{timestamp}] Generating IDs...")
         # Generate IDs immediately
         formula_id = str(uuid.uuid4())
         if not history_id:
             # Generate MongoDB ObjectId upfront
             history_id = str(ObjectId())
+        print(f"✅ [MAIN] [{timestamp}] IDs generated - formula_id: {formula_id}, history_id: {history_id}")
         
         # CRITICAL: Save to DB FIRST so detail API can find it immediately
         # This is a quick operation and ensures the record exists
@@ -382,6 +399,8 @@ async def generate_formula_revised(
                 print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
         
         # NOW start background task for heavy processing (formula generation, trends, etc.)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🚀 [MAIN] [{timestamp}] Creating background task for history_id: {history_id}")
         background_coro = process_generate_revised_background_with_semaphore(
             history_id=history_id,
             user_id=user_id,
@@ -392,7 +411,8 @@ async def generate_formula_revised(
             is_new_history=not bool(request.history_id)
         )
         # Fire and forget - don't await, don't store reference
-        asyncio.create_task(handle_background_task_safely(background_coro))
+        task = asyncio.create_task(handle_background_task_safely(background_coro))
+        print(f"✅ [MAIN] [{timestamp}] Background task created and scheduled (task_id: {id(task)})")
         
         # Return immediate acknowledgment (DB already saved, processing in background)
         # Response model requires: success, formula_id, history_id
@@ -425,10 +445,18 @@ async def handle_background_task_safely(coro):
     Wrapper to safely execute background tasks and catch any unhandled exceptions.
     """
     try:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔄 [BACKGROUND] [{timestamp}] Background task wrapper started")
         await coro
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [BACKGROUND] [{timestamp}] Background task wrapper completed successfully")
     except Exception as e:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
         logger = logging.getLogger(__name__)
-        logger.error(f"❌ Unhandled exception in background task: {e}", exc_info=True)
+        logger.error(f"❌ [BACKGROUND] [{timestamp}] Unhandled exception in background task: {e}", exc_info=True)
+        print(f"❌ [BACKGROUND] [{timestamp}] Unhandled exception in background task: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 async def process_generate_revised_background_with_semaphore(
@@ -444,8 +472,12 @@ async def process_generate_revised_background_with_semaphore(
     Wrapper that acquires semaphore before running background task.
     This prevents too many concurrent tasks from blocking the event loop.
     """
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🔒 [BACKGROUND] [{timestamp}] Waiting for semaphore for history_id: {history_id}")
     semaphore = await get_background_task_semaphore()
     async with semaphore:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [BACKGROUND] [{timestamp}] Semaphore acquired for history_id: {history_id}, starting processing...")
         # Yield control to event loop before starting heavy work
         await asyncio.sleep(0)
         await process_generate_revised_background(
@@ -457,6 +489,8 @@ async def process_generate_revised_background_with_semaphore(
             request_received_at=request_received_at,
             is_new_history=is_new_history
         )
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔓 [BACKGROUND] [{timestamp}] Semaphore released for history_id: {history_id}")
 
 
 # ============================================================================
@@ -490,7 +524,11 @@ async def process_generate_revised_background(
     error_message = None
     
     try:
-        print(f"[BACKGROUND] Starting processing for history_id: {history_id}")
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🚀 [BACKGROUND] [{timestamp}] ========================================")
+        print(f"🚀 [BACKGROUND] [{timestamp}] STARTING processing for history_id: {history_id}")
+        print(f"🚀 [BACKGROUND] [{timestamp}] User: {user_id}, Formula ID: {formula_id}")
+        print(f"🚀 [BACKGROUND] [{timestamp}] ========================================")
         
         # Prepare wish data (moved here from main endpoint to return ASAP)
         cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
@@ -512,13 +550,18 @@ async def process_generate_revised_background(
         
         # DB is already saved in main endpoint, so we can skip saving here
         # Just log that we're starting processing
-        print(f"[BACKGROUND] Starting processing for history_id: {history_id} (DB already saved)")
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"📝 [BACKGROUND] [{timestamp}] DB already saved, starting formula generation...")
         
         # Yield control to event loop before starting heavy work
         await asyncio.sleep(0)
         
         # Generate formula
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🤖 [BACKGROUND] [{timestamp}] Calling AI to generate formula...")
         basic_result = await generate_formula_from_wish(wish_data)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [BACKGROUND] [{timestamp}] Formula generation completed!")
         basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names
         
         # Yield control after formula generation
@@ -546,7 +589,8 @@ async def process_generate_revised_background(
         trend_data = {}  # Keep for backward compatibility (empty for now)
         
         try:
-            print(f"📊 Fetching market trends data for frontend...")
+            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"📊 [BACKGROUND] [{timestamp}] Fetching market trends data for frontend...")
             from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
             trends_service = MarketTrendsService()
             
@@ -563,11 +607,13 @@ async def process_generate_revised_background(
                 max_age_days=35,
                 use_fallback=True
             )
-            print(f"✅ Market trends fetched successfully")
+            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"✅ [BACKGROUND] [{timestamp}] Market trends fetched successfully")
             
             # Run synthesis for each hero ingredient using market trends data
             if market_trends and hero_ingredients:
-                print(f"🔬 Running synthesis for {len(hero_ingredients)} ingredients...")
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"🔬 [BACKGROUND] [{timestamp}] Running synthesis for {len(hero_ingredients)} ingredients...")
                 from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
                 from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
                 
@@ -653,6 +699,8 @@ async def process_generate_revised_background(
             {"$set": update_doc}
         )
         
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"💾 [BACKGROUND] [{timestamp}] Updating database with completed status...")
         print(f"[BACKGROUND] ✅ Updated history {history_id} with completed status")
         processing_success = True
         
@@ -709,9 +757,13 @@ async def process_generate_revised_background(
     except Exception as e:
         processing_success = False
         error_message = str(e)
-        print(f"❌ [BACKGROUND] Error processing wish {history_id}: {e}")
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"❌ [BACKGROUND] [{timestamp}] ========================================")
+        print(f"❌ [BACKGROUND] [{timestamp}] ERROR processing wish {history_id}: {e}")
+        print(f"❌ [BACKGROUND] [{timestamp}] Error type: {type(e).__name__}")
         import traceback
         traceback.print_exc()
+        print(f"❌ [BACKGROUND] [{timestamp}] ========================================")
         
         # Update database with failed status
         try:
