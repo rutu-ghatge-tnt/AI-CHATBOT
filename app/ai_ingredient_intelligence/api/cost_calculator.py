@@ -46,6 +46,10 @@ from bson import ObjectId
 
 router = APIRouter(prefix="/cost-calculator", tags=["Cost Calculator"])
 
+# Markup percentage to add to ingredient costs from database
+INGREDIENT_COST_MARKUP_PERCENT = 35  # 35% markup on database costs
+INGREDIENT_COST_MARKUP_MULTIPLIER = 1 + (INGREDIENT_COST_MARKUP_PERCENT / 100.0)  # 1.35
+
 
 @router.get("/lookup-ingredient")
 async def lookup_ingredient(
@@ -108,11 +112,13 @@ async def lookup_ingredient(
                 )
                 
                 if distributor_doc and distributor_doc.get("pricePerKg"):
-                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0))
+                    # Apply 35% markup to cost from database
+                    cost_per_kg = float(distributor_doc.get("pricePerKg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
                 elif branded_ing.get("estimated_cost_per_kg"):
-                    cost_per_kg = float(branded_ing.get("estimated_cost_per_kg", 0))
+                    # Apply 35% markup to cost from database
+                    cost_per_kg = float(branded_ing.get("estimated_cost_per_kg", 0)) * INGREDIENT_COST_MARKUP_MULTIPLIER
                 else:
-                    # Use default estimates based on category
+                    # Use default estimates based on category (no markup on defaults)
                     if category == "Active":
                         cost_per_kg = 5000  # Default for actives
                     else:
