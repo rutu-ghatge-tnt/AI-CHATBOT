@@ -880,8 +880,9 @@ async def process_generate_revised_background(
             return
         
         # Deduct credits on success
+        deduct_credits_result = None
         try:
-            await deduct_credits(
+            deduct_credits_result = await deduct_credits(
                 user_id=user_id,
                 reference_id=history_id,
                 credit_key=CreditKey.MAKE_WISH_GENERATE,
@@ -892,13 +893,26 @@ async def process_generate_revised_background(
             print(f"⚠️ [BACKGROUND] Failed to deduct credits: {credit_error}")
             # Don't fail the whole process if credit deduction fails
         
+        # Build notification data; include credit info when available
+        notification_data = {
+            "history_id": history_id,
+            "status": "completed",
+            "type": "make_wish_revised"
+        }
+        if deduct_credits_result:
+            notification_data["deduct_credits"] = {
+                "deducted": deduct_credits_result.get("deducted"),
+                "creditsDeducted": deduct_credits_result.get("creditsDeducted"),
+                "creditsRemaining": deduct_credits_result.get("creditsRemaining"),
+            }
+        
         # Send success notification via OneSignal (ONLY after status is confirmed as "completed")
         try:
             await send_onesignal_notification(
                 user_id=user_id,
                 title="Formula Generated Successfully!",
                 message=f"Your formula '{name}' has been generated and is ready to view.",
-                data={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
+                data=notification_data
             )
             print(f"✅ [BACKGROUND] Success notification sent via OneSignal")
         except Exception as notif_error:
@@ -917,7 +931,7 @@ async def process_generate_revised_background(
                     kind="route",
                     to=f"/make-wish/{history_id}"
                 ),
-                meta={"history_id": history_id, "status": "completed", "type": "make_wish_revised"}
+                meta=notification_data
             )
             print(f"✅ [BACKGROUND] Success notification sent via WebSocket")
         except Exception as ws_error:

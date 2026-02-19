@@ -37,19 +37,22 @@ async def deduct_credits(
     credit_key: CreditKey,
     transaction_type: Optional[str] = None,
     description: Optional[str] = None
-) -> bool:
+) -> dict:
     """
     Deduct credits for a user operation.
+    Sends a DeductCreditsRequest body: { "taskKey": "<credit_key>" }.
+    The API identifies the user from the request (e.g. auth); user_id/reference_id are for logging only.
     
     Args:
-        user_id: User ID who performed the operation
-        reference_id: Reference ID (e.g., history_id, request_id) for tracking
-        credit_key: Credit key from CreditKey enum (determines amount to deduct)
-        transaction_type: Optional transaction type for logging (defaults to credit_key)
-        description: Optional description for the transaction
+        user_id: User ID (for logging; API may resolve user from auth)
+        reference_id: Reference ID (e.g., history_id) for logging
+        credit_key: Credit key from CreditKey enum → sent as taskKey
+        transaction_type: Optional; unused in request body (kept for caller compatibility)
+        description: Optional; unused in request body (kept for caller compatibility)
     
     Returns:
-        True if credits were successfully deducted, False otherwise
+        Dict with keys: deducted (bool), creditsDeducted (int), creditsRemaining (int)
+        from the API response data when status is 200.
     
     Raises:
         Exception: If credit deduction API call fails
@@ -61,24 +64,12 @@ async def deduct_credits(
     # Construct credit deduction endpoint
     credit_api_url = f"{base_url}{api_prefix}/credits/deduct"
     
-    # Use enum value as the key
-    key = credit_key.value
-    
-    # Default transaction type and description if not provided
-    if not transaction_type:
-        transaction_type = key.replace("-", "_")
-    if not description:
-        description = f"Credit deduction for {key} - {reference_id}"
+    # Use enum value as the task key (API expects DeductCreditsRequest with taskKey only)
+    task_key = credit_key.value
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            payload = {
-                "key": key,
-                "user_id": user_id,
-                "reference_id": reference_id,
-                "transaction_type": transaction_type,
-                "description": description
-            }
+            payload: dict = {"taskKey": task_key}
             
             response = await client.post(
                 credit_api_url,
@@ -86,15 +77,22 @@ async def deduct_credits(
             )
             
             if response.status_code == 200:
-                print(f"✅ [CREDITS] Successfully deducted credits for user {user_id} (key: {key}, reference: {reference_id})")
-                return True
+                body = response.json()
+                data = body.get("data") or {}
+                result = {
+                    "deducted": data.get("deducted", True),
+                    "creditsDeducted": data.get("creditsDeducted", 0),
+                    "creditsRemaining": data.get("creditsRemaining", 0),
+                }
+                print(f"✅ [CREDITS] Successfully deducted credits for user {user_id} (taskKey: {task_key}, reference: {reference_id})")
+                return result
             else:
                 error_msg = f"Credit deduction API returned status {response.status_code}: {response.text}"
                 print(f"⚠️ [CREDITS] {error_msg}")
                 raise Exception(error_msg)
                 
     except httpx.TimeoutException:
-        error_msg = f"Credit deduction API timeout for user {user_id} (key: {key})"
+        error_msg = f"Credit deduction API timeout for user {user_id} (taskKey: {task_key})"
         print(f"❌ [CREDITS] {error_msg}")
         raise Exception(error_msg)
     except Exception as e:
