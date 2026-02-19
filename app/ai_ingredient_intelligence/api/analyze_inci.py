@@ -735,6 +735,27 @@ async def analyze_ingredients_core(ingredients: List[str]) -> AnalyzeInciRespons
         key = tuple(sorted(item.matched_inci))
         detected_dict[key].append(item)
 
+    # 🔧 FIX: Ensure all items in a group have the correct category
+    # If ANY INCI in the group is Active, ALL items in the group should be Active
+    for key, items_in_group in detected_dict.items():
+        # Compute category for the group based on INCI list
+        group_category = await compute_item_category(list(key), inci_categories)
+        
+        # If group has any Active INCI, ensure all items are marked as Active
+        if group_category == "Active":
+            for item in items_in_group:
+                if item.category != "Active":
+                    # Update item category to Active
+                    item.category = "Active"
+                    print(f"[DEBUG] 🔧 Updated category to 'Active' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+        # If group is Excipient, ensure all items are Excipient (but only if no Active found)
+        elif group_category == "Excipient":
+            for item in items_in_group:
+                if item.category != "Excipient" and item.category != "Active":
+                    # Only update if not already Active (Active takes precedence)
+                    item.category = "Excipient"
+                    print(f"[DEBUG] 🔧 Updated category to 'Excipient' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+
     detected: List[InciGroup] = [
         InciGroup(
             inci_list=list(key),
@@ -1299,6 +1320,27 @@ async def analyze_url(
         # Use sorted tuple as key to group items with exact same INCI names
         key = tuple(sorted(item.matched_inci))
         detected_dict[key].append(item)
+
+    # 🔧 FIX: Ensure all items in a group have the correct category
+    # If ANY INCI in the group is Active, ALL items in the group should be Active
+    for key, items_in_group in detected_dict.items():
+        # Compute category for the group based on INCI list
+        group_category = await compute_item_category(list(key), inci_categories)
+        
+        # If group has any Active INCI, ensure all items are marked as Active
+        if group_category == "Active":
+            for item in items_in_group:
+                if item.category != "Active":
+                    # Update item category to Active
+                    item.category = "Active"
+                    print(f"[DEBUG] 🔧 Updated category to 'Active' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+        # If group is Excipient, ensure all items are Excipient (but only if no Active found)
+        elif group_category == "Excipient":
+            for item in items_in_group:
+                if item.category != "Excipient" and item.category != "Active":
+                    # Only update if not already Active (Active takes precedence)
+                    item.category = "Excipient"
+                    print(f"[DEBUG] 🔧 Updated category to 'Excipient' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
 
     detected: List[InciGroup] = [
         InciGroup(
