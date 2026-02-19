@@ -72,6 +72,11 @@ async def add_product_from_url(
         "my_rating": None,
         "decoded": False,
         "decoded_data": None,
+        # Store fetched product data fields
+        "ingredients": fetched_data.get("ingredients", []),
+        "benefits": fetched_data.get("benefits", []),
+        "target_audience": fetched_data.get("target_audience", []),
+        "extracted_text": fetched_data.get("extracted_text"),
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
@@ -267,6 +272,11 @@ async def _format_product(product_doc: Dict[str, Any]) -> Dict[str, Any]:
         "decoded_data": decoded_data,
         "created_at": product_doc.get("created_at"),
         "updated_at": product_doc.get("updated_at", product_doc.get("created_at")),
+        # Fetched product data fields
+        "ingredients": product_doc.get("ingredients", []),
+        "benefits": product_doc.get("benefits", []),
+        "target_audience": product_doc.get("target_audience", []),
+        "extracted_text": product_doc.get("extracted_text"),
         # New fields for feature integration
         "product_type": product_doc.get("product_type"),
         "history_link": product_doc.get("history_link"),
