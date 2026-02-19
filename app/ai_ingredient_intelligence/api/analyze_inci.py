@@ -176,8 +176,8 @@ async def fetch_and_compute_categories(items: List[AnalyzeInciItem]) -> Tuple[Di
         item_category = None
         
         if len(item.matched_inci) > 1:
-            # COMBINATION: Always compute category based on individual INCI categories
-            # Logic: If ANY INCI is Active → combination is Active
+            # COMBINATION/GROUPED: Always compute category based on individual INCI categories
+            # Logic: If ANY INCI is Active → combination/group is Active
             item_category = await compute_item_category(item.matched_inci, inci_categories)
         elif item.tag == "G":
             # GENERAL INCI (single): Get from MongoDB first, compute if not found
@@ -189,15 +189,18 @@ async def fetch_and_compute_categories(items: List[AnalyzeInciItem]) -> Tuple[Di
                 if not item_category:
                     item_category = await compute_item_category(item.matched_inci, inci_categories)
         elif item.tag == "B":
-            # BRANDED (single): Use category_decided from MongoDB, but also compute for bifurcation
-            # For single branded INCI, use category_decided if available, otherwise compute
-            if item.category_decided:
-                item_category = item.category_decided
-            elif len(item.matched_inci) == 1:
+            # BRANDED (single or grouped): Always compute category based on individual INCI categories
+            # NOT based on category_decided from MongoDB - use INCI categories instead
+            # Logic: If ANY INCI is Active → branded ingredient is Active
+            if len(item.matched_inci) == 1:
+                # Single INCI: Get from INCI categories
                 inci_name = item.matched_inci[0].strip().lower()
                 item_category = inci_categories.get(inci_name)
                 if not item_category:
                     item_category = await compute_item_category(item.matched_inci, inci_categories)
+            else:
+                # Grouped (multiple INCI): Compute based on individual INCI categories
+                item_category = await compute_item_category(item.matched_inci, inci_categories)
         
         # Create new item with only necessary fields
         item_dict = {
@@ -732,6 +735,27 @@ async def analyze_ingredients_core(ingredients: List[str]) -> AnalyzeInciRespons
         key = tuple(sorted(item.matched_inci))
         detected_dict[key].append(item)
 
+    # 🔧 FIX: Ensure all items in a group have the correct category
+    # If ANY INCI in the group is Active, ALL items in the group should be Active
+    for key, items_in_group in detected_dict.items():
+        # Compute category for the group based on INCI list
+        group_category = await compute_item_category(list(key), inci_categories)
+        
+        # If group has any Active INCI, ensure all items are marked as Active
+        if group_category == "Active":
+            for item in items_in_group:
+                if item.category != "Active":
+                    # Update item category to Active
+                    item.category = "Active"
+                    print(f"[DEBUG] 🔧 Updated category to 'Active' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+        # If group is Excipient, ensure all items are Excipient (but only if no Active found)
+        elif group_category == "Excipient":
+            for item in items_in_group:
+                if item.category != "Excipient" and item.category != "Active":
+                    # Only update if not already Active (Active takes precedence)
+                    item.category = "Excipient"
+                    print(f"[DEBUG] 🔧 Updated category to 'Excipient' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+
     detected: List[InciGroup] = [
         InciGroup(
             inci_list=list(key),
@@ -740,7 +764,9 @@ async def analyze_ingredients_core(ingredients: List[str]) -> AnalyzeInciRespons
         )
         for key, val in detected_dict.items()
     ]
-    # Sort by number of INCI: more INCI first, then by first INCI name
+    # Sort by number of INCI: more INCI first (grouped ingredients at top), then individual ingredients below
+    # Primary sort: number of INCI (descending - more INCI first)
+    # Secondary sort: alphabetically by first INCI name
     detected.sort(key=lambda x: (-len(x.inci_list), x.inci_list[0].lower() if x.inci_list else ""))
 
     # Filter out water-related BIS cautions
@@ -1295,6 +1321,27 @@ async def analyze_url(
         key = tuple(sorted(item.matched_inci))
         detected_dict[key].append(item)
 
+    # 🔧 FIX: Ensure all items in a group have the correct category
+    # If ANY INCI in the group is Active, ALL items in the group should be Active
+    for key, items_in_group in detected_dict.items():
+        # Compute category for the group based on INCI list
+        group_category = await compute_item_category(list(key), inci_categories)
+        
+        # If group has any Active INCI, ensure all items are marked as Active
+        if group_category == "Active":
+            for item in items_in_group:
+                if item.category != "Active":
+                    # Update item category to Active
+                    item.category = "Active"
+                    print(f"[DEBUG] 🔧 Updated category to 'Active' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+        # If group is Excipient, ensure all items are Excipient (but only if no Active found)
+        elif group_category == "Excipient":
+            for item in items_in_group:
+                if item.category != "Excipient" and item.category != "Active":
+                    # Only update if not already Active (Active takes precedence)
+                    item.category = "Excipient"
+                    print(f"[DEBUG] 🔧 Updated category to 'Excipient' for item '{item.ingredient_name}' in group with INCI: {list(key)}")
+
     detected: List[InciGroup] = [
         InciGroup(
             inci_list=list(key),
@@ -1303,7 +1350,9 @@ async def analyze_url(
         )
         for key, val in detected_dict.items()
     ]
-    # Sort by number of INCI: more INCI first, then by first INCI name
+    # Sort by number of INCI: more INCI first (grouped ingredients at top), then individual ingredients below
+    # Primary sort: number of INCI (descending - more INCI first)
+    # Secondary sort: alphabetically by first INCI name
     detected.sort(key=lambda x: (-len(x.inci_list), x.inci_list[0].lower() if x.inci_list else ""))
 
     # Filter out water-related BIS cautions

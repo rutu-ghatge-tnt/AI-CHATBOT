@@ -914,17 +914,50 @@ REFORMATTED CAUTIONS:"""
     print(f"[DEBUG] Building expected benefits info...")
     print(f"[DEBUG]   - expected_benefits: {expected_benefits}")
     print(f"[DEBUG]   - expected_benefits is None: {expected_benefits is None}")
-    if expected_benefits:
-        print(f"[DEBUG]   - expected_benefits.strip(): '{expected_benefits.strip()}'")
-        print(f"[DEBUG]   - len(expected_benefits.strip()): {len(expected_benefits.strip())}")
+    print(f"[DEBUG]   - expected_benefits type: {type(expected_benefits).__name__ if expected_benefits else 'None'}")
     
-    if expected_benefits and expected_benefits.strip():
-        expected_benefits_info = f"\n\nEXPECTED BENEFITS FROM USER:\n{expected_benefits.strip()}\n\nCRITICAL: You MUST add a section at the end of the report (after section 8) titled:\n\n9) Expected Benefits Analysis\n\nFor each expected benefit mentioned by the user, analyze:\n- Can this benefit be achieved from this formulation? (YES/NO/PARTIALLY)\n- Which ingredients support this benefit?\n- What is the evidence/mechanism?\n- Any limitations or concerns?\n\nFormat as a table with columns: Expected Benefit | Can Be Achieved? | Supporting Ingredients | Evidence/Mechanism | Limitations\n\nThis section should ONLY be included if expected benefits are provided above. If no expected benefits are provided, DO NOT include section 9 - end the report after section 8.\n"
+    # 🔧 FIX: More robust validation - handle None, empty string, whitespace-only, and non-string types
+    expected_benefits_valid = False
+    expected_benefits_clean = None
+    
+    if expected_benefits is not None:
+        # Convert to string if it's not already
+        if not isinstance(expected_benefits, str):
+            expected_benefits_clean = str(expected_benefits).strip()
+            print(f"[DEBUG]   - Converted non-string to string: '{expected_benefits_clean}'")
+        else:
+            expected_benefits_clean = expected_benefits.strip()
+        
+        # Check if it's not empty after stripping
+        if expected_benefits_clean and len(expected_benefits_clean) > 0:
+            expected_benefits_valid = True
+            print(f"[DEBUG]   - expected_benefits.strip(): '{expected_benefits_clean}'")
+            print(f"[DEBUG]   - len(expected_benefits.strip()): {len(expected_benefits_clean)}")
+        else:
+            print(f"[DEBUG]   - expected_benefits is empty or whitespace-only after strip")
+    else:
+        print(f"[DEBUG]   - expected_benefits is None")
+    
+    if expected_benefits_valid and expected_benefits_clean:
+        expected_benefits_info = f"\n\nEXPECTED BENEFITS FROM USER:\n{expected_benefits_clean}\n\nCRITICAL: You MUST add a section at the end of the report (after section 8) titled:\n\n9) Expected Benefits Analysis\n\nFor each expected benefit mentioned by the user, analyze:\n- Can this benefit be achieved from this formulation? (YES/NO/PARTIALLY)\n- Which ingredients support this benefit?\n- What is the evidence/mechanism?\n- Any limitations or concerns?\n\nFormat as a table with columns: Expected Benefit | Can Be Achieved? | Supporting Ingredients | Evidence/Mechanism | Limitations\n\nThis section should ONLY be included if expected benefits are provided above. If no expected benefits are provided, DO NOT include section 9 - end the report after section 8.\n"
         print(f"[DEBUG] ✅ Expected benefits info built (length: {len(expected_benefits_info)})")
+        print(f"[DEBUG] ✅ Expected benefits will be included in prompt to Claude")
     else:
         print(f"[DEBUG] ❌ Expected benefits info is empty - will not be included")
+        print(f"[DEBUG] ❌ Expected benefits will NOT be included in prompt to Claude")
     
     user_prompt = f"Generate report for this INCI list:\n{inci_str}{categorization_info}{bis_cautions_info}{expected_benefits_info}\n\nREMEMBER: Every table cell must have content. NO EMPTY CELLS!\n\nCRITICAL FOR BIS CAUTIONS - THIS IS MANDATORY:\n- If BIS cautions are provided above for an ingredient, you MUST include ALL of them - DO NOT SKIP ANY\n- Count the number of cautions provided for each ingredient and ensure ALL are included\n- Each caution must be on a SEPARATE LINE within the BIS Cautions column (use actual line breaks)\n- Number each caution starting with 1., 2., 3., 4., etc. on its own line\n- Do NOT combine multiple cautions into one line separated by commas or semicolons\n- Do NOT skip any cautions - if 4 are provided, include all 4; if 5 are provided, include all 5\n- Do NOT summarize or shorten - include the FULL text of each caution exactly as provided\n- Write each caution exactly as provided, preserving all numerical values, percentages, limits, and exact wording\n- Missing even one caution is a CRITICAL ERROR - verify you have included every single caution listed above\n\nCRITICAL: You MUST generate ALL 9 sections (or 8 if no expected benefits). Do NOT stop after section 2. Include sections 3-9:\n- 3) Compliance Panel\n- 4) Preservative Efficacy Check\n- 5) Risk Panel\n- 6) Cumulative Benefit Panel\n- 7) Claim Panel\n- 8) Recommended pH Range\n- 9) Expected Benefits Analysis (if expected benefits provided)"
+    
+    # 🔧 DEBUG: Verify expected benefits are in the prompt
+    if expected_benefits_valid:
+        if "EXPECTED BENEFITS FROM USER" in user_prompt:
+            print(f"[DEBUG] ✅ VERIFIED: Expected benefits ARE included in prompt to Claude")
+            print(f"[DEBUG]    Prompt contains 'EXPECTED BENEFITS FROM USER': True")
+        else:
+            print(f"[DEBUG] ❌ ERROR: Expected benefits validation passed but NOT found in prompt!")
+            print(f"[DEBUG]    This should not happen - expected_benefits_info length: {len(expected_benefits_info)}")
+    else:
+        print(f"[DEBUG] ℹ️ Expected benefits not validated, so not included in prompt (this is expected if None/empty)")
     
     # Use Claude for report generation
     if claude_client:
@@ -1079,6 +1112,55 @@ async def generate_report_json(
         print(f"[DEBUG] Request body keys: {list(body.keys())}")
         print(f"[DEBUG] Request body size: {len(str(body))} characters")
         
+        # 🔧 FIX: Handle both camelCase and snake_case for expected benefits
+        # Frontend might send expected_benefits (snake_case) but schema expects expectedBenefits (camelCase)
+        if "expected_benefits" in body and "expectedBenefits" not in body:
+            body["expectedBenefits"] = body.pop("expected_benefits")
+            print(f"[DEBUG] 🔧 Converted expected_benefits (snake_case) to expectedBenefits (camelCase)")
+        
+        # 🔧 FIX: Also check for other possible field name variations
+        if "expectedBenefits" not in body:
+            # Try other common variations
+            for key in ["expected_benefit", "expectedBenefit", "expected_benefits_text", "expectedBenefitsText"]:
+                if key in body:
+                    body["expectedBenefits"] = body.pop(key)
+                    print(f"[DEBUG] 🔧 Converted {key} to expectedBenefits (camelCase)")
+                    break
+        
+        # 🔧 FIX: Handle both camelCase and snake_case for BIS cautions
+        if "bis_cautions" in body and "bisCautions" not in body:
+            body["bisCautions"] = body.pop("bis_cautions")
+            print(f"[DEBUG] 🔧 Converted bis_cautions (snake_case) to bisCautions (camelCase)")
+        
+        # 🔧 DEBUG: Show raw values before parsing
+        print(f"[DEBUG] 🔍 Raw body values:")
+        print(f"[DEBUG]    - expectedBenefits in body: {'expectedBenefits' in body}")
+        print(f"[DEBUG]    - expected_benefits in body: {'expected_benefits' in body}")
+        expected_benefits_raw = body.get('expectedBenefits') or body.get('expected_benefits')
+        print(f"[DEBUG]    - expectedBenefits value: {expected_benefits_raw}")
+        print(f"[DEBUG]    - expectedBenefits type: {type(expected_benefits_raw).__name__ if expected_benefits_raw else 'None'}")
+        print(f"[DEBUG]    - expectedBenefits is None: {expected_benefits_raw is None}")
+        print(f"[DEBUG]    - expectedBenefits is empty string: {expected_benefits_raw == '' if expected_benefits_raw else 'N/A'}")
+        if expected_benefits_raw and isinstance(expected_benefits_raw, str):
+            print(f"[DEBUG]    - expectedBenefits length: {len(expected_benefits_raw)}")
+            print(f"[DEBUG]    - expectedBenefits first 100 chars: {expected_benefits_raw[:100]}")
+        
+        print(f"[DEBUG]    - bisCautions in body: {'bisCautions' in body}")
+        print(f"[DEBUG]    - bis_cautions in body: {'bis_cautions' in body}")
+        bis_val = body.get('bisCautions') or body.get('bis_cautions')
+        if bis_val:
+            print(f"[DEBUG]    - bisCautions type: {type(bis_val).__name__}")
+            if isinstance(bis_val, dict):
+                print(f"[DEBUG]    - bisCautions dict size: {len(bis_val)}")
+                print(f"[DEBUG]    - bisCautions keys (first 5): {list(bis_val.keys())[:5]}")
+                # Show sample values
+                for ing, cautions in list(bis_val.items())[:3]:
+                    print(f"[DEBUG]    - bisCautions['{ing}']: {len(cautions) if cautions else 0} caution(s)")
+            else:
+                print(f"[DEBUG]    - bisCautions is NOT a dict: {type(bis_val).__name__}")
+        else:
+            print(f"[DEBUG]    - bisCautions: None or not found")
+        
         payload = FormulationReportRequest(**body)
         
         # Extract user_id from JWT token
@@ -1118,6 +1200,78 @@ async def generate_report_json(
             print(f"[DEBUG] BIS cautions: None or empty")
         
         print(f"[DEBUG] Expected benefits: {payload.expectedBenefits[:100] + '...' if payload.expectedBenefits and len(payload.expectedBenefits) > 100 else payload.expectedBenefits}")
+        print(f"[DEBUG] Expected benefits is None: {payload.expectedBenefits is None}")
+        print(f"[DEBUG] Expected benefits is empty string: {payload.expectedBenefits == '' if payload.expectedBenefits else 'N/A'}")
+        
+        # 🔧 FIX: If BIS cautions are empty or missing, try to re-fetch them
+        # Check if we have ingredients that should have BIS cautions (alcohols, acids, etc.)
+        ingredients_that_need_cautions = [
+            'alcohol', 'cetyl', 'stearyl', 'cetearyl', 'behenyl', 
+            'acid', 'paraben', 'sulfate', 'sulphate', 'phenol'
+        ]
+        has_ingredients_needing_cautions = any(
+            any(keyword in ing.lower() for keyword in ingredients_that_need_cautions) 
+            for ing in payload.inciList
+        )
+        
+        # Check if BIS cautions are missing or all empty
+        bis_cautions_empty = (
+            not payload.bisCautions or 
+            len(payload.bisCautions) == 0 or 
+            all(not v or len(v) == 0 for v in payload.bisCautions.values())
+        )
+        
+        if has_ingredients_needing_cautions and bis_cautions_empty:
+            print(f"[DEBUG] ⚠️ WARNING: Found ingredients that may need BIS cautions but BIS cautions are empty/missing.")
+            print(f"[DEBUG]    Ingredients that may need cautions: {[ing for ing in payload.inciList if any(kw in ing.lower() for kw in ingredients_that_need_cautions)]}")
+            print(f"[DEBUG]    Attempting to re-fetch BIS cautions for all ingredients...")
+            try:
+                from app.ai_ingredient_intelligence.logic.bis_rag import get_bis_cautions_for_ingredients
+                # Re-fetch BIS cautions for all ingredients
+                refreshed_bis_cautions = await get_bis_cautions_for_ingredients(payload.inciList)
+                if refreshed_bis_cautions:
+                    # Initialize if needed
+                    if not payload.bisCautions:
+                        payload.bisCautions = {}
+                    
+                    # Merge with existing (prefer refreshed if it has data)
+                    merged_count = 0
+                    for ing, cautions in refreshed_bis_cautions.items():
+                        if cautions and len(cautions) > 0:
+                            # Normalize ingredient name for matching (case-insensitive)
+                            # Try to match by normalized name
+                            matched_key = None
+                            for existing_key in payload.bisCautions.keys():
+                                if existing_key.lower().strip() == ing.lower().strip():
+                                    matched_key = existing_key
+                                    break
+                            
+                            if matched_key:
+                                # Update existing entry
+                                payload.bisCautions[matched_key] = cautions
+                                print(f"[DEBUG] ✅ Updated BIS cautions for '{matched_key}': {len(cautions)} caution(s)")
+                            else:
+                                # Add new entry
+                                payload.bisCautions[ing] = cautions
+                                print(f"[DEBUG] ✅ Added BIS cautions for '{ing}': {len(cautions)} caution(s)")
+                            merged_count += 1
+                    
+                    # Re-count after refresh
+                    bis_count = len(payload.bisCautions)
+                    non_empty = sum(1 for c in payload.bisCautions.values() if c and len(c) > 0)
+                    total_cautions = sum(len(c) for c in payload.bisCautions.values() if c)
+                    print(f"[DEBUG] After refresh: {bis_count} ingredients, {non_empty} with non-empty lists, {total_cautions} total cautions")
+                    if merged_count == 0:
+                        print(f"[DEBUG] ⚠️ WARNING: Re-fetch returned empty cautions for all ingredients. This may indicate:")
+                        print(f"[DEBUG]    1. BIS RAG system is not finding matches in the documents")
+                        print(f"[DEBUG]    2. Ingredient names don't match BIS document terminology")
+                        print(f"[DEBUG]    3. BIS vectorstore may need to be rebuilt")
+                else:
+                    print(f"[DEBUG] ⚠️ Re-fetch returned no BIS cautions at all")
+            except Exception as e:
+                print(f"[DEBUG] ⚠️ Failed to re-fetch BIS cautions: {e}")
+                import traceback
+                traceback.print_exc()
         
         inci_str = ", ".join(payload.inciList)
 
