@@ -704,23 +704,44 @@ async def call_ai_with_claude(
                 content = content.strip()
                 
                 # Debug: Log the content
-                print(f"🔍 AI Response Content: {content[:200]}...")
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"🔍 [CLAUDE] [{timestamp}] AI Response Content preview: {content[:300]}...")
+                print(f"🔍 [CLAUDE] [{timestamp}] Content length: {len(content)} chars")
+                
+                # Check if content starts with a JSON object
+                if not content.startswith('{'):
+                    # Try to find the first { character
+                    first_brace = content.find('{')
+                    if first_brace > 0:
+                        print(f"⚠️ [CLAUDE] [{timestamp}] Content doesn't start with {{, found at position {first_brace}, trimming...")
+                        content = content[first_brace:]
+                    elif content.startswith('"') or content.startswith("'"):
+                        # Content might be just a JSON string, wrap it
+                        print(f"⚠️ [CLAUDE] [{timestamp}] Content appears to be a JSON string, wrapping in object...")
+                        content = '{' + content + '}'
                 
                 result = json.loads(content)
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"✅ [CLAUDE] [{timestamp}] JSON parsed successfully")
                 return result
             except json.JSONDecodeError as e:
                 # Debug: Log the JSON error
-                print(f"❌ JSON Decode Error: {str(e)}")
-                print(f"❌ Content that failed: {content[:500]}...")
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"❌ [CLAUDE] [{timestamp}] JSON Decode Error: {str(e)}")
+                print(f"❌ [CLAUDE] [{timestamp}] Error position: {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                print(f"❌ [CLAUDE] [{timestamp}] Content that failed (first 1000 chars): {content[:1000]}")
                 
                 # Try to extract JSON from text - improved regex
                 # Look for JSON that starts with a typical JSON structure
                 json_patterns = [
-                    r'\{[^{}]*"[^"]+"\s*:\s*[^{}]*\}',  # Simple JSON objects
-                    r'\{.*?"formula_name".*?\}',        # JSON with formula_name
+                    r'\{.*?"formula_name".*?\}',        # JSON with formula_name (for parse-wish)
+                    r'\{.*?"category".*?\}',            # JSON with category (for parse-wish)
+                    r'\{.*?"product_type".*?\}',        # JSON with product_type (for parse-wish)
+                    r'\{.*?"ingredients".*?\}',         # JSON with ingredients
                     r'\{.*?"analysis_date".*?\}',        # JSON with analysis_date
                     r'\{.*?"target_markets".*?\}',       # JSON with target_markets
                     r'\{.*?"critical_note".*?\}',        # JSON with critical_note
+                    r'\{[^{}]*"[^"]+"\s*:\s*[^{}]*\}',  # Simple JSON objects
                 ]
                 
                 for pattern in json_patterns:
@@ -736,9 +757,12 @@ async def call_ai_with_claude(
                                 json_str += '}' * (open_count - close_count)
                             
                             result = json.loads(json_str)
-                            print(f"✅ Extracted JSON using pattern: {pattern}")
+                            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                            print(f"✅ [CLAUDE] [{timestamp}] Extracted JSON using pattern: {pattern[:50]}...")
                             return result
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as pattern_error:
+                            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                            print(f"⚠️ [CLAUDE] [{timestamp}] Pattern {pattern[:50]}... failed: {str(pattern_error)}")
                             continue
                 
                 # Last resort - find the largest JSON-like structure
@@ -763,16 +787,27 @@ async def call_ai_with_claude(
                     try:
                         json_str = '\n'.join(json_lines)
                         result = json.loads(json_str)
-                        print(f"✅ Extracted JSON using line-by-line method")
+                        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                        print(f"✅ [CLAUDE] [{timestamp}] Extracted JSON using line-by-line method")
                         return result
                     except json.JSONDecodeError:
                         pass
                 
                 if attempt < max_retries - 1:
+                    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"🔄 [CLAUDE] [{timestamp}] Retrying JSON parsing (attempt {attempt + 2}/{max_retries})...")
                     await asyncio.sleep(1)
                     continue
                 else:
-                    raise ValueError(f"Failed to parse JSON from Claude response. Content: {content[:500]}")
+                    # Provide more detailed error message
+                    error_msg = f"Failed to parse JSON from Claude response after {max_retries} attempts."
+                    error_msg += f"\nJSON Error: {str(e)}"
+                    error_msg += f"\nContent preview (first 1000 chars): {content[:1000]}"
+                    if hasattr(e, 'pos') and e.pos:
+                        error_msg += f"\nError at position: {e.pos}"
+                        if e.pos < len(content):
+                            error_msg += f"\nContext around error: ...{content[max(0, e.pos-50):e.pos+50]}..."
+                    raise ValueError(error_msg)
         
         except Exception as e:
             if attempt < max_retries - 1:
@@ -880,7 +915,6 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     # Use fixed wish data (with auto-selections applied)
     wish_data = fixed_wish_data
     
-<<<<<<< HEAD
     # Generate complete formula response
     timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
     print(f"📋 [FORMULA_GEN] [{timestamp}] Generating complete formula...")
@@ -908,96 +942,4 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         import traceback
         traceback.print_exc()
         raise
-    
-    def clean_cost_analysis_units(cost_data: dict, unit: str) -> dict:
-        """Post-process cost analysis to fix any /100g or /100ml that AI might have added"""
-        import json
-        import re
-        
-        # Convert to string, fix, convert back
-        cost_str = json.dumps(cost_data)
-        
-        # Replace /100g and /100ml with actual unit (case-insensitive)
-        cost_str = re.sub(r'/100g', f'/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        # Also catch variations like "₹13.98/100g" or "₹13.98 per 100g"
-        cost_str = re.sub(r'₹([0-9.]+)/100g', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'₹([0-9.]+)/100ml', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'₹([0-9.]+) per 100g', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'₹([0-9.]+) per 100ml', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
-        # Clean competitor_comparison section specifically
-        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100g"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100ml"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
-        
-        try:
-            return json.loads(cost_str)
-        except json.JSONDecodeError:
-            # If JSON parsing fails, return original (shouldn't happen but safety check)
-            print("⚠️ Warning: Failed to parse cleaned cost analysis JSON, returning original")
-            return cost_data
-    
-    async def run_stage_4():
-        print("💰 Stage 4: Cost Analysis...")
-        cost_prompt = generate_cost_prompt(optimized_formula, wish_data)
-        result = await call_ai_with_claude(
-            system_prompt=COST_ANALYSIS_SYSTEM_PROMPT,
-            user_prompt=cost_prompt,
-            prompt_type="cost_analysis"
-        )
-        product_type = wish_data.get('productType', 'serum')
-        unit = get_unit_for_product_type(product_type)
-        
-        # Clean up any /100g or /100ml that might have slipped through
-        result = clean_cost_analysis_units(result, unit)
-        
-        # Apply new cost calculation rules (post-processing)
-        print("   Applying new cost calculation rules (20% formula margin, wastage, manufacturer margin)...")
-        result = post_process_cost_analysis(result, product_type)
-        
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('adjusted_per_100g', result.get('raw_material_cost', {}).get('total_per_100g', 0))}/{unit}")
-        return result
-    
-    async def run_stage_5():
-        print("✅ Stage 5: Compliance Check...")
-        compliance_prompt = generate_compliance_prompt(optimized_formula)
-        result = await call_ai_with_claude(
-            system_prompt=COMPLIANCE_CHECK_SYSTEM_PROMPT,
-            user_prompt=compliance_prompt,
-            prompt_type="compliance_check"
-        )
-        print(f"✅ Compliance: {result.get('overall_status', 'UNKNOWN')}")
-        return result
-    
-    # Run stages 3, 4, and 5 in parallel
-    manufacturing_process, cost_analysis, compliance = await asyncio.gather(
-        run_stage_3(),
-        run_stage_4(),
-        run_stage_5()
-    )
-    
-    # Combine all results
-    result = {
-        "wish_data": wish_data,
-        "ingredient_selection": selected_ingredients,
-        "optimized_formula": optimized_formula,
-        "manufacturing": manufacturing_process,
-        "cost_analysis": cost_analysis,
-        "compliance": compliance,
-        "metadata": {
-            "generated_at": datetime.now().isoformat(),
-            "formula_version": "1.0",
-            "mode": "advanced",
-            "ai_model": claude_model or "claude-sonnet-4-5-20250929",
-            "cache_stats": get_cache_manager().get_cache_stats()
-        }
-    }
-    
-    print("🎉 Make a Wish pipeline complete (ADVANCED MODE)!")
-    
-    return result
->>>>>>> dev
 

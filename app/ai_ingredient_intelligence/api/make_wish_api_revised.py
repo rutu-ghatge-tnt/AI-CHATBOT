@@ -48,6 +48,7 @@ from app.ai_ingredient_intelligence.auth import verify_jwt_token
 from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     ParseWishRequest, ParseWishResponse,
     MakeWishRequestRevised, MakeWishResponseRevised,
+    MakeWishBasicResponseRevised,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
@@ -435,10 +436,17 @@ async def parse_natural_language_wish(
                             print(f"   First Issue (not dict): {type(first_issue).__name__}")
             
         except Exception as ai_error:
-            print(f"❌ AI parsing error: {ai_error}")
+            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"❌ [PARSE-WISH] [{timestamp}] AI parsing error: {ai_error}")
+            import traceback
+            traceback.print_exc()
+            # Provide more helpful error message
+            error_detail = str(ai_error)
+            if "JSON" in error_detail or "json" in error_detail.lower():
+                error_detail = "AI returned invalid JSON format. Please try again or rephrase your wish."
             raise HTTPException(
                 status_code=500,
-                detail=f"Error parsing wish: {str(ai_error)}"
+                detail=f"Error parsing wish: {error_detail}"
             )
         
         # Validate AI response structure
@@ -448,12 +456,16 @@ async def parse_natural_language_wish(
                 detail="Invalid parsing result from AI"
             )
         
-        # Always use basic mode (advanced mode removed)
-        parsed_result["mode"] = "basic"
-
         # Auto-detect texture if not provided
         product_type_id = parsed_result.get("product_type", {}).get("id", "serum")
-        auto_texture = get_texture_for_product_type(product_type_id)
+        auto_texture_raw = get_texture_for_product_type(product_type_id)
+        
+        # Transform texture to match schema (texture_id -> id, add auto_selected)
+        auto_texture = {
+            "id": auto_texture_raw.get("texture_id", "gel"),
+            "label": auto_texture_raw.get("label", "Balanced Texture"),
+            "auto_selected": True
+        }
         
         # Update parsed data with auto-detected texture
         if "auto_texture" not in parsed_result:
@@ -554,7 +566,7 @@ async def parse_natural_language_wish(
 # STAGE 2: REVISED GENERATE ENDPOINT
 # ============================================================================
 
-@router.post("/generate-revised", response_model=None)  # Return full data, not just history_id
+@router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
     current_user: dict = Depends(verify_jwt_token)
@@ -593,7 +605,6 @@ async def generate_formula_revised(
     print(f"   - Name: {name}")
     print(f"   - History ID: {history_id}")
     print(f"   - Complexity: {request.complexity}")
-    print(f"   - Mode: {request.mode or request.parsed_data.mode}")
     print(f"{'='*80}\n")
     
     # Validate required fields
@@ -610,7 +621,6 @@ async def generate_formula_revised(
         )
     
     try:
-<<<<<<< HEAD
         timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
         print(f"🔑 [MAIN] [{timestamp}] Generating IDs...")
         # Generate IDs immediately
@@ -626,7 +636,6 @@ async def generate_formula_revised(
             try:
                 history_doc = {
                     "_id": ObjectId(history_id),
-                    "mode": "basic",
                     "user_id": user_id,
                     "name": name,
                     "tag": request.tag,
@@ -688,11 +697,13 @@ async def generate_formula_revised(
         # Response model requires: success, formula_id, history_id
         # Note: success=True means "request accepted", NOT "formula completed"
         # The actual completion notification is sent via WebSocket when background task finishes
-        return MakeWishBasicResponseRevised(
+        response = MakeWishBasicResponseRevised(
             success=True,
             formula_id=formula_id,
             history_id=history_id
         )
+        print(f"📤 [MAIN] [{timestamp}] Returning response: success={response.success}, formula_id={response.formula_id}, history_id={response.history_id}")
+        return response
     
     except HTTPException:
         raise
@@ -815,7 +826,6 @@ async def process_generate_revised_background(
             "claims": request.claims or [],
             "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
             "additionalNotes": request.additional_notes or "",
-            "mode": "basic",
         }
         
         # DB is already saved in main endpoint, so we can skip saving here
@@ -837,132 +847,9 @@ async def process_generate_revised_background(
         # Yield control after formula generation
         await asyncio.sleep(0)
         
-        # Extract hero ingredients for trend analysis
-        hero_ingredients = []
-        try:
-            # Try to get from activeOptions -> recommendedFormula -> heroActives
-            active_options = basic_result.get("activeOptions", {})
-            recommended_formula = active_options.get("recommendedFormula", {})
-            hero_actives = recommended_formula.get("heroActives", [])
-            hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
-            
-            # Fallback to detected ingredients from wish_data
-            if not hero_ingredients:
-                hero_ingredients = wish_data.get("heroIngredients", [])
-        except Exception as e:
-            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-            print(f"⚠️ [BACKGROUND] [{timestamp}] Error extracting hero ingredients: {e}")
-            hero_ingredients = wish_data.get("heroIngredients", [])
-        
-        # Fetch trend data for hero ingredients (from dev - detailed analysis)
-        trend_data = {}
-        if hero_ingredients:
-            try:
-                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"📊 [BACKGROUND] [{timestamp}] Fetching trend data for {len(hero_ingredients)} hero ingredients...")
-                trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
-                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"✅ [BACKGROUND] [{timestamp}] Trend data fetched successfully")
-            except Exception as e:
-                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"⚠️ [BACKGROUND] [{timestamp}] Error fetching trend data: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Fetch market trends data (formatted for frontend visualization) - from HEAD
-        market_trends = None
-        synthesis_data = {}  # Store synthesis for each ingredient
-        
-        try:
-            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-            print(f"📊 [BACKGROUND] [{timestamp}] Fetching market trends data for frontend...")
-            from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
-            trends_service = MarketTrendsService()
-            
-            # Extract benefits and product type from wish data
-            benefits = wish_data.get("benefits", [])
-            product_type = wish_data.get("productType") or wish_data.get("product_type")
-            category = wish_data.get("category", "skincare")
-            
-            market_trends = await trends_service.fetch_trends_for_wish(
-                hero_ingredients=hero_ingredients,
-                benefits=benefits,
-                product_type=product_type,
-                category=category,
-                max_age_days=35,
-                use_fallback=True
-            )
-            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-            print(f"✅ [BACKGROUND] [{timestamp}] Market trends fetched successfully")
-            
-            # Run synthesis for each hero ingredient using market trends data
-            if market_trends and hero_ingredients:
-                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"🔬 [BACKGROUND] [{timestamp}] Running synthesis for {len(hero_ingredients)} ingredients...")
-                from app.ai_ingredient_intelligence.logic.trend_synthesis import synthesize_trend_insights
-                from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
-                
-                analyzer = TrendAnalyzer()
-                ingredient_trends = market_trends.get("ingredient_trends", [])
-                
-                for ing in hero_ingredients[:5]:  # Limit to 5 to avoid rate limits
-                    # Yield control to event loop periodically during synthesis
-                    await asyncio.sleep(0)
-                    
-                    try:
-                        # Find trend data for this ingredient from market trends
-                        ing_trend = next((t for t in ingredient_trends if t.get("ingredient_name") == ing), None)
-                        
-                        if ing_trend:
-                            # Extract trend data from market trends format
-                            trend_data_for_synthesis = {
-                                "ingredient": ing,
-                                "current_interest": ing_trend.get("current_score", 0),
-                                "growth_rate_6mo": ing_trend.get("growth_6m", 0),
-                                "trend_direction": ing_trend.get("trend_direction", "stable"),
-                                "timeseries_chart": ing_trend.get("timeseries_chart", []),
-                                "rising_queries": ing_trend.get("rising_queries", []),
-                                "top_queries": ing_trend.get("top_queries", [])
-                            }
-                            
-                            # Get additional data for synthesis
-                            consumer_intent_data = None
-                            regional_data = None
-                            
-                            try:
-                                consumer_intent_data = await analyzer.analyze_consumer_intent(ing)
-                            except:
-                                pass
-                            
-                            try:
-                                regional_data = await analyzer.analyze_regional_demand(ing)
-                            except:
-                                pass
-                            
-                            # Run synthesis
-                            synthesis_result = await synthesize_trend_insights(
-                                ingredient=ing,
-                                trend_data=trend_data_for_synthesis,
-                                consumer_intent_data=consumer_intent_data,
-                                competitive_data=None,
-                                regional_data=regional_data
-                            )
-                            
-                            synthesis_data[ing] = synthesis_result
-                            print(f"   ✅ Synthesis completed for {ing}")
-                        else:
-                            print(f"   ⚠️ No trend data found for {ing}, skipping synthesis")
-                    except Exception as synth_error:
-                        print(f"   ⚠️ Error synthesizing {ing}: {synth_error}")
-                        continue
-                
-                print(f"✅ Synthesis completed for {len(synthesis_data)} ingredients")
-        except Exception as e:
-            print(f"⚠️ Error fetching market trends: {e}")
-            import traceback
-            traceback.print_exc()
-            # Don't fail the request if trends fail
-            market_trends = None
+        # Trend data fetching removed - it's now a separate endpoint
+        # Market trends are fetched separately via /market-trends/{history_id} endpoint
+        # Not included in make a wish flow to keep it fast
         
         processing_time = time.time() - start_time
         processing_time_seconds = round(processing_time, 2)
@@ -971,9 +858,6 @@ async def process_generate_revised_background(
         # Update database with completed status
         update_doc = {
             "basic_mode_result": basic_result,
-            "trend_data": trend_data,
-            "market_trends": market_trends,
-            "synthesis_data": synthesis_data,
             "status": "completed",
             "processing_time": processing_time_seconds,
             "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
@@ -1376,11 +1260,8 @@ async def edit_formula(
                 detail="Formula not found or access denied"
             )
         
-        parsed = history_item.get("parsed_data") or {}
-        if parsed.get("mode") == "basic" and history_item.get("basic_mode_result"):
-            current_formula = history_item.get("basic_mode_result") or {}
-        else:
-            current_formula = history_item.get("formula_data") or {}
+        # Always use basic_mode_result (only one mode now)
+        current_formula = history_item.get("basic_mode_result") or {}
         current_complexity = history_item.get("complexity", "classic")
         
         # Validate operations

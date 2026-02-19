@@ -332,190 +332,151 @@ After calculating costs, include a "validation_report" section:
 
 # STAGE 1: PARSE WISH PROMPT
 PARSE_WISH_PROMPT = """
-Parse this cosmetic wish and return JSON:
+Parse this cosmetic wish and extract structured information. Keep it simple and fast - just extract what the user wants, don't generate a full formula.
 
 Wish: {wish_text}
 
-## YOUR EXPERTISE INCLUDES:
+## YOUR TASK:
 
-- Deep knowledge of INCI nomenclature and ingredient functions
-- Understanding of ingredient synergies and incompatibilities
-- Familiarity with Indian cosmetic regulations (BIS IS 4707)
-- Knowledge of both commodity and branded/patented ingredients
-- Cost optimization for Indian market (pricing in ₹/kg)
-- Ayurvedic and natural ingredient alternatives
-
-## CRITICAL RULES:
-
-### 1. INGREDIENT SELECTION
-
-- Select ingredients that directly deliver the requested benefits
-- Prioritize efficacy-proven ingredients with clinical backing
-- Consider ingredient stability and compatibility
-- Include both active and supporting ingredients
-- Suggest branded alternatives where beneficial (e.g., Sepineo™, Zincidone®)
-
-### 2. EXCLUSIONS (STRICT)
-
-- NEVER include ingredients matching user exclusions
-- If user says "Silicone-free", exclude ALL silicones (Dimethicone, Cyclomethicone, etc.)
-- If user says "Sulfate-free", exclude ALL sulfates (SLS, SLES, ALS, etc.)
-- If user says "Paraben-free", exclude ALL parabens
-- If user says "Fragrance-free", exclude Parfum/Fragrance AND essential oils unless therapeutic
-
-### 3. PHASE ORGANIZATION
-
-For SKINCARE (Serums, Moisturizers, etc.):
-
-- Phase A: Water Phase (aqueous ingredients, heated)
-- Phase B: Oil Phase (oils, emollients, heated) - if emulsion
-- Phase C: Active Phase (heat-sensitive actives, cool down)
-- Phase D: Preservation & pH Adjustment
-
-For HAIRCARE (Shampoos):
-
-- Phase A: Water Phase (water, humectants)
-- Phase B: Surfactant Phase (primary + secondary surfactants)
-- Phase C: Conditioning Phase (conditioning agents)
-- Phase D: Active Phase (actives, extracts)
-- Phase E: Preservation & pH Adjustment
-
-For HAIRCARE (Conditioners, Masks):
-
-- Phase A: Water Phase (water, humectants)
-- Phase B: Emulsion Phase (cetyl alcohol, BTMS, etc.)
-- Phase C: Oil/Butter Phase (oils, butters)
-- Phase D: Active Phase (proteins, extracts)
-- Phase E: Preservation & pH Adjustment
-
-For HAIRCARE (Serums, Oils):
-
-- Phase A: Oil Phase (carrier oils, silicones if allowed)
-- Phase B: Active Phase (heat-sensitive actives)
-- Phase C: Fragrance (if applicable)
-
-### 4. COST CONSIDERATIONS
-
-**IMPORTANT: Unit varies by product type:**
-- Liquid products (serum, toner, shampoo, conditioner, oil): Use **ml** (e.g., ₹30-60/ml)
-- Solid/semi-solid products (cream, lotion, mask, gel, balm): Use **g** (e.g., ₹30-60/g)
-
-**Cost Ranges:**
-- Budget (₹30-60 per unit): Use commodity ingredients, higher water content
-- Mid-range (₹60-120 per unit): Include 1-2 premium actives
-- Premium (₹120-200 per unit): Multiple actives, branded ingredients
-- Luxury (₹200+ per unit): Patented ingredients, high concentrations
-
-**When generating cost information, ALWAYS use the appropriate unit:**
-- For serums, toners, shampoos, conditioners, oils → use "/ml"
-- For creams, lotions, masks, gels, balms → use "/g"
-
-### 5. MANDATORY INGREDIENTS
-
-Always include appropriate:
-
-- Solvent/Base (Water for aqueous, oils for anhydrous)
-- Preservation system (unless anhydrous with no water activity)
-- pH adjustment system (for aqueous products)
-- Texture/viscosity modifier
+Extract the following information from the natural language wish:
+1. Category (skincare or haircare)
+2. Product type (serum, moisturizer, shampoo, etc.)
+3. Ingredients mentioned (if any)
+4. Benefits requested
+5. Exclusions mentioned (silicone-free, sulfate-free, etc.)
+6. Skin types or hair concerns (if mentioned)
+7. Any compatibility issues between mentioned ingredients
 
 ## OUTPUT FORMAT (JSON):
 
+{{
+  "category": "skincare|haircare",
+  "product_type": {{
+    "id": "serum|moisturizer|cleanser|shampoo|conditioner|mask|toner|oil|gel|balm|etc.",
+    "name": "Display name (e.g., 'Serum', 'Moisturizer', 'Shampoo')",
+    "icon": "lucide icon name (e.g., 'droplet', 'sparkles', 'beaker')",
+    "confidence": 0.95
+  }},
+  "detected_ingredients": [
+    {{
+      "name": "Ingredient name as mentioned (e.g., 'Vitamin C', 'Niacinamide')",
+      "confidence": 0.9,
+      "has_alternatives": true
+    }}
+  ],
+  "detected_benefits": [
+    "List of benefits mentioned (e.g., 'brightening', 'anti-aging', 'hydration')"
+  ],
+  "detected_exclusions": [
+    "List of exclusions mentioned (e.g., 'silicone-free', 'sulfate-free', 'paraben-free')"
+  ],
+  "detected_skin_types": [
+    "List of skin types mentioned (e.g., 'oily', 'dry', 'sensitive') - empty if not mentioned"
+  ],
+  "detected_hair_concerns": [
+    "List of hair concerns mentioned (e.g., 'dandruff', 'hair fall') - empty if not mentioned"
+  ],
+  "compatibility_issues": [
+    {{
+      "severity": "critical|warning",
+      "title": "Brief issue title",
+      "problem": "Description of the compatibility issue",
+      "solution": "Suggested solution",
+      "ingredients_involved": ["Ingredient1", "Ingredient2"]
+    }}
+  ],
+  "needs_clarification": [
+    {{
+      "question": "Question if wish is ambiguous",
+      "reason": "Why clarification is needed"
+    }}
+  ]
+}}
+
+## IMPORTANT RULES:
+
+1. **Keep it simple**: Only extract what's explicitly mentioned or clearly implied. Don't generate a full formula.
+2. **Product type**: Use common IDs like: serum, moisturizer, cleanser, toner, mask, shampoo, conditioner, oil, gel, balm, sunscreen, face_wash
+3. **Icon names**: Use Lucide icon names like: droplet, sparkles, beaker, flask, test-tube, syringe, etc.
+4. **Confidence**: Use high confidence (0.8-1.0) if clear, lower (0.5-0.7) if ambiguous
+5. **Ingredients**: Only list ingredients explicitly mentioned. Use common names (e.g., "Vitamin C" not "L-Ascorbic Acid")
+6. **Benefits**: Extract from phrases like "for brightening", "gives glow", "reduces wrinkles", etc.
+7. **Exclusions**: Look for words like "free", "without", "no" (e.g., "silicone-free" → exclude silicones)
+8. **Compatibility issues**: Only flag if multiple incompatible ingredients are mentioned together
+
+Return ONLY the JSON, no additional text.
+"""
+
+
+# ============================================================================
+# INGREDIENT SELECTION SYSTEM PROMPT (Base)
+# ============================================================================
+
+INGREDIENT_SELECTION_SYSTEM_PROMPT = """You are an expert cosmetic formulator. Your task is to select appropriate ingredients for a cosmetic formula based on user requirements.
+
+CRITICAL RULES:
+1. Select ingredients that match the requested benefits
+2. Respect all exclusions (e.g., if "Silicone-free", don't include any silicones)
+3. Prioritize hero ingredients if specified
+4. Consider cost targets
+5. Include necessary base ingredients (water, preservatives, pH adjusters)
+6. Select appropriate functional ingredients (humectants, emollients, actives, etc.)
+7. Organize ingredients into phases (Water Phase, Active Phase, Preservation, etc.)
+
+OUTPUT FORMAT (JSON):
 {
-  "formula_name": "Suggested product name based on benefits",
-  "formula_type": "serum|moisturizer|cleanser|shampoo|conditioner|etc.",
-  "target_ph": {"min": 5.0, "max": 6.0},
-  
-  "ingredients": [
-    {
-      "ingredient_name": "Common/Trade Name",
-      "inci_name": "INCI Name",
-      "inci_aliases": ["Alternative INCI names if any"],
-      "functional_category": "Primary function category",
-      "sub_functions": ["Additional functions"],
-      "phase": "A|B|C|D|E",
-      "usage_range": {"min": 0.5, "max": 2.0},
-      "recommended_percent": 1.0,
-      "cost_per_kg_inr": 35000,
-      "cost_estimation": {
-        "cost_per_kg_inr_low": 25000,
-        "cost_per_kg_inr_high": 45000,
-        "cost_per_kg_inr_mid": 35000,
-        "estimation_method": "reference_table | analogous_ingredient | specialty_estimate",
-        "reasoning": "Patented Seppic ingredient, no generic available. Referenced from Category D anchor table. Seppic lipopeptides typically ₹25,000-45,000/kg from Indian distributors.",
-        "confidence": "high | medium | low",
-        "is_import_dependent": true,
-        "primary_source_country": "France",
-        "indian_suppliers": ["IMCD India", "Seppic India Pvt Ltd"],
-        "price_volatile": false
-      },
-      "is_hero": true|false,
-      "is_active": true|false,
-      "branded_alternative": {
-        "trade_name": "Branded version if available",
-        "manufacturer": "Company name",
-        "benefit": "Why use branded version"
-      },
-      "notes": "Important formulation notes"
-    }
-  ],
-  
-  "phases": [
-    {
-      "id": "A",
-      "name": "Water Phase",
-      "process_temp": "70-75°C",
-      "instructions": "Heat water and add water-soluble ingredients",
-      "ingredient_names": ["Purified Water", "Glycerin", "Niacinamide"]
-    }
-  ],
-  
-  "insights": [
-    {
-      "icon": "lightbulb",
-      "category": "efficacy|stability|cost|safety",
-      "title": "Niacinamide at 5%",
-      "text": "Clinical studies show 5% niacinamide provides optimal brightening benefits while minimizing potential flushing."
-    }
-  ],
-  
-  "warnings": [
-    {
-      "severity": "critical|caution|info",
-      "category": "stability|safety|compatibility|regulatory",
-      "text": "Warning message",
-      "solution": "How to address this"
-    }
-  ],
-  
-  "ingredient_synergies": [
-    {
-      "ingredients": ["Niacinamide", "Zinc PCA"],
-      "benefit": "Enhanced oil control and pore minimizing effect"
-    }
-  ],
-  
-  "ingredient_conflicts": [
-    {
-      "ingredients": ["Vitamin C (L-AA)", "Niacinamide"],
-      "issue": "Can cause flushing at low pH",
-      "solution": "Use stable Vitamin C derivative or separate application"
-    }
-  ],
-  
-  "reasoning": "Detailed explanation of why these ingredients were selected and how they work together to deliver the requested benefits."
+    "ingredients": [
+        {
+            "ingredient_name": "Niacinamide",
+            "inci_names": ["Niacinamide"],
+            "functional_categories": ["Skin Lightening Agents", "Antioxidants"],
+            "estimated_cost_per_kg": 5000,
+            "usage_range": {"min": 2, "max": 5},
+            "function": "Brightening agent",
+            "is_hero": false,
+            "phase": "B"
+        }
+    ],
+    "phases": [
+        {
+            "id": "A",
+            "name": "Water Phase",
+            "temp": "70°C",
+            "ingredients": ["Purified Water", "Glycerin"]
+        },
+        {
+            "id": "B",
+            "name": "Active Phase",
+            "temp": "40°C",
+            "ingredients": ["Niacinamide", "3-O-Ethyl Ascorbic Acid"]
+        }
+    ],
+    "insights": [
+        {
+            "icon": "💡",
+            "title": "Niacinamide",
+            "text": "Effective at 2-5% for brightening and oil control"
+        }
+    ],
+    "warnings": [
+        {
+            "type": "info",
+            "text": "pH must be maintained at 5.0-6.5 for optimal stability"
+        }
+    ],
+    "reasoning": "Brief explanation of ingredient choices"
 }
 
-IMPORTANT NOTES:
-- All costs in Indian Rupees (₹) per kilogram
-- Use standard INCI nomenclature
-- Provide realistic, safe usage ranges
+IMPORTANT:
+- Use standard INCI names
+- Provide realistic cost estimates in ₹/kg (Indian Rupees per kilogram)
+- Provide safe usage percentage ranges
 - Mark hero ingredients with is_hero: true
-- Mark actives with is_active: true
-- Include 8-15 ingredients for complete formula
-- Consider Indian climate (humidity, heat) in formulation
-- Suggest preservative systems effective in tropical climates
-
+- Include at least 5-10 ingredients for a complete formula
+- Always include: Water (Aqua), Preservative, pH Adjuster
+- Organize into phases: Water Phase (A), Active Phase (B), Preservation (C/D)
+- Generate insights explaining key ingredient choices
+- Add warnings for important considerations (pH, stability, etc.)
 """
 
 
