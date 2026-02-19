@@ -23,7 +23,7 @@ class AnalyzeInciItem(BaseModel):
     match_score: float
     matched_inci: List[str]
     tag: Optional[str] = Field(None, description="Tag: 'B' for branded, 'G' for general INCI")
-    match_method: Optional[str] = Field(None, description="Match method: 'exact', 'fuzzy', 'synonym', or 'combination'")
+    match_method: Optional[str] = Field(None, description="Match method: 'exact', 'fuzzy', 'synonym', 'combination', or 'grouped'")
     
     # Pydantic v2: Use model_config to ensure supplier_name, supplier_id and ingredient_id are always included even when None
     # This ensures these fields are always serialized, even when None

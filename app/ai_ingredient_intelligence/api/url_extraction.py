@@ -436,7 +436,9 @@ async def analyze_url(
             )
             for key, val in detected_dict.items()
         ]
-        # Sort by number of INCI: more INCI first, then by first INCI name
+        # Sort by number of INCI: more INCI first (grouped ingredients at top), then individual ingredients below
+        # Primary sort: number of INCI (descending - more INCI first)
+        # Secondary sort: alphabetically by first INCI name
         detected.sort(key=lambda x: (-len(x.inci_list), x.inci_list[0].lower() if x.inci_list else ""))
 
         # Filter out water-related BIS cautions

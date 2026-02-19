@@ -418,6 +418,9 @@ async def match_inci_names(
                 supplier_id_str = str(raw_supplier_id)
             print(f"[DEBUG] Step 1 - After conversion: supplier_id_str={supplier_id_str}")
             
+            # Determine match method: "grouped" if branded ingredient has multiple INCI, "exact" if single
+            match_method = "grouped" if total_brand_inci > 1 else "exact"
+            
             matched_results.append({
                 "ingredient_name": doc["ingredient_name"],
                 "ingredient_id": str(doc["_id"]),  # Add ingredient ID for distributor mapping
@@ -433,7 +436,7 @@ async def match_inci_names(
                 "matched_count": total_brand_inci,
                 "total_brand_inci": total_brand_inci,
                 "tag": "B",  # Branded
-                "match_method": "exact"
+                "match_method": match_method  # "grouped" for multiple INCI, "exact" for single INCI
             })
             
             # Mark all matched INCI as branded
