@@ -14,6 +14,17 @@ import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone, timedelta
 
+# Import prompts
+from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
+    get_ingredient_selection_system_prompt,
+    get_ingredient_selection_system_prompt_async,
+    USE_MONGODB_FOR_COSTS,
+    FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
+    MANUFACTURING_PROCESS_SYSTEM_PROMPT,
+    COST_ANALYSIS_SYSTEM_PROMPT,
+    COMPLIANCE_CHECK_SYSTEM_PROMPT
+)
+
 # Import cache manager
 from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_manager
 
@@ -22,6 +33,12 @@ from app.ai_ingredient_intelligence.logic.make_wish_rules_engine import (
     get_rules_engine,
     ValidationSeverity
 )
+
+# Import unit helper
+from app.ai_ingredient_intelligence.logic.formula_generator import get_unit_for_product_type
+
+# Import cost calculation post-processor
+from app.ai_ingredient_intelligence.logic.cost_calculation_postprocessor import post_process_cost_analysis
 
 # Claude API setup
 try:
@@ -129,7 +146,7 @@ def generate_ingredient_selection_prompt(wish_data: dict) -> str:
 
 ### COST TARGET
 
-- Target formula cost: ₹{cost_min} - ₹{cost_max} per 100g
+- Target formula cost: ₹{cost_min} - ₹{cost_max} per unit
 - This is the RAW MATERIAL cost, not retail price
 - Optimize ingredient selection to meet this target
 
@@ -313,7 +330,7 @@ def generate_optimization_prompt(wish_data: dict, selected_ingredients: list) ->
 
 ### COST TARGET
 
-- Formula cost: ₹{cost_min} - ₹{cost_max} per 100g
+- Formula cost: ₹{cost_min} - ₹{cost_max} per unit
 - Optimize percentages to achieve this cost
 
 ### SELECTED INGREDIENTS TO OPTIMIZE
@@ -422,14 +439,32 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
     cost_breakdown = optimized_formula.get('cost_breakdown', {})
     total_cost = cost_breakdown.get('total_per_100g', 0)
     
+    cost_min = wish_data.get('costMin', 30)
+    cost_max = wish_data.get('costMax', 60)
+    product_type = wish_data.get('productType', 'serum')
+    benefits = wish_data.get('benefits', [])
+    hero_ingredients = wish_data.get('heroIngredients', [])
+    
+    # Determine unit based on product type
+    unit = get_unit_for_product_type(product_type)
+    
     # Format ingredients with costs
     ingredients_text = "\n".join([
-        f"  • {ing.get('name', 'Unknown')}: {ing.get('percent', 0)}% @ ₹{ing.get('cost_per_kg', 0)}/kg = ₹{ing.get('cost_contribution', 0)} per 100g"
+        f"  • {ing.get('name', 'Unknown')}: {ing.get('percent', 0)}% @ ₹{ing.get('cost_per_kg', 0)}/kg = ₹{ing.get('cost_contribution', 0)} per {unit}"
         for ing in ingredients
     ])
     
-    cost_min = wish_data.get('costMin', 30)
-    cost_max = wish_data.get('costMax', 60)
+    # Format benefits and hero ingredients for context
+    benefits_text = ", ".join(benefits) if benefits else "General benefits"
+    hero_text = ", ".join(hero_ingredients) if hero_ingredients else "None specified"
+    
+    # Determine common sizes based on unit
+    if unit == "ml":
+        common_sizes = "30ml, 50ml, 100ml"
+        size_examples = "30ml, 50ml, 100ml"
+    else:
+        common_sizes = "30g, 50g, 100g"
+        size_examples = "30g, 50g, 100g"
     
     return f"""
 ## ANALYZE FORMULA COSTS
@@ -437,8 +472,12 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 ### FORMULA INFORMATION
 
 - Formula Name: {formula_name}
-- Current Formula Cost: ₹{total_cost} per 100g
-- Target Cost Range: ₹{cost_min} - ₹{cost_max} per 100g
+- Product Type: {product_type}
+- **Unit: {unit}** (use {unit} for all cost calculations and displays)
+- Current Formula Cost: ₹{total_cost} per {unit}
+- Target Cost Range: ₹{cost_min} - ₹{cost_max} per {unit}
+- Target Benefits: {benefits_text}
+- Hero Ingredients: {hero_text}
 
 ### INGREDIENT COSTS
 
@@ -446,21 +485,38 @@ def generate_cost_prompt(optimized_formula: dict, wish_data: dict) -> str:
 
 ### COST BREAKDOWN
 
-- Actives: ₹{cost_breakdown.get('actives_cost', 0)}
-- Base Ingredients: ₹{cost_breakdown.get('base_cost', 0)}
-- Functional Ingredients: ₹{cost_breakdown.get('functional_cost', 0)}
-- Preservation: ₹{cost_breakdown.get('preservation_cost', 0)}
+- Actives: ₹{cost_breakdown.get('actives_cost', 0)} per {unit}
+- Base Ingredients: ₹{cost_breakdown.get('base_cost', 0)} per {unit}
+- Functional Ingredients: ₹{cost_breakdown.get('functional_cost', 0)} per {unit}
+- Preservation: ₹{cost_breakdown.get('preservation_cost', 0)} per {unit}
 
 ### YOUR TASK
 
 1. Calculate detailed cost breakdown
-2. Estimate packaging costs for common sizes (30ml, 50ml, 100ml)
-3. Calculate total product cost with packaging
-4. Provide pricing recommendations (D2C, retail, premium)
-5. Suggest cost optimization opportunities
-6. Compare with competitor products if applicable
+2. Estimate packaging costs for ALL common sizes: 30ml, 50ml, 100ml, 30g, 50g, 100g
+3. Estimate labelling costs for each size:
+   - 30ml/30g: ₹3-5
+   - 50ml/50g: ₹4-6
+   - 100ml/100g: ₹5-7
+4. Estimate carton box costs for each size:
+   - 30ml/30g: ₹6-9
+   - 50ml/50g: ₹6-9
+   - 100ml/100g: ₹7-10
+5. Calculate total product cost for ALL sizes including: raw materials + packaging + labelling + carton box
+6. Calculate manufacturing overhead (20% of subtotal: raw materials + packaging + labelling + carton box) for ALL sizes
+7. Provide pricing recommendations (D2C 5x, retail 6x, premium 8x) for ALL sizes
+8. Suggest cost optimization opportunities
+9. Compare with competitor products if applicable
 
-Return the complete cost analysis as JSON following the specified format.
+CRITICAL REQUIREMENTS:
+- MUST include data for ALL sizes: 30ml, 50ml, 100ml, 30g, 50g, 100g
+- This allows frontend users to switch between sizes without regenerating
+- Include packaging_cost, labelling_cost, and carton_box_cost separately in packaging_estimate
+- Manufacturing overhead is 20% of (raw material + packaging + labelling + carton box costs)
+- D2C markup is 5x (changed from 4x)
+- Calculate formula_cost for each size: (size/100) × formula_cost_per_100g
+
+Return the complete cost analysis as JSON following the specified format with ALL sizes included.
 
 """
 
@@ -537,33 +593,31 @@ async def call_ai_with_claude(
     if not claude_model:
         raise RuntimeError("Claude model not configured. Check CLAUDE_MODEL environment variable.")
     
-    # Get cache manager and check if we should use caching
-    cache_manager = get_cache_manager(claude_client)
-    cache_block_id = await cache_manager.get_or_create_cache(
-        prompt_type=prompt_type,
+    # Format system prompt with cache_control (GA approach - SDK 0.34.0+)
+    from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
+    formatted_system = format_system_prompt_with_cache(
         system_prompt=system_prompt,
-        claude_client=claude_client
+        prompt_type=prompt_type,
+        claude_client=claude_client,
+        ttl="1h"  # 1 hour ephemeral cache
     )
     
-    # Prepare API call parameters
+    if isinstance(formatted_system, list):
+        print(f"💾 Using prompt caching (GA) for {prompt_type} - system prompt formatted as content blocks")
+    else:
+        print(f"📝 Using plain system prompt for {prompt_type} (caching disabled or failed)")
+    
+    # Prepare API call parameters with properly formatted system prompt
     # Using claude-opus-4-5-20251101 for all Make a Wish operations
     api_params = {
         "model": claude_model,  # claude-opus-4-5-20251101
         "max_tokens": 16384,
         "temperature": 0.3,
-        "system": system_prompt,
+        "system": formatted_system,  # Can be string or list of content blocks with cache_control
         "messages": [
             {"role": "user", "content": user_prompt}
         ]
     }
-    
-    # Use cache_control if caching is enabled
-    # Claude's ephemeral cache automatically caches system prompts when cache_control is used
-    # This reduces costs by ~90% on system prompt tokens after the first call
-    if cache_block_id:
-        print(f"💾 Using cached system prompt for {prompt_type}")
-    else:
-        print(f"📝 Using uncached system prompt for {prompt_type} (first call)")
     
     timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
     print(f"🌐 [CLAUDE] [{timestamp}] Starting Claude API call (attempt {1}/{max_retries})...")
@@ -601,6 +655,18 @@ async def call_ai_with_claude(
                 )
                 progress_task.cancel()  # Stop progress logging
                 timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Log response metadata
+                if hasattr(response, 'usage'):
+                    usage = response.usage
+                    print(f"📊 [CLAUDE] [{timestamp}] Token usage - Input: {usage.input_tokens}, Output: {usage.output_tokens}, Total: {usage.input_tokens + usage.output_tokens}")
+                
+                # Log cache status if available
+                if hasattr(response, 'cache_creation_input_tokens'):
+                    print(f"💾 [CLAUDE] [{timestamp}] Cache creation tokens: {response.cache_creation_input_tokens}")
+                if hasattr(response, 'cache_read_input_tokens'):
+                    print(f"💾 [CLAUDE] [{timestamp}] Cache read tokens: {response.cache_read_input_tokens}")
+                
                 print(f"✅ [CLAUDE] [{timestamp}] Claude API call completed successfully!")
             except asyncio.TimeoutError:
                 progress_task.cancel()  # Stop progress logging
@@ -814,6 +880,7 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     # Use fixed wish data (with auto-selections applied)
     wish_data = fixed_wish_data
     
+<<<<<<< HEAD
     # Generate complete formula response
     timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
     print(f"📋 [FORMULA_GEN] [{timestamp}] Generating complete formula...")
@@ -841,4 +908,96 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
         import traceback
         traceback.print_exc()
         raise
+    
+    def clean_cost_analysis_units(cost_data: dict, unit: str) -> dict:
+        """Post-process cost analysis to fix any /100g or /100ml that AI might have added"""
+        import json
+        import re
+        
+        # Convert to string, fix, convert back
+        cost_str = json.dumps(cost_data)
+        
+        # Replace /100g and /100ml with actual unit (case-insensitive)
+        cost_str = re.sub(r'/100g', f'/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
+        # Also catch variations like "₹13.98/100g" or "₹13.98 per 100g"
+        cost_str = re.sub(r'₹([0-9.]+)/100g', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+)/100ml', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+) per 100g', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'₹([0-9.]+) per 100ml', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
+        # Clean competitor_comparison section specifically
+        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100g"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
+        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100ml"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
+        
+        try:
+            return json.loads(cost_str)
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return original (shouldn't happen but safety check)
+            print("⚠️ Warning: Failed to parse cleaned cost analysis JSON, returning original")
+            return cost_data
+    
+    async def run_stage_4():
+        print("💰 Stage 4: Cost Analysis...")
+        cost_prompt = generate_cost_prompt(optimized_formula, wish_data)
+        result = await call_ai_with_claude(
+            system_prompt=COST_ANALYSIS_SYSTEM_PROMPT,
+            user_prompt=cost_prompt,
+            prompt_type="cost_analysis"
+        )
+        product_type = wish_data.get('productType', 'serum')
+        unit = get_unit_for_product_type(product_type)
+        
+        # Clean up any /100g or /100ml that might have slipped through
+        result = clean_cost_analysis_units(result, unit)
+        
+        # Apply new cost calculation rules (post-processing)
+        print("   Applying new cost calculation rules (20% formula margin, wastage, manufacturer margin)...")
+        result = post_process_cost_analysis(result, product_type)
+        
+        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('adjusted_per_100g', result.get('raw_material_cost', {}).get('total_per_100g', 0))}/{unit}")
+        return result
+    
+    async def run_stage_5():
+        print("✅ Stage 5: Compliance Check...")
+        compliance_prompt = generate_compliance_prompt(optimized_formula)
+        result = await call_ai_with_claude(
+            system_prompt=COMPLIANCE_CHECK_SYSTEM_PROMPT,
+            user_prompt=compliance_prompt,
+            prompt_type="compliance_check"
+        )
+        print(f"✅ Compliance: {result.get('overall_status', 'UNKNOWN')}")
+        return result
+    
+    # Run stages 3, 4, and 5 in parallel
+    manufacturing_process, cost_analysis, compliance = await asyncio.gather(
+        run_stage_3(),
+        run_stage_4(),
+        run_stage_5()
+    )
+    
+    # Combine all results
+    result = {
+        "wish_data": wish_data,
+        "ingredient_selection": selected_ingredients,
+        "optimized_formula": optimized_formula,
+        "manufacturing": manufacturing_process,
+        "cost_analysis": cost_analysis,
+        "compliance": compliance,
+        "metadata": {
+            "generated_at": datetime.now().isoformat(),
+            "formula_version": "1.0",
+            "mode": "advanced",
+            "ai_model": claude_model or "claude-sonnet-4-5-20250929",
+            "cache_stats": get_cache_manager().get_cache_stats()
+        }
+    }
+    
+    print("🎉 Make a Wish pipeline complete (ADVANCED MODE)!")
+    
+    return result
+>>>>>>> dev
 

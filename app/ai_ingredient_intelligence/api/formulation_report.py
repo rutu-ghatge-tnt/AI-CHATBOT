@@ -9,7 +9,7 @@ import time
 from fastapi import APIRouter, HTTPException, Response, Request, Body, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from bson import ObjectId
 import anthropic
 from jinja2 import Environment, FileSystemLoader
@@ -914,17 +914,50 @@ REFORMATTED CAUTIONS:"""
     print(f"[DEBUG] Building expected benefits info...")
     print(f"[DEBUG]   - expected_benefits: {expected_benefits}")
     print(f"[DEBUG]   - expected_benefits is None: {expected_benefits is None}")
-    if expected_benefits:
-        print(f"[DEBUG]   - expected_benefits.strip(): '{expected_benefits.strip()}'")
-        print(f"[DEBUG]   - len(expected_benefits.strip()): {len(expected_benefits.strip())}")
+    print(f"[DEBUG]   - expected_benefits type: {type(expected_benefits).__name__ if expected_benefits else 'None'}")
     
-    if expected_benefits and expected_benefits.strip():
-        expected_benefits_info = f"\n\nEXPECTED BENEFITS FROM USER:\n{expected_benefits.strip()}\n\nCRITICAL: You MUST add a section at the end of the report (after section 8) titled:\n\n9) Expected Benefits Analysis\n\nFor each expected benefit mentioned by the user, analyze:\n- Can this benefit be achieved from this formulation? (YES/NO/PARTIALLY)\n- Which ingredients support this benefit?\n- What is the evidence/mechanism?\n- Any limitations or concerns?\n\nFormat as a table with columns: Expected Benefit | Can Be Achieved? | Supporting Ingredients | Evidence/Mechanism | Limitations\n\nThis section should ONLY be included if expected benefits are provided above. If no expected benefits are provided, DO NOT include section 9 - end the report after section 8.\n"
+    # 🔧 FIX: More robust validation - handle None, empty string, whitespace-only, and non-string types
+    expected_benefits_valid = False
+    expected_benefits_clean = None
+    
+    if expected_benefits is not None:
+        # Convert to string if it's not already
+        if not isinstance(expected_benefits, str):
+            expected_benefits_clean = str(expected_benefits).strip()
+            print(f"[DEBUG]   - Converted non-string to string: '{expected_benefits_clean}'")
+        else:
+            expected_benefits_clean = expected_benefits.strip()
+        
+        # Check if it's not empty after stripping
+        if expected_benefits_clean and len(expected_benefits_clean) > 0:
+            expected_benefits_valid = True
+            print(f"[DEBUG]   - expected_benefits.strip(): '{expected_benefits_clean}'")
+            print(f"[DEBUG]   - len(expected_benefits.strip()): {len(expected_benefits_clean)}")
+        else:
+            print(f"[DEBUG]   - expected_benefits is empty or whitespace-only after strip")
+    else:
+        print(f"[DEBUG]   - expected_benefits is None")
+    
+    if expected_benefits_valid and expected_benefits_clean:
+        expected_benefits_info = f"\n\nEXPECTED BENEFITS FROM USER:\n{expected_benefits_clean}\n\nCRITICAL: You MUST add a section at the end of the report (after section 8) titled:\n\n9) Expected Benefits Analysis\n\nFor each expected benefit mentioned by the user, analyze:\n- Can this benefit be achieved from this formulation? (YES/NO/PARTIALLY)\n- Which ingredients support this benefit?\n- What is the evidence/mechanism?\n- Any limitations or concerns?\n\nFormat as a table with columns: Expected Benefit | Can Be Achieved? | Supporting Ingredients | Evidence/Mechanism | Limitations\n\nThis section should ONLY be included if expected benefits are provided above. If no expected benefits are provided, DO NOT include section 9 - end the report after section 8.\n"
         print(f"[DEBUG] ✅ Expected benefits info built (length: {len(expected_benefits_info)})")
+        print(f"[DEBUG] ✅ Expected benefits will be included in prompt to Claude")
     else:
         print(f"[DEBUG] ❌ Expected benefits info is empty - will not be included")
+        print(f"[DEBUG] ❌ Expected benefits will NOT be included in prompt to Claude")
     
     user_prompt = f"Generate report for this INCI list:\n{inci_str}{categorization_info}{bis_cautions_info}{expected_benefits_info}\n\nREMEMBER: Every table cell must have content. NO EMPTY CELLS!\n\nCRITICAL FOR BIS CAUTIONS - THIS IS MANDATORY:\n- If BIS cautions are provided above for an ingredient, you MUST include ALL of them - DO NOT SKIP ANY\n- Count the number of cautions provided for each ingredient and ensure ALL are included\n- Each caution must be on a SEPARATE LINE within the BIS Cautions column (use actual line breaks)\n- Number each caution starting with 1., 2., 3., 4., etc. on its own line\n- Do NOT combine multiple cautions into one line separated by commas or semicolons\n- Do NOT skip any cautions - if 4 are provided, include all 4; if 5 are provided, include all 5\n- Do NOT summarize or shorten - include the FULL text of each caution exactly as provided\n- Write each caution exactly as provided, preserving all numerical values, percentages, limits, and exact wording\n- Missing even one caution is a CRITICAL ERROR - verify you have included every single caution listed above\n\nCRITICAL: You MUST generate ALL 9 sections (or 8 if no expected benefits). Do NOT stop after section 2. Include sections 3-9:\n- 3) Compliance Panel\n- 4) Preservative Efficacy Check\n- 5) Risk Panel\n- 6) Cumulative Benefit Panel\n- 7) Claim Panel\n- 8) Recommended pH Range\n- 9) Expected Benefits Analysis (if expected benefits provided)"
+    
+    # 🔧 DEBUG: Verify expected benefits are in the prompt
+    if expected_benefits_valid:
+        if "EXPECTED BENEFITS FROM USER" in user_prompt:
+            print(f"[DEBUG] ✅ VERIFIED: Expected benefits ARE included in prompt to Claude")
+            print(f"[DEBUG]    Prompt contains 'EXPECTED BENEFITS FROM USER': True")
+        else:
+            print(f"[DEBUG] ❌ ERROR: Expected benefits validation passed but NOT found in prompt!")
+            print(f"[DEBUG]    This should not happen - expected_benefits_info length: {len(expected_benefits_info)}")
+    else:
+        print(f"[DEBUG] ℹ️ Expected benefits not validated, so not included in prompt (this is expected if None/empty)")
     
     # Use Claude for report generation
     if claude_client:
@@ -937,16 +970,32 @@ REFORMATTED CAUTIONS:"""
                     if cautions:
                         print(f"   - {ing}: {len(cautions)} caution(s)")
             
+            # Format system prompt with cache_control for prompt caching (GA approach - SDK 0.34.0+)
+            from app.ai_ingredient_intelligence.logic.prompt_cache_manager import format_system_prompt_with_cache
+            formatted_system = format_system_prompt_with_cache(
+                system_prompt=SYSTEM_PROMPT,
+                prompt_type="formulation_report",
+                claude_client=claude_client,
+                ttl="1h"  # 1 hour ephemeral cache
+            )
+            
+            if isinstance(formatted_system, list):
+                print(f"💾 Using prompt caching (GA) for formulation_report - system prompt formatted as content blocks")
+            else:
+                print(f"📝 Using plain system prompt for formulation_report (caching disabled or failed)")
+            
             # Use Claude API to generate report
-            message = claude_client.messages.create(
-                model=claude_model,
-                max_tokens=4096,
-                temperature=0.1,
-                system=SYSTEM_PROMPT,
-                messages=[
+            api_params = {
+                "model": claude_model,
+                "max_tokens": 4096,
+                "temperature": 0.1,
+                "system": formatted_system,  # Can be string or list of content blocks with cache_control
+                "messages": [
                     {"role": "user", "content": user_prompt}
                 ]
-            )
+            }
+            
+            message = claude_client.messages.create(**api_params)
             report_text = message.content[0].text
             report_text = clean_ai_response(report_text)
             
@@ -1063,6 +1112,55 @@ async def generate_report_json(
         print(f"[DEBUG] Request body keys: {list(body.keys())}")
         print(f"[DEBUG] Request body size: {len(str(body))} characters")
         
+        # 🔧 FIX: Handle both camelCase and snake_case for expected benefits
+        # Frontend might send expected_benefits (snake_case) but schema expects expectedBenefits (camelCase)
+        if "expected_benefits" in body and "expectedBenefits" not in body:
+            body["expectedBenefits"] = body.pop("expected_benefits")
+            print(f"[DEBUG] 🔧 Converted expected_benefits (snake_case) to expectedBenefits (camelCase)")
+        
+        # 🔧 FIX: Also check for other possible field name variations
+        if "expectedBenefits" not in body:
+            # Try other common variations
+            for key in ["expected_benefit", "expectedBenefit", "expected_benefits_text", "expectedBenefitsText"]:
+                if key in body:
+                    body["expectedBenefits"] = body.pop(key)
+                    print(f"[DEBUG] 🔧 Converted {key} to expectedBenefits (camelCase)")
+                    break
+        
+        # 🔧 FIX: Handle both camelCase and snake_case for BIS cautions
+        if "bis_cautions" in body and "bisCautions" not in body:
+            body["bisCautions"] = body.pop("bis_cautions")
+            print(f"[DEBUG] 🔧 Converted bis_cautions (snake_case) to bisCautions (camelCase)")
+        
+        # 🔧 DEBUG: Show raw values before parsing
+        print(f"[DEBUG] 🔍 Raw body values:")
+        print(f"[DEBUG]    - expectedBenefits in body: {'expectedBenefits' in body}")
+        print(f"[DEBUG]    - expected_benefits in body: {'expected_benefits' in body}")
+        expected_benefits_raw = body.get('expectedBenefits') or body.get('expected_benefits')
+        print(f"[DEBUG]    - expectedBenefits value: {expected_benefits_raw}")
+        print(f"[DEBUG]    - expectedBenefits type: {type(expected_benefits_raw).__name__ if expected_benefits_raw else 'None'}")
+        print(f"[DEBUG]    - expectedBenefits is None: {expected_benefits_raw is None}")
+        print(f"[DEBUG]    - expectedBenefits is empty string: {expected_benefits_raw == '' if expected_benefits_raw else 'N/A'}")
+        if expected_benefits_raw and isinstance(expected_benefits_raw, str):
+            print(f"[DEBUG]    - expectedBenefits length: {len(expected_benefits_raw)}")
+            print(f"[DEBUG]    - expectedBenefits first 100 chars: {expected_benefits_raw[:100]}")
+        
+        print(f"[DEBUG]    - bisCautions in body: {'bisCautions' in body}")
+        print(f"[DEBUG]    - bis_cautions in body: {'bis_cautions' in body}")
+        bis_val = body.get('bisCautions') or body.get('bis_cautions')
+        if bis_val:
+            print(f"[DEBUG]    - bisCautions type: {type(bis_val).__name__}")
+            if isinstance(bis_val, dict):
+                print(f"[DEBUG]    - bisCautions dict size: {len(bis_val)}")
+                print(f"[DEBUG]    - bisCautions keys (first 5): {list(bis_val.keys())[:5]}")
+                # Show sample values
+                for ing, cautions in list(bis_val.items())[:3]:
+                    print(f"[DEBUG]    - bisCautions['{ing}']: {len(cautions) if cautions else 0} caution(s)")
+            else:
+                print(f"[DEBUG]    - bisCautions is NOT a dict: {type(bis_val).__name__}")
+        else:
+            print(f"[DEBUG]    - bisCautions: None or not found")
+        
         payload = FormulationReportRequest(**body)
         
         # Extract user_id from JWT token
@@ -1102,6 +1200,78 @@ async def generate_report_json(
             print(f"[DEBUG] BIS cautions: None or empty")
         
         print(f"[DEBUG] Expected benefits: {payload.expectedBenefits[:100] + '...' if payload.expectedBenefits and len(payload.expectedBenefits) > 100 else payload.expectedBenefits}")
+        print(f"[DEBUG] Expected benefits is None: {payload.expectedBenefits is None}")
+        print(f"[DEBUG] Expected benefits is empty string: {payload.expectedBenefits == '' if payload.expectedBenefits else 'N/A'}")
+        
+        # 🔧 FIX: If BIS cautions are empty or missing, try to re-fetch them
+        # Check if we have ingredients that should have BIS cautions (alcohols, acids, etc.)
+        ingredients_that_need_cautions = [
+            'alcohol', 'cetyl', 'stearyl', 'cetearyl', 'behenyl', 
+            'acid', 'paraben', 'sulfate', 'sulphate', 'phenol'
+        ]
+        has_ingredients_needing_cautions = any(
+            any(keyword in ing.lower() for keyword in ingredients_that_need_cautions) 
+            for ing in payload.inciList
+        )
+        
+        # Check if BIS cautions are missing or all empty
+        bis_cautions_empty = (
+            not payload.bisCautions or 
+            len(payload.bisCautions) == 0 or 
+            all(not v or len(v) == 0 for v in payload.bisCautions.values())
+        )
+        
+        if has_ingredients_needing_cautions and bis_cautions_empty:
+            print(f"[DEBUG] ⚠️ WARNING: Found ingredients that may need BIS cautions but BIS cautions are empty/missing.")
+            print(f"[DEBUG]    Ingredients that may need cautions: {[ing for ing in payload.inciList if any(kw in ing.lower() for kw in ingredients_that_need_cautions)]}")
+            print(f"[DEBUG]    Attempting to re-fetch BIS cautions for all ingredients...")
+            try:
+                from app.ai_ingredient_intelligence.logic.bis_rag import get_bis_cautions_for_ingredients
+                # Re-fetch BIS cautions for all ingredients
+                refreshed_bis_cautions = await get_bis_cautions_for_ingredients(payload.inciList)
+                if refreshed_bis_cautions:
+                    # Initialize if needed
+                    if not payload.bisCautions:
+                        payload.bisCautions = {}
+                    
+                    # Merge with existing (prefer refreshed if it has data)
+                    merged_count = 0
+                    for ing, cautions in refreshed_bis_cautions.items():
+                        if cautions and len(cautions) > 0:
+                            # Normalize ingredient name for matching (case-insensitive)
+                            # Try to match by normalized name
+                            matched_key = None
+                            for existing_key in payload.bisCautions.keys():
+                                if existing_key.lower().strip() == ing.lower().strip():
+                                    matched_key = existing_key
+                                    break
+                            
+                            if matched_key:
+                                # Update existing entry
+                                payload.bisCautions[matched_key] = cautions
+                                print(f"[DEBUG] ✅ Updated BIS cautions for '{matched_key}': {len(cautions)} caution(s)")
+                            else:
+                                # Add new entry
+                                payload.bisCautions[ing] = cautions
+                                print(f"[DEBUG] ✅ Added BIS cautions for '{ing}': {len(cautions)} caution(s)")
+                            merged_count += 1
+                    
+                    # Re-count after refresh
+                    bis_count = len(payload.bisCautions)
+                    non_empty = sum(1 for c in payload.bisCautions.values() if c and len(c) > 0)
+                    total_cautions = sum(len(c) for c in payload.bisCautions.values() if c)
+                    print(f"[DEBUG] After refresh: {bis_count} ingredients, {non_empty} with non-empty lists, {total_cautions} total cautions")
+                    if merged_count == 0:
+                        print(f"[DEBUG] ⚠️ WARNING: Re-fetch returned empty cautions for all ingredients. This may indicate:")
+                        print(f"[DEBUG]    1. BIS RAG system is not finding matches in the documents")
+                        print(f"[DEBUG]    2. Ingredient names don't match BIS document terminology")
+                        print(f"[DEBUG]    3. BIS vectorstore may need to be rebuilt")
+                else:
+                    print(f"[DEBUG] ⚠️ Re-fetch returned no BIS cautions at all")
+            except Exception as e:
+                print(f"[DEBUG] ⚠️ Failed to re-fetch BIS cautions: {e}")
+                import traceback
+                traceback.print_exc()
         
         inci_str = ", ".join(payload.inciList)
 
@@ -1255,197 +1425,9 @@ async def generate_report_json(
         
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
-@router.post("/formulation-report")
-async def generate_report(
-    payload: FormulationReportRequest,
-    request: Request,
-    current_user: dict = Depends(verify_jwt_token)  # JWT token validation
-):
-    print(f"\n{'='*80}")
-    print(f"[DEBUG] 🚀 API CALL: /api/formulation-report")
-    print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
-    print(f"[DEBUG] INCI list count: {len(payload.inciList) if payload.inciList else 0}")
-    print(f"{'='*80}\n")
-    
-    try:
-        inci_str = ", ".join(payload.inciList)
-        print(f"[DEBUG] Processing INCI string (length: {len(inci_str)} characters)")
-
-        # 🔹 Generate report text using OpenAI with categorization info, BIS cautions, and expected benefits
-        report_text = await generate_report_text(
-            inci_str, 
-            branded_ingredients=payload.brandedIngredients,
-            not_branded_ingredients=payload.notBrandedIngredients,
-            bis_cautions=payload.bisCautions,
-            expected_benefits=payload.expectedBenefits
-        )
-        
-        # 🔹 Validate and fix empty notes if needed
-        max_retries = 3
-        retry_count = 0
-        ingredient_count = len(payload.inciList)
-        
-        # Check if BIS cautions are missing
-        bis_cautions_missing = False
-        if payload.bisCautions:
-            validation_results = validate_bis_cautions_in_report(report_text, payload.bisCautions)
-            missing_cautions = [ing for ing, found in validation_results.items() if not found]
-            if missing_cautions:
-                bis_cautions_missing = True
-                print(f"⚠️ BIS cautions validation failed for: {', '.join(missing_cautions)}")
-        
-        # Retry if report content is invalid OR if BIS cautions are missing
-        while (not validate_report_content(report_text, ingredient_count) or bis_cautions_missing) and retry_count < max_retries:
-            retry_count += 1
-            if bis_cautions_missing:
-                print(f"⚠️ BIS cautions missing (attempt {retry_count}/{max_retries}). Regenerating with stronger BIS cautions emphasis...")
-            else:
-                print(f"⚠️ Report validation failed (attempt {retry_count}/{max_retries}). Regenerating...")
-            
-            # Build categorization info for retry
-            retry_categorization = ""
-            if payload.brandedIngredients or payload.notBrandedIngredients:
-                retry_categorization = "\n\nINGREDIENT CATEGORIZATION FROM DATABASE ANALYSIS:\n"
-                if payload.brandedIngredients:
-                    retry_categorization += f"- BRANDED Ingredients (found in database): {', '.join(payload.brandedIngredients)}\n"
-                if payload.notBrandedIngredients:
-                    retry_categorization += f"- NOT BRANDED Ingredients (not found in database): {', '.join(payload.notBrandedIngredients)}\n"
-                retry_categorization += "\nUse this categorization information to accurately mark ingredients as BRANDED or NOT BRANDED in the report.\n"
-            
-            # Build BIS cautions info for retry (use same detailed format as initial generation)
-            retry_bis_cautions = ""
-            if payload.bisCautions and len(payload.bisCautions) > 0:
-                total_cautions = sum(len(cautions) for cautions in payload.bisCautions.values() if cautions)
-                retry_bis_cautions = "\n\n" + "=" * 70 + "\n"
-                retry_bis_cautions += "BUREAU OF INDIAN STANDARDS (BIS) CAUTIONS & REGULATORY NOTES\n"
-                retry_bis_cautions += "=" * 70 + "\n"
-                retry_bis_cautions += "CRITICAL INSTRUCTIONS FOR BIS CAUTIONS:\n"
-                retry_bis_cautions += "1. You MUST include ALL cautions listed below for each ingredient\n"
-                retry_bis_cautions += "2. Each caution must be on a SEPARATE LINE within the table cell\n"
-                retry_bis_cautions += "3. Number each caution (1., 2., 3., etc.)\n"
-                retry_bis_cautions += "4. Include EXACT numerical values (percentages, limits, concentrations)\n"
-                retry_bis_cautions += "5. Do NOT combine multiple cautions into one line\n"
-                retry_bis_cautions += "6. Do NOT use vague phrases - include actual values\n"
-                retry_bis_cautions += "\n" + "-" * 70 + "\n"
-                retry_bis_cautions += "BIS CAUTIONS BY INGREDIENT:\n"
-                retry_bis_cautions += "-" * 70 + "\n"
-                for ingredient, cautions in payload.bisCautions.items():
-                    if cautions and len(cautions) > 0:
-                        retry_bis_cautions += f"\n[{ingredient}] - {len(cautions)} caution(s) - YOU MUST INCLUDE ALL {len(cautions)} CAUTIONS:\n"
-                        for i, caution in enumerate(cautions, 1):
-                            retry_bis_cautions += f"  CAUTION {i} of {len(cautions)}: {caution}\n"
-                        retry_bis_cautions += f"  → REMEMBER: This ingredient has {len(cautions)} cautions. Include ALL {len(cautions)} in the report!\n"
-                        retry_bis_cautions += "\n"
-                retry_bis_cautions += "\n" + "=" * 70 + "\n"
-                retry_bis_cautions += "FORMATTING REQUIREMENTS FOR TABLE CELL:\n"
-                retry_bis_cautions += "When you write BIS cautions in the 'BIS Cautions' column of the Analysis table:\n"
-                retry_bis_cautions += "- Put each caution on its own line (use actual line breaks, not commas)\n"
-                retry_bis_cautions += "- Start each line with the number and period (1., 2., 3., etc.)\n"
-                retry_bis_cautions += "- Use actual newline characters to separate cautions within the cell\n"
-                retry_bis_cautions += "- CRITICAL: If an ingredient has multiple cautions, you MUST write each one on a separate line\n"
-                retry_bis_cautions += "- Example format for an ingredient with 4 cautions:\n"
-                retry_bis_cautions += "  Ingredient Name | Category | Functions/Notes | 1. First caution with exact values\n"
-                retry_bis_cautions += "  2. Second caution with exact values\n"
-                retry_bis_cautions += "  3. Third caution with exact values\n"
-                retry_bis_cautions += "  4. Fourth caution with exact values\n"
-                retry_bis_cautions += "- DO NOT write all cautions on one line separated by commas or semicolons\n"
-                retry_bis_cautions += "- DO NOT skip any cautions - include ALL of them\n"
-                retry_bis_cautions += "- DO NOT summarize or combine cautions - list each one separately\n"
-                retry_bis_cautions += "=" * 70 + "\n"
-            
-            # Build expected benefits info for retry (optional - only include if provided)
-            retry_expected_benefits = ""
-            if payload.expectedBenefits and payload.expectedBenefits.strip():
-                retry_expected_benefits = f"\n\nEXPECTED BENEFITS FROM USER:\n{payload.expectedBenefits.strip()}\n\nCRITICAL: You MUST add a section at the end of the report (after section 8) titled:\n\n9) Expected Benefits Analysis\n\nFor each expected benefit mentioned by the user, analyze:\n- Can this benefit be achieved from this formulation? (YES/NO/PARTIALLY)\n- Which ingredients support this benefit?\n- What is the evidence/mechanism?\n- Any limitations or concerns?\n\nFormat as a table with columns: Expected Benefit | Can Be Achieved? | Supporting Ingredients | Evidence/Mechanism | Limitations\n\nThis section should ONLY be included if expected benefits are provided above. If no expected benefits are provided, DO NOT include section 9 - end the report after section 8.\n"
-            
-            # Regenerate with stronger prompt
-            retry_prompt = f"{SYSTEM_PROMPT}\n\nCRITICAL: The previous response had empty table cells, missing notes, missing ingredients, missing BIS cautions, or was missing sections. Regenerate with NO EMPTY CELLS, MEANINGFUL NOTES, ALL INGREDIENTS INCLUDED, ALL BIS CAUTIONS INCLUDED, AND ALL SECTIONS.\n\nGenerate report for this INCI list:\n{inci_str}{retry_categorization}{retry_bis_cautions}{retry_expected_benefits}\n\nEVERY SINGLE TABLE CELL MUST CONTAIN MEANINGFUL TEXT!\nINCLUDE ALL {ingredient_count} INGREDIENTS - DO NOT SKIP ANY!\n\nCRITICAL: You MUST generate ALL sections starting with section 0:\n- 0) Executive Summary (MANDATORY - must be first, format as table with Field | Value)\n- 1) Submitted INCI List\n- 2) Analysis\n- 3) Compliance Panel\n- 4) Preservative Efficacy Check\n- 5) Risk Panel\n- 6) Cumulative Benefit Panel\n- 7) Claim Panel\n- 8) Recommended pH Range\n- 9) Expected Benefits Analysis (if expected benefits provided)\n\nDO NOT skip section 0 (Executive Summary). You MUST include ALL sections!\n\nCRITICAL FOR BIS CAUTIONS:\n- If BIS cautions are provided above, you MUST include ALL of them for each ingredient\n- Count the cautions provided and ensure ALL are included - missing even one is an error\n- Each caution must be on a SEPARATE LINE with proper numbering (1., 2., 3., etc.)\n- Do NOT combine cautions into one line - each must be on its own line\n- Include the FULL text of each caution with exact numerical values\n\nExample of proper notes:\nAqua: Primary solvent, base ingredient\nGlycerin: Humectant, skin conditioning agent\nNiacinamide: Vitamin B3, brightening active\nProprietary Blend XYZ: Unknown proprietary ingredient, requires manufacturer clarification"
-            
-            # Regenerate with Claude
-            if claude_client:
-                try:
-                    retry_message = claude_client.messages.create(
-                        model=claude_model,
-                        max_tokens=4096,
-                        temperature=0.1,
-                        system=SYSTEM_PROMPT,
-                        messages=[
-                            {"role": "user", "content": retry_prompt}
-                        ]
-                    )
-                    report_text = retry_message.content[0].text
-                except Exception as e:
-                    error_msg = str(e)
-                    print(f"❌ Claude retry failed: {type(e).__name__}: {error_msg}")
-                    # Check if it's a model not found error
-                    if "404" in error_msg or "not_found_error" in error_msg.lower() or "model:" in error_msg.lower():
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Claude report generation failed: Error code: 404 - Model '{claude_model}' not found. Please check your CLAUDE_MODEL environment variable or use a valid model name."
-                        )
-                    else:
-                        raise HTTPException(status_code=500, detail=f"Claude retry failed: {error_msg}")
-            else:
-                raise HTTPException(status_code=500, detail="Claude API not available for retry")
-            
-            # Clean the retry response
-            report_text = clean_ai_response(report_text)
-            
-            # Re-validate BIS cautions after retry
-            if payload.bisCautions:
-                validation_results = validate_bis_cautions_in_report(report_text, payload.bisCautions)
-                missing_cautions = [ing for ing, found in validation_results.items() if not found]
-                bis_cautions_missing = len(missing_cautions) > 0
-                if bis_cautions_missing:
-                    print(f"⚠️ BIS cautions still missing after retry: {', '.join(missing_cautions)}")
-                else:
-                    print("✅ All BIS cautions now present in report")
-        
-        if not validate_report_content(report_text):
-            print("❌ Failed to generate valid report after multiple attempts")
-        
-        last_report["text"] = report_text
-
-        # 🔹 Render as HTML (with Download PDF button)
-        # Use absolute path for templates - check both possible locations
-        template_dir1 = os.path.join(os.path.dirname(__file__), "..", "..", "templates")
-        template_dir2 = os.path.join(os.path.dirname(__file__), "..", "..", "..", "templates")
-        
-        # Try the first path, then the second
-        if os.path.exists(template_dir1):
-            template_dir = template_dir1
-        elif os.path.exists(template_dir2):
-            template_dir = template_dir2
-        else:
-            # Fallback to current directory
-            template_dir = os.path.dirname(__file__)
-        
-        env = Environment(loader=FileSystemLoader(template_dir))
-        
-        try:
-            template = env.get_template("formulation_report.html")
-        except Exception as e:
-            # If template not found, return JSON response instead
-            return {
-                "title": "FormulationLooker 1.0 – Cumulative Report (Formulator Edition)",
-                "date": datetime.date.today().strftime("%d %b %Y"),
-                "report_text": report_text,
-                "message": "HTML template not found, returning JSON format"
-            }
-
-        html_content = template.render({
-            "title": "FormulationLooker 1.0 – Cumulative Report (Formulator Edition)",
-            "date": datetime.date.today().strftime("%d %b %Y"),
-            "report_text": report_text
-        })
-
-        return Response(content=html_content, media_type="text/html")
-
-    except Exception as e:
-        print(f"❌ Error in generate_report: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+# DEPRECATED: /formulation-report endpoint removed - use /formulation-report-json instead
+# The HTML endpoint was redundant and only used by test scripts.
+# The JSON endpoint (/formulation-report-json) is the main endpoint and provides structured data.
 
 
 @router.get("/formulation-report/status")

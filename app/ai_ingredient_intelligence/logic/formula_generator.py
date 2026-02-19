@@ -81,6 +81,56 @@ else:
         print("Warning: CLAUDE_API_KEY not set. Claude optimization will be disabled.")
 
 # ============================================================================
+# HELPER: PRODUCT TYPE TO UNIT MAPPING
+# ============================================================================
+
+def get_unit_for_product_type(product_type: str) -> str:
+    """
+    Get the appropriate unit (ml or g) for a product type.
+    
+    Liquid products (serums, toners, shampoos, etc.) use ml
+    Solid/semi-solid products (creams, lotions, masks, etc.) use g
+    
+    Args:
+        product_type: Product type string (e.g., "serum", "cream", "shampoo")
+    
+    Returns:
+        "ml" for liquid products, "g" for solid/semi-solid products
+    """
+    product_type_lower = product_type.lower()
+    
+    # Liquid products (use ml)
+    liquid_types = [
+        "serum", "toner", "essence", "ampoule", "water", "emulsion", 
+        "fluid", "drops", "oil", "face_oil", "hair_oil", "cleansing_balm",
+        "spray", "mist", "aerosol", "shampoo", "conditioner", "hair_serum",
+        "face_mist", "scalp_treatment"
+    ]
+    
+    # Solid/semi-solid products (use g)
+    solid_types = [
+        "cream", "lotion", "milk", "balm", "butter", "ointment", 
+        "pomade", "paste", "gel", "powder", "wax", "foam", "mousse",
+        "whip", "sheet", "patches", "pad", "scrub", "peel", "clay",
+        "hair_mask", "mask", "styling_cream", "styling_gel", "texturizer",
+        "pomade_wax", "exfoliator", "moisturizer", "cleanser"
+    ]
+    
+    # Check if product type matches any liquid type
+    for liquid in liquid_types:
+        if liquid in product_type_lower:
+            return "ml"
+    
+    # Check if product type matches any solid type
+    for solid in solid_types:
+        if solid in product_type_lower:
+            return "g"
+    
+    # Default: assume solid (g) for unknown types
+    return "g"
+
+
+# ============================================================================
 # STEP 1: TEMPLATE DATABASE
 # ============================================================================
 # Pre-defined formula templates for each product type
@@ -838,7 +888,7 @@ async def validate_and_enrich_claude_ingredients(
                 
                 warnings.append({
                     "type": "info",
-                    "text": f"'{ingredient_name}' (hero ingredient) is expensive (₹{cost_per_kg}/kg). To fit your budget (₹{cost_target_min}-{cost_target_max}/100g), consider reducing its percentage to {suggested_percentage:.1f}% or less."
+                    "text": f"'{ingredient_name}' (hero ingredient) is expensive (₹{cost_per_kg}/kg). To fit your budget (₹{cost_target_min}-{cost_target_max}/unit), consider reducing its percentage to {suggested_percentage:.1f}% or less."
                 })
                 hero_ingredient_costs[ingredient_name] = {
                     "cost_per_kg": cost_per_kg,
@@ -987,7 +1037,6 @@ async def select_ingredients_by_benefits(
     
     # Build prompt for Claude to select ingredients
     user_prompt = build_ingredient_selection_prompt(benefits, exclusions, hero_ingredients, cost_target)
-    full_prompt = f"{INGREDIENT_SELECTION_SYSTEM_PROMPT}\n\n{user_prompt}"
     
     try:
         if not claude_model:
@@ -995,12 +1044,26 @@ async def select_ingredients_by_benefits(
         
         print(f"🤖 Asking Claude to select ingredients for benefits: {', '.join(benefits)}")
         
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=16384,
-            temperature=0.3,
-            messages=[{"role": "user", "content": full_prompt}]
+        # Get cache_control for prompt caching to reduce token costs
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+        cache_control = get_cache_control_for_prompt(
+            system_prompt=INGREDIENT_SELECTION_SYSTEM_PROMPT,
+            prompt_type="ingredient_selection",
+            claude_client=claude_client,
+            ttl="1h"
         )
+        
+        api_params = {
+            "model": claude_model,
+            "max_tokens": 16384,
+            "temperature": 0.3,
+            "system": INGREDIENT_SELECTION_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": user_prompt}]
+        }
+        if cache_control:
+            api_params["cache_control"] = cache_control
+        
+        response = claude_client.messages.create(**api_params)
         
         if not response.content or len(response.content) == 0:
             raise ValueError("Empty response from Claude API")
@@ -1543,7 +1606,7 @@ def build_ingredient_selection_prompt(
     """Build prompt for Claude to select ingredients"""
     exclusions_text = ", ".join(exclusions) if exclusions else "None"
     hero_text = ", ".join(hero_ingredients) if hero_ingredients else "None"
-    cost_text = f"₹{cost_target.get('min', 30)}-{cost_target.get('max', 60)}/100g"
+    cost_text = f"₹{cost_target.get('min', 30)}-{cost_target.get('max', 60)}/unit"
     
     return f"""
 Select ingredients for a cosmetic formula with these requirements:
@@ -1678,19 +1741,30 @@ async def optimize_percentages_with_ai(
     # Build prompt for Claude
     prompt = build_optimization_prompt(allocated_ingredients, wish_data, template)
     
-    # Combine system prompt and user prompt for Claude
-    full_prompt = f"{FORMULA_OPTIMIZATION_SYSTEM_PROMPT}\n\n{prompt}"
-    
     try:
         if not claude_model:
             raise ValueError("Claude model not configured")
-            
-        response = claude_client.messages.create(
-            model=claude_model,
-            max_tokens=16384,
-            temperature=0.3,  # Lower temperature for more consistent results
-            messages=[{"role": "user", "content": full_prompt}]
+        
+        # Get cache_control for prompt caching to reduce token costs
+        from app.ai_ingredient_intelligence.logic.prompt_cache_manager import get_cache_control_for_prompt
+        cache_control = get_cache_control_for_prompt(
+            system_prompt=FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
+            prompt_type="formula_optimization",
+            claude_client=claude_client,
+            ttl="1h"
         )
+        
+        api_params = {
+            "model": claude_model,
+            "max_tokens": 16384,
+            "temperature": 0.3,  # Lower temperature for more consistent results
+            "system": FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        if cache_control:
+            api_params["cache_control"] = cache_control
+        
+        response = claude_client.messages.create(**api_params)
         
         if not response.content or len(response.content) == 0:
             raise ValueError("Empty response from Claude API")
@@ -1772,14 +1846,16 @@ def build_optimization_prompt(
     template: Dict
 ) -> str:
     """Build prompt for Claude optimization"""
+    product_type = wish_data.get('productType', 'serum')
+    unit = get_unit_for_product_type(product_type)
     return f"""
 Optimize this cosmetic formulation:
 
-PRODUCT TYPE: {wish_data.get('productType', 'serum')}
+PRODUCT TYPE: {product_type}
 BENEFITS: {', '.join(wish_data.get('benefits', []))}
 EXCLUSIONS: {', '.join(wish_data.get('exclusions', []))}
 HERO INGREDIENTS: {', '.join(wish_data.get('heroIngredients', []))}
-COST TARGET: ₹{wish_data.get('costMin', 30)}-{wish_data.get('costMax', 60)}/100g
+COST TARGET: ₹{wish_data.get('costMin', 30)}-{wish_data.get('costMax', 60)}/{unit}
 TEXTURE: {wish_data.get('texture', 'serum')}
 
 CURRENT FORMULATION:

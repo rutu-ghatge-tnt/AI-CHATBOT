@@ -186,6 +186,7 @@ async def create_query_from_payment(
 # No longer needed since commercialization_requests collection was removed
 # All commercialization requests are now created directly as QMS queries
 
+<<<<<<< HEAD
 
             "quantity_interest": quantity_interest,
 
@@ -516,5 +517,3 @@ async def create_query_from_payment(
 # No longer needed since commercialization_requests collection was removed
 
 # All commercialization requests are now created directly as QMS queries
-
-

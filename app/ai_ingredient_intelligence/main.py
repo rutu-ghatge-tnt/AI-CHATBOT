@@ -8,6 +8,7 @@ from app.ai_ingredient_intelligence.api.distributor_management import router as 
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.ingredient_history import router as ingredient_history_router
 from app.ai_ingredient_intelligence.api.market_research import router as market_research_router
+from app.ai_ingredient_intelligence.api.qms_routes import router as qms_router
 from app.ai_ingredient_intelligence.db.mongodb import db
 from app.ai_ingredient_intelligence.logic.ocr_processor import OCRProcessor
 from fastapi.middleware.cors import CORSMiddleware
@@ -73,7 +74,7 @@ async def root():
         "docs": "/docs",
         "endpoints": {
             "ocr_analysis": "/api/analyze-inci",
-            "formulation_report": "/api/formulation-report",
+            "formulation_report": "/api/formulation-report-json",
             "health": "/health"
         }
     }
@@ -135,7 +136,7 @@ async def api_info():
                 "input_types": ["text", "pdf", "image", "camera"]
             },
             "formulation_report": {
-                "url": "/api/formulation-report",
+                "url": "/api/formulation-report-json",
                 "method": "POST",
                 "description": "Generate detailed formulation analysis reports"
             },
@@ -157,6 +158,7 @@ app.include_router(distributor_management_router, prefix="/api")
 app.include_router(product_comparison_router, prefix="/api")
 app.include_router(ingredient_history_router, prefix="/api")
 app.include_router(market_research_router, prefix="/api")
+app.include_router(qms_router, prefix="/api")  # QMS - Query Management System
 
 if __name__ == "__main__":
     import uvicorn

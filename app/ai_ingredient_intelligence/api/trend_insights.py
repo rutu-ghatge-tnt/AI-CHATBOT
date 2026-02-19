@@ -1,0 +1,582 @@
+"""
+Trend Insights API Endpoints
+============================
+
+API endpoints for real-time market intelligence using SerpAPI.
+"""
+
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import Optional, List
+from datetime import datetime
+
+from app.ai_ingredient_intelligence.auth import verify_jwt_token
+from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
+# synthesize_trend_insights - function doesn't exist, will handle gracefully in endpoint
+from app.ai_ingredient_intelligence.logic.trend_monitor import TrendMonitor
+from app.ai_ingredient_intelligence.models.trend_schemas import (
+    TrendAnalysisRequest,
+    TrendAnalysisResponse,
+    ConsumerIntentRequest,
+    ConsumerIntentResponse,
+    CompetitiveAnalysisRequest,
+    CompetitiveAnalysisResponse,
+    RegionalAnalysisRequest,
+    RegionalAnalysisResponse,
+    CompareIngredientsRequest,
+    CompareIngredientsResponse,
+    TrendSynthesisRequest,
+    TrendSynthesisResponse
+)
+
+router = APIRouter(prefix="/trends", tags=["Trend Insights"])
+
+# Initialize analyzer and monitor (lazy initialization to avoid errors if SERPAPI_KEY not set)
+analyzer = None
+monitor = None
+
+def get_analyzer():
+    """Lazy initialization of analyzer"""
+    global analyzer
+    if analyzer is None:
+        analyzer = TrendAnalyzer()
+    return analyzer
+
+def get_monitor():
+    """Lazy initialization of monitor"""
+    global monitor
+    if monitor is None:
+        monitor = TrendMonitor()
+    return monitor
+
+
+@router.post("/analyze", response_model=TrendAnalysisResponse)
+async def analyze_trend(
+    request: TrendAnalysisRequest,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Analyze trend for a single ingredient
+    
+    Returns trend classification, growth rates, and related queries
+    """
+    max_retries = 3
+    retry_delay = 1  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            result = await get_analyzer().analyze_ingredient_trend(
+                request.ingredient,
+                request.time_range,
+                request.compare_with
+            )
+            
+            # Check if result is None or has error
+            if not result:
+                if attempt < max_retries - 1:
+                    print(f"⚠️ Attempt {attempt + 1} failed: No data returned, retrying...")
+                    import asyncio
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise HTTPException(status_code=500, detail="No data returned from trend analysis after retries")
+            
+            if "error" in result:
+                error_msg = result["error"]
+                # Retry on certain errors
+                if "temporarily unavailable" in error_msg.lower() or "rate limit" in error_msg.lower():
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ Attempt {attempt + 1} failed: {error_msg}, retrying...")
+                        import asyncio
+                        await asyncio.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                        continue
+                # Return 400 for client errors that shouldn't be retried
+                raise HTTPException(status_code=400, detail=error_msg)
+            
+            # Success - return result
+            return result
+            
+        except HTTPException:
+            # Re-raise HTTP exceptions (they're already properly formatted)
+            raise
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"⚠️ Attempt {attempt + 1} failed with exception: {str(e)}, retrying...")
+                import asyncio
+                await asyncio.sleep(retry_delay * (attempt + 1))
+                continue
+            # Last attempt failed
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Internal server error after {max_retries} attempts: {str(e)}")
+
+
+@router.post("/consumer-intent", response_model=ConsumerIntentResponse)
+async def analyze_consumer_intent(
+    request: ConsumerIntentRequest,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Analyze consumer intent from People Also Ask questions
+    
+    Categorizes questions by intent type (efficacy, safety, usage, purchase, comparison)
+    """
+    try:
+        result = await get_analyzer().analyze_consumer_intent(
+            request.ingredient,
+            request.concerns
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/competitive", response_model=CompetitiveAnalysisResponse)
+async def analyze_competitive(
+    request: CompetitiveAnalysisRequest,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Analyze competitive landscape from Google Shopping data
+    
+    Returns price distribution, brand analysis, and market overview
+    """
+    try:
+        result = await get_analyzer().analyze_competitive_landscape(
+            request.category,
+            request.price_min,
+            request.price_max
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/regional", response_model=RegionalAnalysisResponse)
+async def analyze_regional(
+    request: RegionalAnalysisRequest,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Analyze regional demand across Indian states
+    
+    Categorizes states by demand level (high, moderate, low)
+    """
+    try:
+        result = await get_analyzer().analyze_regional_demand(
+            request.ingredient,
+            request.time_range
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/compare", response_model=CompareIngredientsResponse)
+async def compare_ingredients(
+    request: CompareIngredientsRequest,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Compare multiple ingredients (up to 5)
+    
+    Returns relative interest levels for each ingredient
+    """
+    try:
+        if len(request.ingredients) > 5:
+            raise HTTPException(status_code=400, detail="Maximum 5 ingredients allowed for comparison")
+        
+        result = await get_analyzer().compare_ingredients(
+            request.ingredients,
+            request.time_range
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/synthesis", response_model=TrendSynthesisResponse)
+async def synthesize_trends(
+    request: TrendSynthesisRequest,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Comprehensive trend synthesis combining all data sources
+    
+    Returns complete analysis with AI-powered insights and recommendations
+    """
+    try:
+        # Gather all data sources
+        analyzer_instance = get_analyzer()
+        
+        # Clean ingredient name - remove parentheses and extra text for better API queries
+        # e.g., "Ascorbyl Glucoside (Vitamin C)" -> "Ascorbyl Glucoside"
+        clean_ingredient = request.ingredient.split("(")[0].strip()
+        
+        trend_data = await analyzer_instance.analyze_ingredient_trend(
+            clean_ingredient,
+            request.time_range
+        )
+        
+        consumer_intent_data = None
+        competitive_data = None
+        regional_data = None
+        
+        if request.include_consumer_intent:
+            consumer_intent_data = await analyzer_instance.analyze_consumer_intent(clean_ingredient)
+        
+        if request.include_competitive:
+            competitive_data = await analyzer_instance.analyze_competitive_landscape(f"{clean_ingredient} serum")
+        
+        if request.include_regional:
+            regional_data = await analyzer_instance.analyze_regional_demand(
+                clean_ingredient,
+                request.time_range
+            )
+        
+        # Send to Claude for synthesis
+        # Safely check for errors - handle None case
+        safe_trend_data = None
+        if trend_data and isinstance(trend_data, dict) and "error" not in trend_data:
+            safe_trend_data = trend_data
+        elif trend_data:
+            print(f"⚠️ Trend data has error: {trend_data.get('error', 'Unknown error')}")
+        
+        safe_consumer_intent_data = None
+        if consumer_intent_data and isinstance(consumer_intent_data, dict) and "error" not in consumer_intent_data:
+            safe_consumer_intent_data = consumer_intent_data
+        elif consumer_intent_data:
+            print(f"⚠️ Consumer intent data has error: {consumer_intent_data.get('error', 'Unknown error')}")
+        
+        safe_competitive_data = None
+        if competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data:
+            safe_competitive_data = competitive_data
+        elif competitive_data:
+            print(f"⚠️ Competitive data has error: {competitive_data.get('error', 'Unknown error')}")
+        
+        safe_regional_data = None
+        if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
+            safe_regional_data = regional_data
+        elif regional_data:
+            print(f"⚠️ Regional data has error: {regional_data.get('error', 'Unknown error')}")
+        
+        # Log what data we have
+        print(f"📊 Synthesis data status: trend={bool(safe_trend_data)}, consumer={bool(safe_consumer_intent_data)}, competitive={bool(safe_competitive_data)}, regional={bool(safe_regional_data)}")
+        
+        # Only proceed with synthesis if we have at least some data
+        # Check if any data source has valid (non-empty) data
+        has_valid_data = (
+            (safe_trend_data is not None and isinstance(safe_trend_data, dict) and len(safe_trend_data) > 0) or
+            (safe_consumer_intent_data is not None and isinstance(safe_consumer_intent_data, dict) and len(safe_consumer_intent_data) > 0) or
+            safe_competitive_data is not None or
+            safe_regional_data is not None
+        )
+        
+        synthesis_result = None
+        if has_valid_data:
+            # synthesize_trend_insights function not available - return error message
+            default_synthesis = {
+                "opportunity_score": None,
+                "scores_breakdown": {},
+                "tier": None,
+                "confidence": "low",
+                "key_insights": ["Synthesis function not available. Please use /api/make-wish/market-trends endpoint instead."],
+                "product_recommendations": [],
+                "marketing_angles": [],
+                "risks": [],
+                "next_steps": []
+            }
+            synthesis_result = {
+                "error": "synthesize_trend_insights function is not available. Use /api/make-wish/market-trends endpoint instead.",
+                "synthesis": default_synthesis
+            }
+        else:
+            default_synthesis = {
+                "opportunity_score": None,
+                "scores_breakdown": {},
+                "tier": None,
+                "confidence": "low",
+                "key_insights": [],
+                "product_recommendations": [],
+                "marketing_angles": [],
+                "risks": [],
+                "next_steps": []
+            }
+            synthesis_result = {
+                "error": "No valid data available for synthesis",
+                "synthesis": default_synthesis  # Return default structure instead of None
+            }
+        
+        # Safely check for errors when building response
+        safe_trend_analysis = None
+        if trend_data and isinstance(trend_data, dict) and "error" not in trend_data:
+            safe_trend_analysis = trend_data
+        
+        safe_competitive_landscape = None
+        if competitive_data and isinstance(competitive_data, dict) and "error" not in competitive_data:
+            safe_competitive_landscape = competitive_data
+        
+        safe_regional_demand = None
+        if regional_data and isinstance(regional_data, dict) and "error" not in regional_data:
+            safe_regional_demand = regional_data
+        
+        # Build response with proper error handling
+        # Always provide a valid synthesis object structure, even if it failed
+        default_synthesis = {
+            "opportunity_score": None,
+            "scores_breakdown": {},
+            "tier": None,
+            "confidence": "low",
+            "key_insights": [],
+            "product_recommendations": [],
+            "marketing_angles": [],
+            "risks": [],
+            "next_steps": []
+        }
+        
+        synthesis_data = default_synthesis.copy()
+        if synthesis_result and synthesis_result.get("synthesis"):
+            # Merge the actual synthesis data with defaults to ensure all fields exist
+            synthesis_data.update(synthesis_result.get("synthesis", {}))
+        
+        response_data = {
+            "ingredient": request.ingredient,
+            "trend_analysis": safe_trend_analysis,
+            "consumer_intent": safe_consumer_intent_data if safe_consumer_intent_data else consumer_intent_data,
+            "competitive_landscape": safe_competitive_landscape,
+            "regional_demand": safe_regional_demand,
+            "synthesis": synthesis_data,  # Always return valid structure, never null
+            "error": synthesis_result.get("error") if synthesis_result else None
+        }
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Synthesis API error: {error_trace}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
+@router.post("/monitor/run")
+async def run_monitoring(
+    ingredients: Optional[List[str]] = None,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Run trend monitoring for tracked ingredients
+    
+    Manually trigger monitoring (also runs on schedule)
+    """
+    try:
+        result = await get_monitor().monitor_tracked_ingredients(ingredients)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/alerts")
+async def get_alerts(
+    limit: int = Query(50, ge=1, le=200),
+    severity: Optional[str] = Query(None, regex="^(high|medium|low)$"),
+    acknowledged: Optional[bool] = Query(None),
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Get recent trend alerts
+    
+    Returns alerts for explosive growth, breakout queries, and declining trends
+    """
+    try:
+        alerts = await get_monitor().get_recent_alerts(limit=limit, severity=severity, acknowledged=acknowledged)
+        return {
+            "alerts": alerts,
+            "count": len(alerts)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(
+    alert_id: str,
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """Mark an alert as acknowledged"""
+    try:
+        success = await get_monitor().acknowledge_alert(alert_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        return {"success": True, "alert_id": alert_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/dashboard/summary")
+async def get_dashboard_summary(
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Get dashboard summary data
+    
+    Returns overview of trends, alerts, and key metrics
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        monitor_instance = get_monitor()
+        # Get recent alerts
+        recent_alerts = await monitor_instance.get_recent_alerts(limit=10, acknowledged=False)
+        
+        # Get trend history for tracked ingredients
+        tracked_ingredients = [
+            "niacinamide", "vitamin c", "retinol", "tranexamic acid", "ceramides"
+        ]
+        
+        ingredient_summaries = []
+        for ingredient in tracked_ingredients[:5]:  # Limit to 5 for performance
+            history = await monitor_instance.get_ingredient_history(ingredient, days=7)
+            if history:
+                latest = history[-1]
+                ingredient_summaries.append({
+                    "ingredient": ingredient,
+                    "current_interest": latest.get("current_interest", 0),
+                    "growth_6mo": latest.get("growth_6mo", 0),
+                    "trajectory": latest.get("trajectory", ""),
+                    "last_updated": latest.get("timestamp")
+                })
+        
+        return {
+            "summary": {
+                "total_alerts": len(recent_alerts),
+                "high_severity_alerts": len([a for a in recent_alerts if a.get("severity") == "high"]),
+                "tracked_ingredients": len(tracked_ingredients),
+                "last_updated": datetime.utcnow().isoformat()
+            },
+            "recent_alerts": recent_alerts[:5],
+            "ingredient_summaries": ingredient_summaries
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/dashboard/ingredient/{ingredient}")
+async def get_ingredient_dashboard(
+    ingredient: str,
+    days: int = Query(30, ge=1, le=365),
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Get dashboard data for a specific ingredient
+    
+    Returns trend history, alerts, and current status
+    """
+    try:
+        monitor_instance = get_monitor()
+        analyzer_instance = get_analyzer()
+        # Get trend history
+        history = await monitor_instance.get_ingredient_history(ingredient, days=days)
+        
+        # Get recent alerts for this ingredient
+        all_alerts = await monitor_instance.get_recent_alerts(limit=100)
+        ingredient_alerts = [a for a in all_alerts if a.get("ingredient") == ingredient]
+        
+        # Get current trend analysis
+        current_analysis = await analyzer_instance.analyze_ingredient_trend(ingredient)
+        
+        return {
+            "ingredient": ingredient,
+            "history": history,
+            "alerts": ingredient_alerts,
+            "current_analysis": current_analysis if "error" not in current_analysis else None,
+            "summary": {
+                "data_points": len(history),
+                "total_alerts": len(ingredient_alerts),
+                "unacknowledged_alerts": len([a for a in ingredient_alerts if not a.get("acknowledged")])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/dashboard/trending")
+async def get_trending_ingredients(
+    limit: int = Query(10, ge=1, le=50),
+    min_growth: float = Query(20.0, description="Minimum 6-month growth rate"),
+    current_user: dict = Depends(verify_jwt_token)
+):
+    """
+    Get trending ingredients (high growth)
+    
+    Returns ingredients with growth above threshold
+    """
+    try:
+        from app.ai_ingredient_intelligence.logic.trend_monitor import DEFAULT_TRACKED_INGREDIENTS
+        
+        monitor_instance = get_monitor()
+        trending = []
+        for ingredient in DEFAULT_TRACKED_INGREDIENTS[:limit * 2]:  # Check more than needed
+            history = await monitor_instance.get_ingredient_history(ingredient, days=7)
+            if history:
+                latest = history[-1]
+                growth = latest.get("growth_6mo", 0)
+                if growth >= min_growth:
+                    trending.append({
+                        "ingredient": ingredient,
+                        "growth_6mo": growth,
+                        "current_interest": latest.get("current_interest", 0),
+                        "trajectory": latest.get("trajectory", ""),
+                        "last_updated": latest.get("timestamp")
+                    })
+        
+        # Sort by growth and return top N
+        trending.sort(key=lambda x: x["growth_6mo"], reverse=True)
+        return {
+            "trending_ingredients": trending[:limit],
+            "threshold": min_growth,
+            "count": len(trending[:limit])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/health")
+async def health_check():
+    """Health check endpoint for trend insights service"""
+    try:
+        # Check if SerpAPI key is configured
+        import os
+        has_key = os.getenv("SERPAPI_KEY") is not None
+        
+        return {
+            "status": "healthy" if has_key else "configured",
+            "serpapi_configured": has_key,
+            "message": "Trend Insights API is operational" if has_key else "SERPAPI_KEY not configured"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+

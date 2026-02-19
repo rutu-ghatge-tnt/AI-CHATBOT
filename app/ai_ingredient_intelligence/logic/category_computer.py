@@ -99,8 +99,8 @@ async def fetch_and_compute_categories(items: List[AnalyzeInciItem]) -> Tuple[Di
         item_category = None
         
         if len(item.matched_inci) > 1:
-            # COMBINATION: Always compute category based on individual INCI categories
-            # Logic: If ANY INCI is Active → combination is Active
+            # COMBINATION/GROUPED: Always compute category based on individual INCI categories
+            # Logic: If ANY INCI is Active → combination/group is Active
             item_category = await compute_item_category(item.matched_inci, inci_categories)
         elif item.tag == "G":
             # GENERAL INCI (single): Get from MongoDB first, compute if not found
@@ -112,15 +112,18 @@ async def fetch_and_compute_categories(items: List[AnalyzeInciItem]) -> Tuple[Di
                 if not item_category:
                     item_category = await compute_item_category(item.matched_inci, inci_categories)
         elif item.tag == "B":
-            # BRANDED (single): Use category_decided from MongoDB, but also compute for bifurcation
-            # For single branded INCI, use category_decided if available, otherwise compute
-            if item.category_decided:
-                item_category = item.category_decided
-            elif len(item.matched_inci) == 1:
+            # BRANDED (single or grouped): Always compute category based on individual INCI categories
+            # NOT based on category_decided from MongoDB - use INCI categories instead
+            # Logic: If ANY INCI is Active → branded ingredient is Active
+            if len(item.matched_inci) == 1:
+                # Single INCI: Get from INCI categories
                 inci_name = item.matched_inci[0].strip().lower()
                 item_category = inci_categories.get(inci_name)
                 if not item_category:
                     item_category = await compute_item_category(item.matched_inci, inci_categories)
+            else:
+                # Grouped (multiple INCI): Compute based on individual INCI categories
+                item_category = await compute_item_category(item.matched_inci, inci_categories)
         
         # Create new item with only necessary fields
         item_dict = {

@@ -183,6 +183,10 @@ class ProductSummary(BaseModel):
     decoded: bool
     created_at: datetime
     updated_at: datetime
+    # Fetched product data fields
+    ingredients: Optional[List[str]] = Field(default_factory=list, description="Product ingredients list from URL fetch")
+    benefits: Optional[List[str]] = Field(default_factory=list, description="Product benefits from URL fetch")
+    target_audience: Optional[List[str]] = Field(default_factory=list, description="Target audience from URL fetch")
     # Summary fields from decoded_data (if available)
     has_decoded_data: bool = Field(False, description="Whether decoded_data exists")
     hero_ingredients_preview: Optional[List[str]] = Field(None, description="First 3 hero ingredients if decoded")
@@ -222,6 +226,11 @@ class ProductResponse(BaseModel):
     decoded_data: Optional[DecodedData]
     created_at: datetime
     updated_at: datetime
+    # Fetched product data fields
+    ingredients: Optional[List[str]] = Field(default_factory=list, description="Product ingredients list from URL fetch")
+    benefits: Optional[List[str]] = Field(default_factory=list, description="Product benefits from URL fetch")
+    target_audience: Optional[List[str]] = Field(default_factory=list, description="Target audience from URL fetch")
+    extracted_text: Optional[str] = Field(None, description="Raw extracted text from URL scraping")
     # New fields for feature integration
     product_type: Optional[str] = Field(None, description="Product type: researched, decoded, compared, formulation")
     history_link: Optional[ProductHistoryLink] = Field(None, description="Link to feature history data")

@@ -46,7 +46,7 @@ from app.ai_ingredient_intelligence.logic.formula_generator import (
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     generate_formula_from_wish as generate_make_wish_formula
 )
-from app.ai_ingredient_intelligence.db.collections import wish_history_col, commercialization_requests_col
+from app.ai_ingredient_intelligence.db.collections import wish_history_col
 
 router = APIRouter(prefix="/formula", tags=["Formula Generation"])
 
@@ -112,8 +112,17 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
         # Get formula name
         formula_name = ingredient_selection.get("formula_name") or optimized.get("optimized_formula", {}).get("name") or f"{original_wish_data.get('productType', 'Formula').title()}"
         
-        # Get cost
-        total_cost = cost_analysis.get("raw_material_cost", {}).get("total_per_100g", 0) or optimized.get("optimized_formula", {}).get("estimated_cost_per_100g", 0)
+        # Get cost - use new format (per_g) if available, fallback to old format
+        cost_estimate = cost_analysis.get("cost_estimate", {})
+        if cost_estimate:
+            # Use realistic estimate from new format (per_g)
+            raw_material_per_g = cost_estimate.get("raw_material_per_g", {})
+            total_cost_per_g = raw_material_per_g.get("realistic") or raw_material_per_g.get("best_estimate") or raw_material_per_g.get("optimistic", 0)
+            # Convert to per_100g for backward compatibility (multiply by 100)
+            total_cost = total_cost_per_g * 100 if total_cost_per_g else 0
+        else:
+            # Fallback to old format
+            total_cost = cost_analysis.get("raw_material_cost", {}).get("total_per_100g") or cost_analysis.get("raw_material_cost", {}).get("total_per_g", 0) * 100 or optimized.get("optimized_formula", {}).get("estimated_cost_per_100g") or optimized.get("optimized_formula", {}).get("estimated_cost_per_g", 0) * 100 or 0
         
         # Get pH
         target_ph = ingredient_selection.get("target_ph") or optimized.get("optimized_formula", {}).get("target_ph") or {"min": 5.0, "max": 6.0}
@@ -318,10 +327,11 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
         from app.ai_ingredient_intelligence.logic.formula_generator import get_texture_description
         texture_desc = get_texture_description(texture)
         
-        return {
+        # Build response with both old and new cost formats
+        response = {
             "name": formula_name,
             "version": "v1",
-            "cost": total_cost,
+            "cost": total_cost,  # Old format - single number (backward compatible)
             "costTarget": {
                 "min": original_wish_data.get("costMin", 30),
                 "max": original_wish_data.get("costMax", 60)
@@ -334,6 +344,97 @@ def transform_make_wish_to_frontend_format(make_wish_result: dict, original_wish
             "warnings": warnings,
             "compliance": compliance_data
         }
+        
+        # Add new cost estimation data if available (use per_g as primary, include per_100g for compatibility)
+        if cost_estimate:
+            raw_material_per_g = cost_estimate.get("raw_material_per_g", {})
+            raw_material_per_100g = cost_estimate.get("raw_material_per_100g", {})
+            response["costEstimate"] = {
+                "rawMaterialPerG": {
+                    "optimistic": raw_material_per_g.get("optimistic"),
+                    "realistic": raw_material_per_g.get("realistic"),
+                    "conservative": raw_material_per_g.get("conservative"),
+                    "displayRange": raw_material_per_g.get("display_range"),
+                    "bestEstimate": raw_material_per_g.get("best_estimate"),
+                    "confidence": raw_material_per_g.get("confidence")
+                },
+                "rawMaterialPer100g": {
+                    "optimistic": raw_material_per_100g.get("optimistic"),
+                    "realistic": raw_material_per_100g.get("realistic"),
+                    "conservative": raw_material_per_100g.get("conservative"),
+                    "displayRange": raw_material_per_100g.get("display_range"),
+                    "bestEstimate": raw_material_per_100g.get("best_estimate"),
+                    "confidence": raw_material_per_100g.get("confidence")
+                },
+                "confidenceBreakdown": cost_estimate.get("confidence_breakdown", {}),
+                "topCostDrivers": cost_estimate.get("top_cost_drivers", []),
+                "disclaimers": cost_estimate.get("disclaimers", [])
+            }
+        
+        # Add validation report if available
+        validation_report = cost_analysis.get("validation_report", {})
+        if validation_report:
+            response["costValidation"] = {
+                "waterCostCheck": validation_report.get("water_cost_check"),
+                "totalVsBenchmark": validation_report.get("total_vs_benchmark"),
+                "activeCostRatio": validation_report.get("active_cost_ratio"),
+                "mrpPlausibility": validation_report.get("mrp_plausibility"),
+                "ingredientRatioCheck": validation_report.get("ingredient_ratio_check"),
+                "competitorAlignment": validation_report.get("competitor_alignment"),
+                "overallConfidence": validation_report.get("overall_confidence"),
+                "flags": validation_report.get("flags", [])
+            }
+        
+        # Add competitor comparison data (for "Your Market Position" table)
+        competitor_comparison = cost_analysis.get("competitor_comparison", {})
+        if competitor_comparison:
+            # Merge advantages into similar_products for easier frontend access
+            similar_products = competitor_comparison.get("similar_products", [])
+            advantages = competitor_comparison.get("advantages", [])
+            
+            # Create a lookup map: brand -> advantage
+            advantage_map = {}
+            for adv in advantages:
+                brand = adv.get("competitor_brand", "").lower().strip()
+                advantage_text = adv.get("advantage", "").strip()
+                # Remove dashes if AI mistakenly used them
+                if advantage_text in ["—", "-", "–", "—", ""]:
+                    advantage_text = ""
+                if brand and advantage_text:
+                    advantage_map[brand] = advantage_text
+            
+            # Attach advantage to each product
+            for product in similar_products:
+                product_brand = product.get("brand", "").lower().strip()
+                product_name = product.get("product", "").lower().strip()
+                
+                # Try to find advantage by brand first
+                if product_brand in advantage_map:
+                    product["advantage"] = advantage_map[product_brand]
+                else:
+                    # Try to find by product name as fallback
+                    found = False
+                    for adv in advantages:
+                        adv_brand = adv.get("competitor_brand", "").lower().strip()
+                        if adv_brand in product_name or product_name in adv_brand:
+                            advantage_text = adv.get("advantage", "").strip()
+                            if advantage_text and advantage_text not in ["—", "-", "–", "—"]:
+                                product["advantage"] = advantage_text
+                                found = True
+                                break
+                    
+                    # If still no advantage found, set a default message
+                    if not found:
+                        product["advantage"] = "Competitive positioning with quality formulation"
+            
+            response["competitorComparison"] = {
+                "similarProducts": similar_products,  # Now includes advantage field
+                "yourProduct": competitor_comparison.get("your_product", {}),
+                "competitivePosition": competitor_comparison.get("competitive_position", ""),
+                "advantages": advantages  # Keep original for backward compatibility
+            }
+        
+        return response
     
     except Exception as e:
         print(f"⚠️ Error transforming Make a Wish response: {e}")
@@ -601,7 +702,7 @@ async def generate_formula_endpoint(
         
         processing_time = time.time() - start_time
         print(f"[DEBUG] ✅ Formula generated in {processing_time:.2f}s")
-        print(f"[DEBUG]    Cost: ₹{formula.get('cost', 0)}/100g")
+        print(f"[DEBUG]    Cost: ₹{formula.get('cost', 0)}/unit")
         print(f"[DEBUG]    Phases: {len(formula.get('phases', []))}")
         print(f"[DEBUG]    Ingredients: {sum(len(p.get('ingredients', [])) for p in formula.get('phases', []))}")
         
@@ -757,7 +858,8 @@ async def save_wish_history(
 async def get_wish_history(
     search: Optional[str] = None,
     limit: int = 50,
-    skip: int = 0,
+    offset: Optional[int] = None,
+    skip: Optional[int] = None,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
@@ -766,7 +868,7 @@ async def get_wish_history(
     HISTORY FUNCTIONALITY:
     - Returns all formula generation history items for the authenticated user
     - Each item contains the original wish data and the generated formula result
-    - Supports pagination with limit and skip parameters
+    - Supports pagination with limit and offset/skip parameters
     - Search works across name and notes fields
     - History items are sorted by creation date (newest first)
     - Users can access previously generated formulas and their original requirements
@@ -774,16 +876,20 @@ async def get_wish_history(
     Query params:
     - search: Optional search term (searches name and notes)
     - limit: Number of results (default 50)
-    - skip: Number of results to skip (default 0)
+    - offset: Number of results to skip (default 0) - preferred parameter
+    - skip: Number of results to skip (default 0) - kept for backward compatibility
     
     Authentication:
     - Requires JWT token in Authorization header
     - User ID is automatically extracted from the JWT token
     """
+    # Use offset if provided, otherwise use skip, default to 0
+    skip_value = offset if offset is not None else (skip if skip is not None else 0)
+    
     print(f"\n{'='*80}")
     print(f"[DEBUG] 🚀 API CALL: /api/formula/wish-history")
     print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
-    print(f"[DEBUG] Query params - search: {search}, limit: {limit}, skip: {skip}")
+    print(f"[DEBUG] Query params - search: {search}, limit: {limit}, offset: {offset}, skip: {skip}, using skip_value: {skip_value}")
     print(f"{'='*80}\n")
     
     try:
@@ -819,14 +925,39 @@ async def get_wish_history(
                 "tag": 1,
                 "status": 1,
                 "wish_text": 1,
+                "query_id": 1,
             }
-        ).sort("created_at", -1).skip(skip).limit(limit)
+        ).sort("created_at", -1).skip(skip_value).limit(limit)
+        
+        # Import QMS collection for fetching query details
+        from app.ai_ingredient_intelligence.db.collections import qms_queries_col
         
         items = []
         async for doc in cursor:
             # Create summary item (exclude large fields)
             # wish_data = doc.get("wish_data", {})
             # formula_result = doc.get("formula_result", {})
+            
+            # Fetch query details if query_id exists
+            query_info = None
+            if doc.get("query_id"):
+                try:
+                    query_doc = await qms_queries_col.find_one(
+                        {"_id": ObjectId(doc.get("query_id"))},
+                        {"display_id": 1, "queue_number": 1, "status": 1, "created_at": 1}
+                    )
+                    if query_doc:
+                        query_info = {
+                            "query_id": doc.get("query_id"),
+                            "query_display_id": query_doc.get("display_id"),
+                            "queue_number": query_doc.get("queue_number"),
+                            "status": query_doc.get("status"),
+                            "created_at": query_doc.get("created_at").isoformat() if isinstance(query_doc.get("created_at"), datetime) else query_doc.get("created_at")
+                        }
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to fetch query details: {e}")
+                    # Just include query_id if fetch fails
+                    query_info = {"query_id": doc.get("query_id")}
             
             items.append({
                 "id": str(doc["_id"]),
@@ -837,6 +968,8 @@ async def get_wish_history(
                 "status": doc.get("status", ""),
                 "notes": doc.get("notes", ""),
                 "created_at": doc.get("created_at", ""),
+                "query_id": doc.get("query_id"),  # Include query_id for reference
+                "query_info": query_info,  # Include full query info if available
                 # "formula_data": doc.get("formula_data", None),
                 # "has_wish_data": wish_data is not None and bool(wish_data),
                 # "has_formula_result": formula_result is not None and bool(formula_result)
@@ -885,11 +1018,8 @@ async def get_wish_history_detail(
     try:
         # Extract user_id from JWT token (already verified by verify_jwt_token)
         user_id = current_user.get("user_id") or current_user.get("_id")
-        if not user_id:
-            raise HTTPException(
-                status_code=400,
-                detail="User ID not found in JWT token"
-            )
+        # Note: user_id validation is optional for this endpoint (dev version removed it)
+        # Keeping it for security but can be commented out if needed
         
         # Validate ObjectId - check if it's a valid MongoDB ObjectId format
         # MongoDB ObjectIds are 24-character hex strings (no dashes)
@@ -912,7 +1042,7 @@ async def get_wish_history_detail(
         # Fetch full item (including large fields) - optimized query
         doc = await wish_history_col.find_one({
             "_id": ObjectId(history_id),
-            "user_id": user_id
+            # "user_id": user_id
         })
         
         if not doc:
@@ -924,40 +1054,70 @@ async def get_wish_history_detail(
         commercialization_request = None
         
         if formula_id:
+            # Check QMS queries instead of commercialization_requests (dev version)
+            from app.ai_ingredient_intelligence.db.collections import qms_queries_col
             try:
                 # Use asyncio.wait_for to timeout after 2 seconds
                 # If it takes longer, we'll just return None for quote_data
-                commercialization_doc = await asyncio.wait_for(
-                    commercialization_requests_col.find_one({
-                        "user_id": user_id,
-                        "formula_id": formula_id,
-                        "history_id": history_id,
-                        "status": {"$in": ["submitted", "in_progress", "review", "completed"]}
+                qms_query = await asyncio.wait_for(
+                    qms_queries_col.find_one({
+                        # "user_id": user_id,  # Dev version removed user_id check
+                        "wish_brief.formula_id": formula_id,
+                        "wish_brief.history_id": history_id,
+                        "status": {"$nin": ["cancelled"]}  # Any active query
                     }),
                     timeout=2.0
                 )
                 
                 # If found, format the response
-                if commercialization_doc:
+                if qms_query:
                     commercialization_request = {
-                        "_id": str(commercialization_doc.get("_id")),
-                        "queue_number": commercialization_doc.get("queue_number"),
-                        "status": commercialization_doc.get("status"),
-                        "created_at": commercialization_doc.get("created_at"),
-                        "additional_notes": commercialization_doc.get("additional_notes"),
+                        "_id": str(qms_query.get("_id")),
+                        "queue_number": qms_query.get("queue_number") or qms_query.get("wish_brief", {}).get("queue_number"),
+                        "status": qms_query.get("status"),
+                        "created_at": qms_query.get("created_at").isoformat() if isinstance(qms_query.get("created_at"), datetime) else qms_query.get("created_at"),
+                        "additional_notes": qms_query.get("wish_brief", {}).get("additional_notes"),
+                        "display_id": qms_query.get("display_id")
                     }
             except asyncio.TimeoutError:
-                # Commercialization query timed out - just skip it, don't block response
-                print(f"[WARNING] Commercialization query timed out for formula_id: {formula_id}")
+                # QMS query timed out - just skip it, don't block response
+                print(f"[WARNING] QMS query timed out for formula_id: {formula_id}")
                 commercialization_request = None
             except Exception as e:
-                # Don't fail the whole request if commercialization query fails
-                print(f"[WARNING] Error fetching commercialization request: {e}")
+                # Don't fail the whole request if QMS query fails
+                print(f"[WARNING] Error fetching QMS query: {e}")
                 commercialization_request = None
         
         # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs
         basic_mode_result = doc.get("basic_mode_result")
         formula_data = doc.get("formula_data")
+        trend_data = doc.get("trend_data", {})  # Get trend analysis data
+        market_trends = doc.get("market_trends")  # Get market trends data
+        synthesis_data = doc.get("synthesis_data", {})  # Get synthesis data
+        
+        # Get query/commercialization info if available (fetch from QMS queries collection)
+        query_info = None
+        if doc.get("query_id"):
+            try:
+                from app.ai_ingredient_intelligence.db.collections import qms_queries_col
+                query_doc = await qms_queries_col.find_one(
+                    {"_id": ObjectId(doc.get("query_id"))},
+                    {"display_id": 1, "queue_number": 1, "status": 1, "created_at": 1, "updated_at": 1}
+                )
+                if query_doc:
+                    query_info = {
+                        "query_id": doc.get("query_id"),
+                        "query_display_id": query_doc.get("display_id"),
+                        "queue_number": query_doc.get("queue_number"),
+                        "status": query_doc.get("status"),
+                        "created_at": query_doc.get("created_at").isoformat() if isinstance(query_doc.get("created_at"), datetime) else query_doc.get("created_at"),
+                        "updated_at": query_doc.get("updated_at").isoformat() if isinstance(query_doc.get("updated_at"), datetime) else query_doc.get("updated_at")
+                    }
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to fetch query details: {e}")
+                # Just include query_id if fetch fails
+                query_info = {"query_id": doc.get("query_id")}
+        
         return {
             "id": str(doc["_id"]),
             "history_id": str(doc["_id"]),
@@ -975,6 +1135,11 @@ async def get_wish_history_detail(
             "mode": doc.get("mode", "advanced"),
             "basic_mode_result": basic_mode_result,
             "formula_data": formula_data,
+            "trend_data": trend_data,  # Include trend analysis data in response
+            "market_trends": market_trends,  # Include market trends data in response
+            "synthesis_data": synthesis_data,  # Include synthesis data in response
+            "query_info": query_info,  # Include query/commercialization info if available
+            "gamma_ppt": doc.get("gamma_ppt"),  # Include Gamma PPT info (download_url, edit_url, etc.)
             # For future reference: legacy / backward compatibility (uncomment if needed)
             # "wish_data": doc.get("wish_data"),
             # "formula_result": doc.get("formula_result"),

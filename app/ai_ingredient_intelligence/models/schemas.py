@@ -23,7 +23,7 @@ class AnalyzeInciItem(BaseModel):
     match_score: float
     matched_inci: List[str]
     tag: Optional[str] = Field(None, description="Tag: 'B' for branded, 'G' for general INCI")
-    match_method: Optional[str] = Field(None, description="Match method: 'exact', 'fuzzy', 'synonym', or 'combination'")
+    match_method: Optional[str] = Field(None, description="Match method: 'exact', 'fuzzy', 'synonym', 'combination', or 'grouped'")
     
     # Pydantic v2: Use model_config to ensure supplier_name, supplier_id and ingredient_id are always included even when None
     # This ensures these fields are always serialized, even when None
@@ -178,6 +178,66 @@ class FormulaCompliance(BaseModel):
     vegan: bool
 
 
+class CostEstimateRawMaterial(BaseModel):
+    """Schema for raw material cost estimate with ranges (per g)"""
+    optimistic: Optional[float] = None
+    realistic: Optional[float] = None
+    conservative: Optional[float] = None
+    displayRange: Optional[str] = None
+    bestEstimate: Optional[float] = None
+    confidence: Optional[str] = None  # "high" | "medium" | "low"
+
+
+class CostEstimateRawMaterial100g(BaseModel):
+    """Schema for raw material cost estimate with ranges (per 100g) - for backward compatibility"""
+    optimistic: Optional[float] = None
+    realistic: Optional[float] = None
+    conservative: Optional[float] = None
+    displayRange: Optional[str] = None
+    bestEstimate: Optional[float] = None
+    confidence: Optional[str] = None  # "high" | "medium" | "low"
+
+
+class ConfidenceBreakdown(BaseModel):
+    """Schema for confidence breakdown by ingredient confidence level"""
+    high_confidence_ingredients: Optional[Dict[str, Any]] = None
+    medium_confidence_ingredients: Optional[Dict[str, Any]] = None
+    low_confidence_ingredients: Optional[Dict[str, Any]] = None
+
+
+class TopCostDriver(BaseModel):
+    """Schema for top cost driver ingredient"""
+    ingredient: str
+    percentage_in_formula: Optional[float] = None
+    cost_per_kg_range: Optional[str] = None
+    cost_per_g_range: Optional[str] = Field(None, description="Cost range per gram (primary format)")
+    cost_per_100g_range: Optional[str] = Field(None, description="Cost range per 100g (for backward compatibility)")
+    share_of_total: Optional[str] = None
+    confidence: Optional[str] = None
+    note: Optional[str] = None
+
+
+class CostEstimate(BaseModel):
+    """Schema for enhanced cost estimate with ranges and confidence"""
+    rawMaterialPerG: Optional[CostEstimateRawMaterial] = Field(None, description="Cost estimate per gram (primary format)")
+    rawMaterialPer100g: Optional[CostEstimateRawMaterial100g] = Field(None, description="Cost estimate per 100g (for backward compatibility)")
+    confidenceBreakdown: Optional[ConfidenceBreakdown] = None
+    topCostDrivers: Optional[List[TopCostDriver]] = None
+    disclaimers: Optional[List[str]] = None
+
+
+class CostValidation(BaseModel):
+    """Schema for cost validation report"""
+    waterCostCheck: Optional[str] = None
+    totalVsBenchmark: Optional[str] = None
+    activeCostRatio: Optional[str] = None
+    mrpPlausibility: Optional[str] = None
+    ingredientRatioCheck: Optional[str] = None
+    competitorAlignment: Optional[str] = None
+    overallConfidence: Optional[str] = None
+    flags: Optional[List[str]] = None
+
+
 class GenerateFormulaResponse(BaseModel):
     """Response schema for formula generation"""
     name: str
@@ -192,6 +252,9 @@ class GenerateFormulaResponse(BaseModel):
     warnings: List[FormulaWarning]
     compliance: FormulaCompliance
     history_id: Optional[str] = Field(None, description="History item ID (MongoDB ObjectId) - returned when history is auto-saved")
+    # New optional fields for enhanced cost estimation
+    costEstimate: Optional[CostEstimate] = Field(None, description="Enhanced cost estimate with ranges and confidence")
+    costValidation: Optional[CostValidation] = Field(None, description="Cost validation report with sanity checks")
 
 
 class DecodeHistoryItemSummary(BaseModel):
@@ -704,6 +767,7 @@ class MakeWishResponse(BaseModel):
     compliance: Dict[str, Any] = Field(..., description="Stage 5: Regulatory compliance check")
     metadata: Dict[str, Any] = Field(..., description="Metadata about the generation process")
     history_id: Optional[str] = Field(None, description="History item ID (MongoDB ObjectId) - returned when history is auto-saved")
+    market_trends: Optional[Dict[str, Any]] = Field(None, description="Market trends data for ingredients, benefits, and product type - ready for frontend visualization")
 
 
 class UpdateWishHistoryRequest(BaseModel):

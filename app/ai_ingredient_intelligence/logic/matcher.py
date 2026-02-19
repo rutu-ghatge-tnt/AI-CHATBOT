@@ -271,7 +271,8 @@ async def match_inci_names(
                 brand_inci_list = [i.strip().lower() for i in doc.get("inci_list", [])]
                 brand_inci_set = set(brand_inci_list)
                 
-                # Check if this branded ingredient's INCI list contains ALL INCI from the combination
+                # Match ONLY if ALL INCI from combination are in branded ingredient
+                # Check if the combination INCI set is a subset of branded ingredient INCI set
                 if combo_inci_set.issubset(brand_inci_set) and len(combo_inci_set) > 0:
                     # Also check that the combination matches a significant portion (at least 2 INCI or 50% match)
                     match_ratio = len(combo_inci_set) / len(brand_inci_set) if brand_inci_set else 0
@@ -304,6 +305,11 @@ async def match_inci_names(
                             supplier_id_str = str(raw_supplier_id)
                         print(f"[DEBUG] Step 0 - After conversion: supplier_id_str={supplier_id_str}")
                         
+                        # 🔧 FIX: matched_inci should ONLY contain INCI from the INPUT combination
+                        # Since combo_inci_set is subset of brand_inci_set, and we require all brand INCI in input,
+                        # all combo INCI are in input
+                        matched_inci_from_combo = list(combo_inci_set)  # All are in input since subset checks passed
+                        
                         matched_results.append({
                             "ingredient_name": doc["ingredient_name"],
                             "ingredient_id": str(doc["_id"]),
@@ -315,9 +321,9 @@ async def match_inci_names(
                             "functionality_category_tree": func_tree,
                             "chemical_class_category_tree": chem_tree,
                             "match_score": 1.0,
-                            "matched_inci": list(combo_inci_set),  # The INCI that matched from the combination
-                            "matched_count": len(combo_inci_set),
-                            "total_brand_inci": len(brand_inci_set),
+                            "matched_inci": matched_inci_from_combo,  # Only INCI from input combination
+                            "matched_count": len(matched_inci_from_combo),  # How many INCI from combination matched
+                            "total_brand_inci": len(brand_inci_set),  # Total INCI components in branded ingredient (for reference)
                             "tag": "B",  # Branded
                             "match_method": "combination"
                         })
@@ -326,10 +332,12 @@ async def match_inci_names(
                         matched_combinations.add(combo_string.lower())
                         matched_original_names.add(combo_string)
                         
-                        # Mark all matched INCI as branded
+                        # Mark ONLY the INCI from combination that are in input as branded
+                        # Since combo is subset of brand, and brand is subset of input, all combo INCI are in input
                         for inci in combo_inci_set:
-                            matched_inci_all.add(inci)
-                            ingredient_tags[inci] = "B"
+                            if inci in product_inci_set:  # Double-check: only mark if in input
+                                matched_inci_all.add(inci)
+                                ingredient_tags[inci] = "B"
                         
                         print(f"[OK] Matched combination '{combo_string}' to branded ingredient '{doc['ingredient_name']}'")
                         break  # Found a match for this combination, move to next
@@ -389,6 +397,7 @@ async def match_inci_names(
         brand_inci_set = set(brand_inci_list)
         total_brand_inci = len(brand_inci_set)
 
+        # Match ONLY if ALL INCI components of branded ingredient are in input INCI list
         if brand_inci_set.issubset(product_inci_set) and total_brand_inci > 0:
             func_tree = await build_category_tree(
                 func_cat_col,
@@ -418,6 +427,14 @@ async def match_inci_names(
                 supplier_id_str = str(raw_supplier_id)
             print(f"[DEBUG] Step 1 - After conversion: supplier_id_str={supplier_id_str}")
             
+            # Determine match method: "grouped" if branded ingredient has multiple INCI, "exact" if single
+            match_method = "grouped" if total_brand_inci > 1 else "exact"
+            
+            # 🔧 FIX: matched_inci should ONLY contain INCI that were in the INPUT list
+            # Since brand_inci_set is a subset of product_inci_set (subset check passed), 
+            # all branded INCI are in input, so we show all of them
+            matched_inci_from_input = list(brand_inci_set)  # All are in input since subset check passed
+            
             matched_results.append({
                 "ingredient_name": doc["ingredient_name"],
                 "ingredient_id": str(doc["_id"]),  # Add ingredient ID for distributor mapping
@@ -429,21 +446,23 @@ async def match_inci_names(
                 "functionality_category_tree": func_tree,
                 "chemical_class_category_tree": chem_tree,
                 "match_score": 1.0,
-                "matched_inci": list(brand_inci_set),
-                "matched_count": total_brand_inci,
-                "total_brand_inci": total_brand_inci,
+                "matched_inci": matched_inci_from_input,  # Only INCI from input (all branded INCI are in input)
+                "matched_count": len(matched_inci_from_input),  # How many INCI matched from input
+                "total_brand_inci": total_brand_inci,  # Total INCI components in branded ingredient (for reference)
                 "tag": "B",  # Branded
-                "match_method": "exact"
+                "match_method": match_method  # "grouped" for multiple INCI, "exact" for single INCI
             })
             
-            # Mark all matched INCI as branded
+            # Mark ONLY the INCI that were in the input as branded
+            # Since brand_inci_set is subset of product_inci_set, all are in input
             for inci in brand_inci_set:
-                matched_inci_all.add(inci)
-                ingredient_tags[inci] = "B"
-                # Find original name that matched
-                for orig_name, norm_name in product_inci_original.items():
-                    if norm_name == inci:
-                        matched_original_names.add(orig_name)
+                if inci in product_inci_set:  # Double-check: only mark if in input
+                    matched_inci_all.add(inci)
+                    ingredient_tags[inci] = "B"
+                    # Find original name that matched
+                    for orig_name, norm_name in product_inci_original.items():
+                        if norm_name == inci:
+                            matched_original_names.add(orig_name)
 
     # ============================================
     # STEP 2: Fuzzy/NLP matching for branded ingredients (spelling mistakes)
@@ -524,26 +543,39 @@ async def match_inci_names(
                                     supplier_id_str = str(raw_supplier_id)
                                 print(f"[DEBUG] Step 2 - After conversion: supplier_id_str={supplier_id_str}")
                                 
-                                matched_results.append({
-                                    "ingredient_name": doc["ingredient_name"],
-                                    "ingredient_id": str(doc["_id"]),  # Add ingredient ID for distributor mapping
-                                    "supplier_id": supplier_id_str,
-                                    "supplier_name": doc.get("supplier_name"),
-                                    "description": description,  # Use enhanced_description if available
-                                    "rephrased_description": doc.get("enhanced_description"),  # Keep for backward compatibility
-                                    "category_decided": doc.get("category_decided"),  # Include category_decided from MongoDB
-                                    "functionality_category_tree": func_tree,
-                                    "chemical_class_category_tree": chem_tree,
-                                    "match_score": confidence,
-                                    "matched_inci": [matched_inci],
-                                    "matched_count": 1,
-                                    "total_brand_inci": len(doc_inci_set),
-                                    "tag": "B",
-                                    "match_method": "fuzzy"
-                                })
-                                
-                                matched_inci_all.add(matched_inci)
-                                ingredient_tags[matched_inci] = "B"
+                                # 🔧 FIX: For fuzzy match, we should ONLY match if ALL branded INCI are in input
+                                # Check if ALL INCI from branded ingredient are in input (subset check)
+                                if doc_inci_set.issubset(product_inci_set):
+                                    # Only the INCI that fuzzy matched (which is in input)
+                                    matched_inci_from_fuzzy = [matched_inci]  # Only the INCI that fuzzy matched
+                                    
+                                    matched_results.append({
+                                        "ingredient_name": doc["ingredient_name"],
+                                        "ingredient_id": str(doc["_id"]),  # Add ingredient ID for distributor mapping
+                                        "supplier_id": supplier_id_str,
+                                        "supplier_name": doc.get("supplier_name"),
+                                        "description": description,  # Use enhanced_description if available
+                                        "rephrased_description": doc.get("enhanced_description"),  # Keep for backward compatibility
+                                        "category_decided": doc.get("category_decided"),  # Include category_decided from MongoDB
+                                        "functionality_category_tree": func_tree,
+                                        "chemical_class_category_tree": chem_tree,
+                                        "match_score": confidence,
+                                        "matched_inci": matched_inci_from_fuzzy,  # Only the INCI that matched from input
+                                        "matched_count": 1,  # How many INCI matched (fuzzy match found 1)
+                                        "total_brand_inci": len(doc_inci_set),  # Total INCI components in branded ingredient (for reference)
+                                        "tag": "B",
+                                        "match_method": "fuzzy"
+                                    })
+                                    
+                                    # Mark ONLY the INCI that are in input as branded
+                                    for inci in doc_inci_set:
+                                        if inci in product_inci_set:  # Only mark if in input
+                                            matched_inci_all.add(inci)
+                                            ingredient_tags[inci] = "B"
+                                else:
+                                    # Skip this branded ingredient - it has INCI not in input
+                                    print(f"[DEBUG] Step 2 - Skipping '{doc['ingredient_name']}': has INCI not in input (fuzzy match found '{matched_inci}' but branded ingredient has extra INCI)")
+                                    continue
                                 # Find original name
                                 for orig_name, norm_name in product_inci_original.items():
                                     if normalize_ingredient_name(orig_name) == ingredient_norm:
@@ -583,55 +615,67 @@ async def match_inci_names(
                 if normalized_synonyms.intersection(brand_inci_set):
                     matched_synonyms = normalized_synonyms.intersection(brand_inci_set)
                     
-                    func_tree = await build_category_tree(
-                        func_cat_col,
-                        doc.get("functional_category_ids", []),
-                        "functionalName"
-                    )
-                    chem_tree = await build_category_tree(
-                        chem_class_col,
-                        doc.get("chemical_class_ids", []),
-                        "chemicalClassName"
-                    )
-                    
-                    # Use enhanced_description if available, otherwise fallback to description
-                    description = doc.get("enhanced_description") or doc.get("description")
-                    
-                    # Debug: Check supplier_id value
-                    raw_supplier_id = doc.get("supplier_id")
-                    print(f"[DEBUG] Step 3 - Synonym match: ingredient_name={doc['ingredient_name']}, raw_supplier_id={raw_supplier_id}, type={type(raw_supplier_id)}")
-                    # Convert ObjectId to string, or keep as string/None
-                    if raw_supplier_id is None:
-                        supplier_id_str = None
-                    elif isinstance(raw_supplier_id, ObjectId):
-                        supplier_id_str = str(raw_supplier_id)
-                    elif isinstance(raw_supplier_id, str):
-                        supplier_id_str = raw_supplier_id
+                    # 🔧 FIX: Only match if ALL branded INCI are in input (subset check)
+                    if brand_inci_set.issubset(product_inci_set):
+                        func_tree = await build_category_tree(
+                            func_cat_col,
+                            doc.get("functional_category_ids", []),
+                            "functionalName"
+                        )
+                        chem_tree = await build_category_tree(
+                            chem_class_col,
+                            doc.get("chemical_class_ids", []),
+                            "chemicalClassName"
+                        )
+                        
+                        # Use enhanced_description if available, otherwise fallback to description
+                        description = doc.get("enhanced_description") or doc.get("description")
+                        
+                        # Debug: Check supplier_id value
+                        raw_supplier_id = doc.get("supplier_id")
+                        print(f"[DEBUG] Step 3 - Synonym match: ingredient_name={doc['ingredient_name']}, raw_supplier_id={raw_supplier_id}, type={type(raw_supplier_id)}")
+                        # Convert ObjectId to string, or keep as string/None
+                        if raw_supplier_id is None:
+                            supplier_id_str = None
+                        elif isinstance(raw_supplier_id, ObjectId):
+                            supplier_id_str = str(raw_supplier_id)
+                        elif isinstance(raw_supplier_id, str):
+                            supplier_id_str = raw_supplier_id
+                        else:
+                            supplier_id_str = str(raw_supplier_id)
+                        print(f"[DEBUG] Step 3 - After conversion: supplier_id_str={supplier_id_str}")
+                        
+                        # 🔧 FIX: matched_inci should only contain INCI that are in input
+                        # Since brand_inci_set is subset of product_inci_set, all are in input
+                        matched_inci_from_synonyms = list(matched_synonyms)  # Only the INCI that matched via synonyms (all in input)
+                        
+                        matched_results.append({
+                            "ingredient_name": doc["ingredient_name"],
+                            "ingredient_id": str(doc["_id"]),  # Add ingredient ID for distributor mapping
+                            "supplier_id": supplier_id_str,
+                            "supplier_name": doc.get("supplier_name"),
+                            "description": description,  # Use enhanced_description if available
+                            "rephrased_description": doc.get("enhanced_description"),  # Keep for backward compatibility
+                            "category_decided": doc.get("category_decided"),  # Include category_decided from MongoDB
+                            "functionality_category_tree": func_tree,
+                            "chemical_class_category_tree": chem_tree,
+                            "match_score": 0.9,  # Slightly lower score for synonym match
+                            "matched_inci": matched_inci_from_synonyms,  # Only INCI that matched via synonyms (all in input)
+                            "matched_count": len(matched_inci_from_synonyms),  # How many synonyms matched
+                            "total_brand_inci": len(brand_inci_set),  # Total INCI components in branded ingredient (for reference)
+                            "tag": "B",
+                            "match_method": "synonym"
+                        })
+                        
+                        # Mark ONLY the INCI that are in input as branded
+                        for inci in brand_inci_set:
+                            if inci in product_inci_set:  # Only mark if in input
+                                matched_inci_all.add(inci)
+                                ingredient_tags[inci] = "B"
                     else:
-                        supplier_id_str = str(raw_supplier_id)
-                    print(f"[DEBUG] Step 3 - After conversion: supplier_id_str={supplier_id_str}")
-                    
-                    matched_results.append({
-                        "ingredient_name": doc["ingredient_name"],
-                        "ingredient_id": str(doc["_id"]),  # Add ingredient ID for distributor mapping
-                        "supplier_id": supplier_id_str,
-                        "supplier_name": doc.get("supplier_name"),
-                        "description": description,  # Use enhanced_description if available
-                        "rephrased_description": doc.get("enhanced_description"),  # Keep for backward compatibility
-                        "category_decided": doc.get("category_decided"),  # Include category_decided from MongoDB
-                        "functionality_category_tree": func_tree,
-                        "chemical_class_category_tree": chem_tree,
-                        "match_score": 0.9,  # Slightly lower score for synonym match
-                        "matched_inci": list(matched_synonyms),
-                        "matched_count": len(matched_synonyms),
-                        "total_brand_inci": len(brand_inci_set),
-                        "tag": "B",
-                        "match_method": "synonym"
-                    })
-                    
-                    for syn in matched_synonyms:
-                        matched_inci_all.add(syn)
-                        ingredient_tags[syn] = "B"
+                        # Skip this branded ingredient - it has INCI not in input
+                        print(f"[DEBUG] Step 3 - Skipping '{doc['ingredient_name']}': has INCI not in input (synonym match found but branded ingredient has extra INCI)")
+                        continue
                     
                     matched_original_names.add(ingredient)
                     break

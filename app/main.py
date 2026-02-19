@@ -51,6 +51,14 @@ from app.ai_ingredient_intelligence.api.ingredient_history import router as ingr
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.health_checks import router as health_checks_router
 
+# Import Trend Insights router (with error handling for missing dependencies)
+try:
+    from app.ai_ingredient_intelligence.api.trend_insights import router as trend_insights_router
+except ImportError as e:
+    print(f"Warning: Could not import trend_insights router: {e}")
+    print("   Trend Insights API will not be available. This is not critical.")
+    trend_insights_router = None
+
 # Import Formula Generation router (with error handling for missing dependencies)
 try:
     from app.ai_ingredient_intelligence.api.formula_generation import router as formula_generation_router
@@ -59,7 +67,7 @@ except ImportError as e:
     print("   Formula Generation API will not be available. This is not critical.")
     formula_generation_router = None
 
-# Import Make a Wish router (with error handling for missing dependencies)
+# Import Make a Wish router (consolidated - includes all endpoints)
 try:
     from app.ai_ingredient_intelligence.api.make_wish_api_revised import router as make_wish_router
 except ImportError as e:
@@ -174,6 +182,10 @@ def custom_openapi():
                 "description": "Dashboard statistics and analytics endpoints"
             },
             {
+                "name": "Trend Insights",
+                "description": "Real-time market intelligence and trend analysis using SerpAPI"
+            },
+            {
                 "name": "Make a Wish",
                 "description": "Feature request and wishlist management"
             }
@@ -235,31 +247,36 @@ app.openapi = custom_openapi
 # This must be added BEFORE CORS middleware to ensure it wraps all requests
 app.add_middleware(TimingMiddleware)
 
-# ✅ CORS - Updated for production
-# Using both explicit origins and regex pattern for flexibility
+# ✅ CORS - Configuration loaded from .env
+# Parse CORS settings from environment variables
+cors_allow_origins_str = os.getenv("CORS_ALLOW_ORIGINS", "")
+cors_allow_origins = [origin.strip() for origin in cors_allow_origins_str.split(",") if origin.strip()] if cors_allow_origins_str else []
+
+cors_allow_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", None)
+
+cors_allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() == "true"
+
+cors_allow_methods_str = os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD")
+cors_allow_methods = [method.strip() for method in cors_allow_methods_str.split(",") if method.strip()] if cors_allow_methods_str else ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+
+cors_allow_headers_str = os.getenv("CORS_ALLOW_HEADERS", "*")
+cors_allow_headers = ["*"] if cors_allow_headers_str.strip() == "*" else [header.strip() for header in cors_allow_headers_str.split(",") if header.strip()]
+
+cors_expose_headers_str = os.getenv("CORS_EXPOSE_HEADERS", "*")
+cors_expose_headers = ["*"] if cors_expose_headers_str.strip() == "*" else [header.strip() for header in cors_expose_headers_str.split(",") if header.strip()]
+
+cors_max_age = int(os.getenv("CORS_MAX_AGE", "3600"))
+
 # This middleware handles all CORS preflight (OPTIONS) and actual requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://tt.skintruth.in", 
-        "https://capi.skintruth.in",
-        "http://localhost:5174", 
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:8501",
-        "https://metaverse.skinbb.com",
-        "https://formulynx.in",
-        "https://www.formulynx.in",
-        "http://formulynx.in",
-        "http://www.formulynx.in"
-    ],
-    allow_origin_regex=r"https?://(www\.)?formulynx\.in",
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,  # Cache preflight requests for 1 hour
+    allow_origins=cors_allow_origins,
+    allow_origin_regex=cors_allow_origin_regex,
+    allow_credentials=cors_allow_credentials,
+    allow_methods=cors_allow_methods,
+    allow_headers=cors_allow_headers,
+    expose_headers=cors_expose_headers,
+    max_age=cors_max_age,  # Cache preflight requests
 )
 
 # ✅ Existing chatbot API
@@ -298,15 +315,22 @@ app.include_router(product_comparison_router, prefix="/api")
 # ✅ Add health checks API
 app.include_router(health_checks_router, prefix="/api")
 
+# ✅ Add trend insights API
+if trend_insights_router is not None:
+    app.include_router(trend_insights_router, prefix="/api")
+else:
+    print("Warning: Trend Insights router not available, skipping registration")
+
 # ✅ Add formula generation API
 if formula_generation_router is not None:
     app.include_router(formula_generation_router, prefix="/api")
 else:
     print("Warning: Formula Generation router not available, skipping registration")
 
-# ✅ Add Make a Wish API
+# ✅ Add Make a Wish API (Consolidated - includes all endpoints)
 if make_wish_router is not None:
     app.include_router(make_wish_router, prefix="/api")
+    print("✅ Make a Wish API router registered successfully")
 else:
     print("Warning: Make a Wish router not available, skipping registration")
 
@@ -348,6 +372,15 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import auth router: {e}")
     print("   Authentication API will not be available.")
+
+# ✅ Add QMS (Query Management System) API
+try:
+    from app.ai_ingredient_intelligence.api.qms_routes import router as qms_router
+    app.include_router(qms_router, prefix="/api")
+    print("✅ QMS router registered successfully")
+except ImportError as e:
+    print(f"Warning: Could not import QMS router: {e}")
+    print("   QMS API will not be available.")
 
 # ✅ Add Timing Statistics API
 try:
