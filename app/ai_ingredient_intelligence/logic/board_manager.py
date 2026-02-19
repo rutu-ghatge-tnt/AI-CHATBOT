@@ -270,6 +270,10 @@ async def _format_product_summary(product_doc: Dict[str, Any]) -> Dict[str, Any]
         "decoded": product_doc.get("decoded", False),
         "created_at": product_doc.get("created_at"),
         "updated_at": product_doc.get("updated_at", product_doc.get("created_at")),
+        # Fetched product data fields
+        "ingredients": product_doc.get("ingredients", []),
+        "benefits": product_doc.get("benefits", []),
+        "target_audience": product_doc.get("target_audience", []),
         "has_decoded_data": has_decoded_data,
         "hero_ingredients_preview": hero_ingredients_preview,
         "estimated_cost": estimated_cost,
@@ -305,6 +309,7 @@ async def _format_product(product_doc: Dict[str, Any]) -> Dict[str, Any]:
         "platform": product_doc.get("platform", "other"),
         "image": image,
         "price": product_doc.get("price", 0),
+        "mrp": product_doc.get("mrp"),  # MRP (Maximum Retail Price) - optional
         "size": product_doc.get("size", 0),
         "unit": product_doc.get("unit", "ml"),
         "price_per_ml": product_doc.get("price_per_ml", 0),
@@ -317,6 +322,11 @@ async def _format_product(product_doc: Dict[str, Any]) -> Dict[str, Any]:
         "decoded_data": decoded_data,
         "created_at": product_doc.get("created_at"),
         "updated_at": product_doc.get("updated_at", product_doc.get("created_at")),
+        # Fetched product data fields
+        "ingredients": product_doc.get("ingredients", []),
+        "benefits": product_doc.get("benefits", []),
+        "target_audience": product_doc.get("target_audience", []),
+        "extracted_text": product_doc.get("extracted_text"),
         # New fields for feature integration
         "product_type": product_doc.get("product_type"),
         "history_link": product_doc.get("history_link"),
