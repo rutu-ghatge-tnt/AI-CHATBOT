@@ -37,7 +37,7 @@ async def deduct_credits(
     credit_key: CreditKey,
     transaction_type: Optional[str] = None,
     description: Optional[str] = None
-) -> dict:
+) -> Optional[dict]:
     """
     Deduct credits for a user operation.
     Sends a DeductCreditsRequest body: { "taskKey": "<credit_key>" }.
@@ -53,9 +53,10 @@ async def deduct_credits(
     Returns:
         Dict with keys: deducted (bool), creditsDeducted (int), creditsRemaining (int)
         from the API response data when status is 200.
+        Returns None if the credits API endpoint doesn't exist (404).
     
     Raises:
-        Exception: If credit deduction API call fails
+        Exception: If credit deduction API call fails (except 404, which returns None)
     """
     # Get API configuration from environment
     api_prefix = os.getenv("API_PREFIX", "/api")
@@ -86,6 +87,10 @@ async def deduct_credits(
                 }
                 print(f"✅ [CREDITS] Successfully deducted credits for user {user_id} (taskKey: {task_key}, reference: {reference_id})")
                 return result
+            elif response.status_code == 404:
+                # Credits API endpoint doesn't exist - log warning but don't fail
+                print(f"⚠️ [CREDITS] Credits API endpoint not found (404) - credit deduction skipped")
+                return None
             else:
                 error_msg = f"Credit deduction API returned status {response.status_code}: {response.text}"
                 print(f"⚠️ [CREDITS] {error_msg}")

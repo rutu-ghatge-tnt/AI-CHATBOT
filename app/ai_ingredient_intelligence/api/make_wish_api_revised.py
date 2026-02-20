@@ -879,7 +879,7 @@ async def process_generate_revised_background(
             print(f"⚠️ [BACKGROUND] Status not confirmed as 'completed', skipping notifications")
             return
         
-        # Deduct credits on success
+        # Deduct credits on success (gracefully handle if credits API doesn't exist)
         deduct_credits_result = None
         try:
             deduct_credits_result = await deduct_credits(
@@ -889,6 +889,8 @@ async def process_generate_revised_background(
                 transaction_type="make_wish_generation_revised",
                 description=f"Make a Wish formula generation (revised) - {history_id}"
             )
+            if deduct_credits_result is None:
+                print(f"ℹ️ [BACKGROUND] Credit deduction skipped (credits API not available)")
         except Exception as credit_error:
             print(f"⚠️ [BACKGROUND] Failed to deduct credits: {credit_error}")
             # Don't fail the whole process if credit deduction fails
