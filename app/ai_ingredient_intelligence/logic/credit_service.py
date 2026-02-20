@@ -60,12 +60,13 @@ async def deduct_credits(
     Raises:
         Exception: If credit deduction API call fails (except 404, which returns None)
     """
-    # Get API configuration from environment
-    api_prefix = os.getenv("API_PREFIX", "/api")
-    base_url = os.getenv("BASE_URL", "http://localhost:8000")
-    
-    # Construct credit deduction endpoint
-    credit_api_url = f"{base_url}{api_prefix}/credits/deduct"
+    # Get third-party credits API URL from environment (required)
+    credit_api_url = os.getenv("CREDITS_API_URL")
+    if not credit_api_url:
+        raise Exception(
+            "CREDITS_API_URL environment variable is required. "
+            "Please set it to your third-party credits API endpoint URL."
+        )
     
     # Use enum value as the task key (API expects DeductCreditsRequest with taskKey only)
     task_key = credit_key.value

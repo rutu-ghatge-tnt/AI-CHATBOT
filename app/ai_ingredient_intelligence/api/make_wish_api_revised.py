@@ -940,10 +940,14 @@ async def process_generate_revised_background(
             "type": "make_wish_revised"
         }
         if deduct_credits_result:
+            # Use actual values from third-party API response (not hardcoded)
+            credits_deducted = deduct_credits_result.get("creditsDeducted")
+            credits_remaining = deduct_credits_result.get("creditsRemaining")
+            print(f"💰 [BACKGROUND] Credit info from API: deducted={credits_deducted}, remaining={credits_remaining}")
             notification_data["deduct_credits"] = {
                 "deducted": deduct_credits_result.get("deducted"),
-                "creditsDeducted": deduct_credits_result.get("creditsDeducted"),
-                "creditsRemaining": deduct_credits_result.get("creditsRemaining"),
+                "creditsDeducted": credits_deducted,
+                "creditsRemaining": credits_remaining,
             }
         
         # Send real-time WebSocket notification using enhanced notification module (ONLY after completion)

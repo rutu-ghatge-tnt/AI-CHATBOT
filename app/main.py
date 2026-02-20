@@ -390,14 +390,8 @@ except ImportError as e:
     print(f"Warning: Could not import timing_stats router: {e}")
     print("   Timing Statistics API will not be available.")
 
-# ✅ Add Credits API (Global credit deduction service)
-try:
-    from app.ai_ingredient_intelligence.api.credits import router as credits_router
-    app.include_router(credits_router, prefix="/api")
-    print("✅ Credits API router registered successfully")
-except ImportError as e:
-    print(f"Warning: Could not import credits router: {e}")
-    print("   Credits API will not be available.")
+# ✅ Credits API: Using third-party API via CREDITS_API_URL environment variable
+# credit_service.py handles all credit deduction calls to external API
 
 # ✅ New image-to-JSON API - Commented out - module doesn't exist
 # app.include_router(image_extractor_router, prefix="/api")
