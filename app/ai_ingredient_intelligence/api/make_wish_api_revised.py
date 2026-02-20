@@ -78,7 +78,6 @@ from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     call_ai_with_claude, generate_formula_from_wish
 )
-from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_formula_basic_mode
 
 # Import credit service
 from app.ai_ingredient_intelligence.logic.credit_service import (
@@ -846,8 +845,8 @@ async def process_generate_revised_background(
         
         # Generate formula using basic mode (from dev)
         timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"🤖 [BACKGROUND] [{timestamp}] Calling AI to generate formula (basic mode)...")
-        basic_result = await generate_formula_basic_mode(wish_data)
+        print(f"🤖 [BACKGROUND] [{timestamp}] Calling AI to generate formula...")
+        basic_result = await generate_formula_from_wish(wish_data)
         timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
         print(f"✅ [BACKGROUND] [{timestamp}] Formula generation completed!")
         basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names
