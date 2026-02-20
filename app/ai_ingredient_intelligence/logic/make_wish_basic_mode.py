@@ -94,6 +94,11 @@ def generate_basic_mode_prompt(wish_data: dict) -> str:
     texture = wish_data.get('texture', 'lightweight')
     cost_min = wish_data.get('costMin', 30)
     cost_max = wish_data.get('costMax', 60)
+    complexity = wish_data.get('complexity', 'classic')
+    max_ingredients = wish_data.get('maxIngredients', 14)
+    active_slots = wish_data.get('activeSlots', 3)
+    include_sensorials = wish_data.get('includeSensorials', True)
+    complexity_description = wish_data.get('complexityDescription', '')
     claims = wish_data.get('claims', [])
     target_audience = wish_data.get('targetAudience', [])
     additional_notes = wish_data.get('additionalNotes', '') or wish_data.get('notes', '')
@@ -122,6 +127,32 @@ def generate_basic_mode_prompt(wish_data: dict) -> str:
     
     natural_language_input = " ".join(natural_language_parts) if natural_language_parts else product_type
     
+    # Build complexity constraints section
+    complexity_section = f"""
+## FORMULA COMPLEXITY CONSTRAINTS (CRITICAL - MUST FOLLOW)
+
+Complexity Level: {complexity.title()} ({complexity_description})
+
+**MANDATORY CONSTRAINTS:**
+- Maximum Total Ingredients: {max_ingredients} (including base ingredients, actives, preservatives, etc.)
+- Maximum Hero Actives: {active_slots} (primary active ingredients that deliver main benefits)
+- Include Sensorials: {'Yes' if include_sensorials else 'No'} (texture enhancers, sensory modifiers, botanical extracts)
+
+**INGREDIENT SELECTION RULES:**
+- For {complexity} complexity, select ingredients that align with the {complexity_description} philosophy
+- Do NOT exceed {max_ingredients} total ingredients in the final formula
+- Focus on {active_slots} hero actives that directly address the primary concerns
+- {'Include texture enhancers and sensorial ingredients for a luxurious experience' if include_sensorials else 'Keep formula minimal - only essential functional ingredients, no sensorial additives'}
+- Base ingredients (water, humectants, preservatives, pH adjusters) are required and count toward the total
+
+**FORMULA GENERATION GUIDANCE:**
+- Minimalist ({max_ingredients if complexity == 'minimalist' else '8'} max): Clean label, essential actives only, minimal base ingredients
+- Classic ({max_ingredients if complexity == 'classic' else '14'} max): Balanced formula with proven actives, standard base ingredients
+- Luxe ({max_ingredients if complexity == 'luxe' else '22'} max): Multi-active powerhouse, premium base ingredients, sensorial enhancements
+
+IMPORTANT: The final formula MUST have {max_ingredients} or fewer total ingredients. Count every ingredient including water, preservatives, and pH adjusters.
+"""
+    
     prompt = f"""# FORMULYNX FORMULA GENERATION PROMPT - BASIC MODE
 
 ## INPUT
@@ -130,47 +161,53 @@ Category: {category}
 Product Type: {product_type}
 Benefits: {', '.join(benefits) if benefits else 'General'}
 Price Segment: {price_segment} (Cost target: ₹{cost_min}-₹{cost_max}/100g)
+Complexity Level: {complexity.title()}
 Exclusions: {', '.join(exclusions) if exclusions else 'None'}
 Hero Ingredients: {', '.join(hero_ingredients) if hero_ingredients else 'None specified'}
 Texture: {texture}
 Claims: {', '.join(claims) if claims else 'None'}
 Target Audience: {', '.join(target_audience) if target_audience else 'General'}
 Additional Notes: {additional_notes if additional_notes else 'None'}
+{complexity_section}
 
 ## PROCESS
 
 ### Step 1: Extract Parameters
 Parse the input to identify:
-- Category (Skincare/Haircare/etc.)
-- Product Type (Eye Cream/Serum/etc.)
-- Primary Concern (Dark Circles/Acne/etc.)
-- Secondary Concerns
+- Category (Skincare/Haircare/Lipcare/Bodycare/etc.)
+- Product Type (Cream/Serum/Shampoo/Balm/etc.)
+- Primary Concern (Dark Circles/Acne/Hair Loss/etc.)
+- Secondary Concerns related to the primary concern
 - Price Segment (Mass/Masstige/Premium/Luxury)
-- Any specific requirements
+# - Price Segment (Mass MRP<INR400/Masstige MRP INR401-800/Premium MRP 801-1500/Luxury MRP >1501)  # Commented out - MRP ranges not needed currently
+- Any specific requirements (Lightweight/SPF50/Rich Lather/Paraben Free/Safe for kids/etc.)
 
 ### Step 2: Present Active Options
 For the identified concerns, present:
-- 3-4 active ingredient options per concern
-- Include: name, concentration, efficacy rating (1-5), cost impact, why it's good
-- Highlight recommended options
-- Explain WHY certain combinations work
+- 3 to 4 active ingredient options per concern (but respect the {active_slots} hero active limit for {complexity} complexity)
+- Include: name, concentration, clinical efficacy data availability (Score 0 for no data available related to the primary concern and 100 for a clinically well studied ingredient), cost impact, and justification for its inclusion
+- Highlight recommended options that fit the complexity level
+- Explain WHY certain combinations work - Highlight possible incompatibilities
+- Ensure recommendations align with {complexity} complexity constraints
 
 ### Step 3: Generate Formula
 Based on selections (or recommendations), generate:
-- Complete formula with all ingredients
+- Complete formula with all ingredients (MUST NOT exceed {max_ingredients} total ingredients)
 - Grouped by benefit (not by phase) for user view
 - Technical formula with phases for manufacturer
-- Total cost per unit
+- Total cost per 100gm
+- Recommended pH based on the ingredient stability and efficacy
+- Verify ingredient count: Total ingredients must be ≤ {max_ingredients}, Hero actives must be ≤ {active_slots}
 
 ### Step 4: Generate Business Context
-- Packaging options with costs
+- Packaging options most suitable for the product type
 - Profit calculations at different MRPs
-- Market comparison with competitors (MUST include "advantage" field for each competitor showing comprehensive advantage: price + ingredients + benefits + overall value)
+- Market comparison with competitors (MUST include "advantage" field for each competitor showing comprehensive advantage: price + ingredients + benefits + overall value, but do not claim superiority)
 - Cost factors that affect real pricing
 
 ### Step 5: Generate Supporting Content
 - Key features (3 main benefit cards)
-- Q&A cards (3-4 questions users would ask)
+- Q&A cards (4-5 questions users would ask)
 - Category trends (MUST include at least 3 trends, never empty)
 - Related trends (MUST include at least 2-3 related trends based on category/benefits, never empty)
 - Claim guidance (can say / avoid)
@@ -208,9 +245,9 @@ Return JSON matching this structure:
           {{
             "name": "Ingredient Name",
             "concentration": "2%",
-            "efficacy": 5,
+            "clinicalEfficacyScore": 85,
             "costImpact": "High",
-            "whyGood": "Explanation of why this works",
+            "justification": "Explanation of why this works and justification for inclusion",
             "recommended": true
           }}
         ],
@@ -378,12 +415,29 @@ Return JSON matching this structure:
 ## KEY RULES
 1. Use simple, layman-friendly language throughout
 2. Group ingredients by BENEFIT for user view, by PHASE for technical view
-3. No individual ingredient costs shown - only total formula cost
+3. No individual ingredient costs shown - only total formula cost per 100gm
 4. Always explain WHY ingredients work, especially for premium actives
-5. Compare to known brands at every opportunity
+5. Compare to known brands at every opportunity but do not claim superiority
 6. Segment-appropriate actives (don't suggest luxury peptides for mass market)
 7. Include myth busters where relevant
 8. Build confidence throughout
+
+## COST CALCULATION RULES (CRITICAL - MUST FOLLOW):
+For cost calculations, prefer to use rates of ingredients from the database. If rate is unknown, use the following fixed rates based on ingredient type:
+
+1. **Indian origin extract (non-hero)**: ₹5,000/kg
+2. **Imported extract (hero ingredient)**: ₹15,000/kg
+3. **Indian origin extract (hero ingredient)**: ₹10,000/kg
+4. **Peptide (hero ingredient)**: ₹30,000/kg
+5. **Plant essence (hero ingredient)**: ₹10,000/kg
+6. **Biotech origin (hero ingredient)**: ₹20,000/kg
+7. **Chemical (hero ingredient)**: ₹15,000/kg
+
+**Priority order:**
+1. First: Check database (MongoDB/Excel) for exact cost
+2. Second: Use reference anchors table if ingredient matches
+3. Third: Apply fixed rates above based on ingredient classification
+4. Always calculate total cost per 100gm for the final formula
 
 ## CRITICAL REQUIREMENTS (MUST FOLLOW):
 1. **categoryTrends**: MUST include at least 3 trends. Never return empty array. Include trends relevant to the product category and benefits.

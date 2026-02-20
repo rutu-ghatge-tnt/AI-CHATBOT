@@ -173,6 +173,7 @@ def get_enhanced_cost_reference_anchors() -> str:
     """
     Get cost reference anchors with database data included.
     Uses MongoDB if available, otherwise falls back to Excel file.
+    Falls back to base anchors if database lookup fails or returns empty.
     """
     base_anchors = COST_REFERENCE_ANCHORS
     
@@ -185,8 +186,10 @@ def get_enhanced_cost_reference_anchors() -> str:
             else:
                 # Excel version is synchronous
                 db_table = get_cost_reference_table()
-                if db_table:
+                if db_table and db_table.strip():  # Check for non-empty string
                     return db_table + "\n\n" + base_anchors
+                else:
+                    print("Warning: Excel cost lookup returned empty. Using default anchors only.")
         except Exception as e:
             print(f"Warning: Could not load cost data: {e}. Using default anchors only.")
     
@@ -197,6 +200,7 @@ async def get_enhanced_cost_reference_anchors_async() -> str:
     """
     Async version that works with MongoDB.
     Use this when calling from async functions.
+    Falls back to base anchors if MongoDB fails or returns empty.
     """
     base_anchors = COST_REFERENCE_ANCHORS
     
@@ -205,14 +209,18 @@ async def get_enhanced_cost_reference_anchors_async() -> str:
             if USE_MONGODB_FOR_COSTS:
                 # MongoDB async version
                 db_table = await get_cost_reference_table_from_mongo()
-                if db_table:
+                if db_table and db_table.strip():  # Check for non-empty string
                     return db_table + "\n\n" + base_anchors
+                else:
+                    print("Warning: MongoDB cost lookup returned empty. Using default anchors only.")
             else:
                 # Excel synchronous version (can be called in async context)
                 import asyncio
                 db_table = await asyncio.to_thread(get_cost_reference_table)
-                if db_table:
+                if db_table and db_table.strip():  # Check for non-empty string
                     return db_table + "\n\n" + base_anchors
+                else:
+                    print("Warning: Excel cost lookup returned empty. Using default anchors only.")
         except Exception as e:
             print(f"Warning: Could not load cost data: {e}. Using default anchors only.")
     

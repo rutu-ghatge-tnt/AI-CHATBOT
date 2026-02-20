@@ -566,6 +566,9 @@ async def generate_formula_revised(
             # Cost range from complexity: minimalist 30-40, classic 40-60, luxe 60-100
             cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
             cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
+            # Get complexity config for constraints
+            from app.ai_ingredient_intelligence.logic.make_wish_config import get_complexity_config
+            complexity_config = get_complexity_config(request.complexity)
             wish_data = {
                 "category": request.parsed_data.category,
                 "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
@@ -575,6 +578,11 @@ async def generate_formula_revised(
                 "texture": request.parsed_data.auto_texture.label,
                 "costMin": cost_min,
                 "costMax": cost_max,
+                "complexity": request.complexity,
+                "maxIngredients": complexity_config.get("max_ingredients", 14),
+                "activeSlots": complexity_config.get("active_slots", 3),
+                "includeSensorials": complexity_config.get("include_sensorials", True),
+                "complexityDescription": complexity_config.get("description", ""),
                 "claims": request.claims or [],
                 "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
                 "additionalNotes": request.additional_notes or "",
