@@ -434,10 +434,17 @@ For cost calculations, prefer to use rates of ingredients from the database. If 
 7. **Chemical (hero ingredient)**: ₹15,000/kg
 
 **Priority order:**
-1. First: Check database (MongoDB/Excel) for exact cost
+1. First: Check database MongoDB for exact cost
 2. Second: Use reference anchors table if ingredient matches
 3. Third: Apply fixed rates above based on ingredient classification
 4. Always calculate total cost per 100gm for the final formula
+
+**CRITICAL: Water/Aqua Cost Calculation**
+- Water (Aqua) cost from database: ₹1/kg (or ₹1.35/kg with 35% markup)
+- Formula: (Percentage/100) × (Cost per kg/10) = Cost per 100g
+- Example: Water at 70% with ₹1.35/kg = (70/100) × (1.35/10) = ₹0.0945 per 100g
+- Water should contribute LESS than ₹0.10 per 100g - if you see water costing ₹100+ per 100g, you have made a calculation error!
+- NEVER use water cost as ₹428/kg or any value above ₹5/kg - water is essentially free (₹1-2/kg max)
 
 ## CRITICAL REQUIREMENTS (MUST FOLLOW):
 1. **categoryTrends**: MUST include at least 3 trends. Never return empty array. Include trends relevant to the product category and benefits.
@@ -748,6 +755,15 @@ async def generate_formula_basic_mode(wish_data: dict) -> dict:
         # Extract cost from technical formula
         technical_formula = formula_data.get("technicalFormula", {})
         base_cost_per_100g = technical_formula.get("totalCostPer100g", 0)
+        
+        # VALIDATION: Check for obvious calculation errors
+        # Water should never contribute more than ₹0.10 per 100g
+        # If total cost is suspiciously high (>₹500/100g for basic products), log warning
+        if base_cost_per_100g > 500:
+            print(f"⚠️ WARNING: Total cost per 100g is ₹{base_cost_per_100g} - this seems unusually high!")
+            print(f"   Expected range: ₹30-150/100g for most products")
+            print(f"   This may indicate a calculation error (e.g., water cost miscalculation)")
+            print(f"   Continuing with post-processing, but please verify the cost calculation")
         
         if base_cost_per_100g > 0:
             # Create cost_analysis structure for post-processor
