@@ -35,7 +35,7 @@ class PPTGenerationRequest(BaseModel):
 # Initialize Claude client
 claude_api_key = os.getenv("CLAUDE_API_KEY")
 presenton_api_key = os.getenv("PRESENTON_API_KEY")
-claude_model = "claude-opus-4-5-20251101"  # Hardcoded for formulation report
+claude_model = "claude-opus-4-5-20251101"  # Hardcoded for formulation report and PPT generation
 
 if not claude_api_key:
     print("⚠️ Warning: CLAUDE_API_KEY environment variable not set")
@@ -1440,7 +1440,11 @@ async def get_report_status(current_user: dict = Depends(verify_jwt_token)):  # 
     }
 
 async def generate_presenton_prompt(report_data: FormulationReportResponse) -> Dict:
-    """Generate Presenton API JSON prompt using Claude from formulation report data"""
+    """
+    Generate Presenton API JSON prompt using Claude Opus model from formulation report data.
+    
+    Uses claude-opus-4-5-20251101 for PPT and PDF generation.
+    """
     if not claude_client:
         raise HTTPException(status_code=500, detail="Claude API not available")
     
@@ -1484,9 +1488,9 @@ REQUIREMENTS:
 Return the JSON object now:"""
     
     try:
-        print("🤖 Generating Presenton prompt with Claude...")
+        print(f"🤖 Generating Presenton prompt with Claude Opus ({claude_model})...")
         message = claude_client.messages.create(
-            model=claude_model,
+            model=claude_model,  # Using claude-opus-4-5-20251101 for PPT generation
             max_tokens=4096,
             temperature=0.3,
             messages=[

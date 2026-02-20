@@ -31,6 +31,19 @@ def _estimate_fallback_cost(inci_name: str) -> Optional[Dict]:
     Estimate cost based on ingredient name patterns when MongoDB lookup fails.
     This is a fallback mechanism using common ingredient cost ranges.
     
+    ⚠️ IMPORTANT: This function should ONLY be used in non-Claude contexts (tests, utilities).
+    For Claude-based flows (make_wish_basic_mode), return None from lookup_cost_by_inci
+    and let Claude handle intelligent cost estimation based on ingredient classification.
+    
+    Claude uses better rates:
+    - Indian origin extract (non-hero): ₹5,000/kg
+    - Indian origin extract (hero): ₹10,000/kg
+    - Imported extract (hero): ₹15,000/kg
+    - Peptide (hero): ₹30,000/kg
+    - etc.
+    
+    This Python fallback uses simpler pattern matching and may give less accurate estimates.
+    
     Returns:
         Dict with estimated cost or None if cannot estimate
     """
@@ -245,6 +258,29 @@ def _estimate_fallback_cost(inci_name: str) -> Optional[Dict]:
             'confidence': 'low'
         }
     
+    # General plant extracts (catch-all for extracts not matching specific patterns)
+    # This should come before the default fallback to catch ingredients like "Rosmarinus Officinalis Leaf Extract"
+    if 'extract' in inci_lower:
+        return {
+            'inci_name': inci_name,
+            'branded_ingredient': '',
+            'avg_cost': 5000.0,  # ₹5000/kg for Indian origin extract (non-hero) - matches Claude prompt
+            'primary_supplier': 'Estimated',
+            'is_fallback': True,
+            'confidence': 'low'
+        }
+    
+    # Fragrance / Parfum
+    if any(term in inci_lower for term in ['parfum', 'fragrance', 'perfume']):
+        return {
+            'inci_name': inci_name,
+            'branded_ingredient': '',
+            'avg_cost': 1500.0,  # ₹1500/kg for fragrance (more realistic than ₹1000)
+            'primary_supplier': 'Estimated',
+            'is_fallback': True,
+            'confidence': 'low'
+        }
+    
     # Try Excel fallback if available
     try:
         from app.ai_ingredient_intelligence.utils.inci_cost_lookup import lookup_cost_by_inci as excel_lookup
@@ -270,12 +306,19 @@ def _estimate_fallback_cost(inci_name: str) -> Optional[Dict]:
 async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fallback: bool = True) -> Optional[Dict]:
     """
     Look up cost for an ingredient by INCI name from MongoDB.
-    Falls back to Excel or estimated costs if MongoDB lookup fails.
+    
+    PRIMARY SOURCE: MongoDB ingredient_costs collection (4200+ ingredients)
+    FALLBACK: Only use Python fallback if use_fallback=True (for non-Claude contexts like tests)
+    
+    IMPORTANT: For make_wish_basic_mode, Claude handles cost estimation when MongoDB fails.
+    The Python fallback should NOT be used in Claude-based flows - Claude uses intelligent
+    classification-based rates (₹5,000-30,000/kg) instead of hardcoded ₹1000 defaults.
     
     Args:
         inci_name: The INCI name to search for
         exact_match: If True, requires exact match. If False, does fuzzy matching.
-        use_fallback: If True, use fallback estimation when MongoDB fails
+        use_fallback: If True, use Python fallback estimation when MongoDB fails.
+                     If False, return None and let Claude handle it (recommended for basic mode)
     
     Returns:
         Dict with keys: 'inci_name', 'branded_ingredient', 'avg_cost', 'primary_supplier'
@@ -288,30 +331,113 @@ async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fal
     try:
         inci_normalized = normalize_inci_name(inci_name)
         
+        # SPECIAL HANDLING: For water/aqua, prioritize generic water records (₹1-2/kg) over expensive branded ingredients
+        # Check if this is a pure water/aqua search (exact match or starts with water/aqua)
+        is_water_aqua = (inci_normalized == 'aqua' or inci_normalized == 'water' or 
+                        inci_normalized.startswith('water ') or inci_normalized.startswith('aqua '))
+        
         if exact_match:
             # Exact match
-            doc = await ingredient_costs_col.find_one(
-                {"inci_name_normalized": inci_normalized}
-            )
+            if is_water_aqua:
+                # For water/aqua, first try to find the generic WATER record
+                doc = await ingredient_costs_col.find_one(
+                    {"branded_ingredient": "WATER"}
+                )
+                if not doc:
+                    # Fall back to exact match
+                    doc = await ingredient_costs_col.find_one(
+                        {"inci_name_normalized": inci_normalized}
+                    )
+            else:
+                doc = await ingredient_costs_col.find_one(
+                    {"inci_name_normalized": inci_normalized}
+                )
         else:
             # Fuzzy match - try exact first, then regex
-            doc = await ingredient_costs_col.find_one(
-                {"inci_name_normalized": inci_normalized}
-            )
+            if is_water_aqua:
+                # For water/aqua, prioritize generic WATER record (₹1/kg) or records with cost <= ₹5/kg
+                # This ensures we get the ₹1/kg WATER record instead of expensive branded aqua
+                doc = await ingredient_costs_col.find_one(
+                    {"branded_ingredient": "WATER"}
+                )
+                if not doc:
+                    # Try to find any water/aqua record with reasonable cost (<= ₹5/kg)
+                    doc = await ingredient_costs_col.find_one(
+                        {
+                            "$or": [
+                                {"inci_name_normalized": inci_normalized, "avg_cost": {"$lte": 5}},
+                                {"inci_name_normalized": {"$regex": "^(water|aqua)", "$options": "i"}, "avg_cost": {"$lte": 5}}
+                            ]
+                        },
+                        sort=[("avg_cost", 1)]  # Sort by cost ascending to get cheapest first
+                    )
+                # If still not found, fall back to regular search
+                if not doc:
+                    doc = await ingredient_costs_col.find_one(
+                        {"inci_name_normalized": inci_normalized}
+                    )
+            else:
+                doc = await ingredient_costs_col.find_one(
+                    {"inci_name_normalized": inci_normalized}
+                )
             
             if not doc:
                 # Try regex match
-                doc = await ingredient_costs_col.find_one(
-                    {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}}
-                )
+                if is_water_aqua:
+                    # For water/aqua, prioritize cheap records
+                    doc = await ingredient_costs_col.find_one(
+                        {"branded_ingredient": "WATER"}
+                    )
+                    if not doc:
+                        doc = await ingredient_costs_col.find_one(
+                            {
+                                "$or": [
+                                    {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}, "avg_cost": {"$lte": 5}},
+                                    {"inci_name_normalized": {"$regex": "^(water|aqua)", "$options": "i"}, "avg_cost": {"$lte": 5}}
+                                ]
+                            },
+                            sort=[("avg_cost", 1)]
+                        )
+                    if not doc:
+                        doc = await ingredient_costs_col.find_one(
+                            {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}}
+                        )
+                else:
+                    doc = await ingredient_costs_col.find_one(
+                        {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}}
+                    )
         
         if doc:
             base_cost = float(doc.get('avg_cost', 0))
+            
+            # VALIDATION: For water/aqua, if we found an expensive record (>₹5/kg), warn and try to find cheaper alternative
+            if is_water_aqua and base_cost > 5:
+                print(f"[WARNING] Found expensive water/aqua record: {doc.get('branded_ingredient', 'N/A')} at ₹{base_cost:.2f}/kg")
+                print(f"   Looking for cheaper water alternative (₹1-5/kg)...")
+                # Try to find the generic WATER record or any cheaper water
+                cheap_water = await ingredient_costs_col.find_one(
+                    {
+                        "$or": [
+                            {"branded_ingredient": "WATER"},
+                            {"branded_ingredient": {"$regex": "^WATER$", "$options": "i"}},
+                            {"inci_name_normalized": {"$in": ["water", "aqua", "water / purified water / demineralized water / aqua"]}, "avg_cost": {"$lte": 5}}
+                        ]
+                    },
+                    sort=[("avg_cost", 1)]
+                )
+                if cheap_water:
+                    print(f"   ✅ Found cheaper water: {cheap_water.get('branded_ingredient', 'N/A')} at ₹{cheap_water.get('avg_cost', 0):.2f}/kg - using this instead")
+                    doc = cheap_water
+                    base_cost = float(cheap_water.get('avg_cost', 0))
+                else:
+                    print(f"   ⚠️ No cheaper water found, using expensive record")
+            
             # Apply 35% markup to MongoDB costs
             INGREDIENT_COST_MARKUP_PERCENT = 35
             INGREDIENT_COST_MARKUP_MULTIPLIER = 1 + (INGREDIENT_COST_MARKUP_PERCENT / 100.0)  # 1.35
             cost_with_markup = base_cost * INGREDIENT_COST_MARKUP_MULTIPLIER
             print(f"[MongoDB] Found '{inci_name}' = Rs {base_cost:.2f}/kg (base) -> Rs {cost_with_markup:.2f}/kg (with 35% markup)")
+            print(f"   Matched: branded_ingredient='{doc.get('branded_ingredient', 'N/A')}', inci_name='{doc.get('inci_name', 'N/A')}'")
             return {
                 'inci_name': doc.get('inci_name', ''),
                 'branded_ingredient': doc.get('branded_ingredient', ''),
@@ -322,11 +448,16 @@ async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fal
                 'is_fallback': False
             }
         
-        # Not found in MongoDB - use fallback if enabled
+        # Not found in MongoDB
         if use_fallback:
-            print(f"[WARNING] MongoDB: '{inci_name}' not found, using fallback cost estimation")
+            # Use Python fallback only for non-Claude contexts (e.g., tests, utilities)
+            # For Claude-based flows (make_wish_basic_mode), return None and let Claude handle it
+            print(f"[WARNING] MongoDB: '{inci_name}' not found, using Python fallback cost estimation")
+            print(f"[NOTE] For Claude-based flows, set use_fallback=False to let Claude handle intelligent cost estimation")
             return _estimate_fallback_cost(inci_name)
         
+        # Return None - let Claude handle the fallback with intelligent classification
+        print(f"[INFO] MongoDB: '{inci_name}' not found, returning None (Claude will handle cost estimation)")
         return None
     
     except Exception as e:

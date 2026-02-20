@@ -2,22 +2,17 @@
 Make a Wish - Formula Generator
 ================================
 
-This module implements the complete 5-stage AI pipeline for generating
-cosmetic formulations from user wishes.
-
-STAGES:
-1. Ingredient Selection
-2. Formula Optimization
-3. Manufacturing Process
-4. Cost Analysis
-5. Compliance Check
+This module implements the formula generation for Make a Wish feature.
+It follows the Formulynx flow with parameter extraction, active ingredient
+options, complete formula generation, business context, and supporting content.
 """
 
 import os
 import json
 import re
+import asyncio
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Import prompts
 from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
@@ -54,7 +49,7 @@ except ImportError:
     anthropic = None
 
 claude_api_key = os.getenv("CLAUDE_API_KEY")
-claude_model = "claude-opus-4-5-20251101"  # Hardcoded for Make a Wish
+claude_model = "claude-opus-4-5-20251101"  # Hardcoded Opus model for all Make a Wish operations
 
 if not claude_api_key:
     raise RuntimeError("CLAUDE_API_KEY is required for Make a Wish feature")
@@ -577,13 +572,18 @@ async def call_ai_with_claude(
     cache_block_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Call Claude API for Make a Wish pipeline with prompt caching support.
-    Uses Claude as per project preference.
+    Call Claude Opus API for Make a Wish pipeline with prompt caching support.
+    
+    Uses claude-opus-4-5-20251101 for all Make a Wish operations including:
+    - Wish parsing
+    - Formula generation
+    - Ingredient selection
+    - Compliance checking
     
     Args:
         system_prompt: The system prompt (will be cached)
         user_prompt: The user prompt (dynamic content)
-        prompt_type: Type of prompt for cache tracking (e.g., "ingredient_selection")
+        prompt_type: Type of prompt for cache tracking (e.g., "parse_wish", "formula_generation")
         max_retries: Maximum number of retry attempts
     """
     
@@ -608,8 +608,9 @@ async def call_ai_with_claude(
         print(f"📝 Using plain system prompt for {prompt_type} (caching disabled or failed)")
     
     # Prepare API call parameters with properly formatted system prompt
+    # Using claude-opus-4-5-20251101 for all Make a Wish operations
     api_params = {
-        "model": claude_model,
+        "model": claude_model,  # claude-opus-4-5-20251101
         "max_tokens": 16384,
         "temperature": 0.3,
         "system": formatted_system,  # Can be string or list of content blocks with cache_control
@@ -618,14 +619,71 @@ async def call_ai_with_claude(
         ]
     }
     
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🌐 [CLAUDE] [{timestamp}] Starting Claude API call (attempt {1}/{max_retries})...")
+    print(f"🌐 [CLAUDE] [{timestamp}] Model: {claude_model}, Prompt type: {prompt_type}")
+    
     for attempt in range(max_retries):
         try:
-            # Call Claude API with caching support (GA - no workarounds needed)
-            response = claude_client.messages.create(**api_params)
+            # Call Claude API with caching support
+            # Run in thread pool to prevent blocking the event loop
+            # This allows other API requests (like wish-history) to be processed concurrently
+            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"🌐 [CLAUDE] [{timestamp}] Executing API call in thread pool (attempt {attempt + 1})...")
+            print(f"⏳ [CLAUDE] [{timestamp}] This may take 30-120 seconds for complex formulas...")
+            
+            loop = asyncio.get_event_loop()
+            # Add timeout of 180 seconds (3 minutes) to prevent hanging forever
+            # Also add a background task to log progress every 30 seconds
+            async def log_progress():
+                elapsed = 0
+                while elapsed < 180:
+                    await asyncio.sleep(30)  # Log every 30 seconds
+                    elapsed += 30
+                    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"⏳ [CLAUDE] [{timestamp}] Still waiting for Claude API response... ({elapsed}s elapsed)")
+            
+            progress_task = asyncio.create_task(log_progress())
+            
+            try:
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: claude_client.messages.create(**api_params)
+                    ),
+                    timeout=180.0  # 3 minute timeout
+                )
+                progress_task.cancel()  # Stop progress logging
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Log response metadata
+                if hasattr(response, 'usage'):
+                    usage = response.usage
+                    print(f"📊 [CLAUDE] [{timestamp}] Token usage - Input: {usage.input_tokens}, Output: {usage.output_tokens}, Total: {usage.input_tokens + usage.output_tokens}")
+                
+                # Log cache status if available
+                if hasattr(response, 'cache_creation_input_tokens'):
+                    print(f"💾 [CLAUDE] [{timestamp}] Cache creation tokens: {response.cache_creation_input_tokens}")
+                if hasattr(response, 'cache_read_input_tokens'):
+                    print(f"💾 [CLAUDE] [{timestamp}] Cache read tokens: {response.cache_read_input_tokens}")
+                
+                print(f"✅ [CLAUDE] [{timestamp}] Claude API call completed successfully!")
+            except asyncio.TimeoutError:
+                progress_task.cancel()  # Stop progress logging
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"⏰ [CLAUDE] [{timestamp}] Claude API call timed out after 180 seconds!")
+                if attempt < max_retries - 1:
+                    print(f"🔄 [CLAUDE] [{timestamp}] Retrying... (attempt {attempt + 2}/{max_retries})")
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    raise Exception("Claude API call timed out after all retry attempts")
+            except Exception as e:
+                progress_task.cancel()  # Stop progress logging on any error
+                raise
             
             if not response.content or len(response.content) == 0:
                 if attempt < max_retries - 1:
-                    import asyncio
                     await asyncio.sleep(1)
                     continue
                 raise ValueError("Empty response from Claude API")
@@ -634,7 +692,6 @@ async def call_ai_with_claude(
             
             if not content:
                 if attempt < max_retries - 1:
-                    import asyncio
                     await asyncio.sleep(1)
                     continue
                 raise ValueError("Empty text in Claude response")
@@ -647,23 +704,44 @@ async def call_ai_with_claude(
                 content = content.strip()
                 
                 # Debug: Log the content
-                print(f"🔍 AI Response Content: {content[:200]}...")
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"🔍 [CLAUDE] [{timestamp}] AI Response Content preview: {content[:300]}...")
+                print(f"🔍 [CLAUDE] [{timestamp}] Content length: {len(content)} chars")
+                
+                # Check if content starts with a JSON object
+                if not content.startswith('{'):
+                    # Try to find the first { character
+                    first_brace = content.find('{')
+                    if first_brace > 0:
+                        print(f"⚠️ [CLAUDE] [{timestamp}] Content doesn't start with {{, found at position {first_brace}, trimming...")
+                        content = content[first_brace:]
+                    elif content.startswith('"') or content.startswith("'"):
+                        # Content might be just a JSON string, wrap it
+                        print(f"⚠️ [CLAUDE] [{timestamp}] Content appears to be a JSON string, wrapping in object...")
+                        content = '{' + content + '}'
                 
                 result = json.loads(content)
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"✅ [CLAUDE] [{timestamp}] JSON parsed successfully")
                 return result
             except json.JSONDecodeError as e:
                 # Debug: Log the JSON error
-                print(f"❌ JSON Decode Error: {str(e)}")
-                print(f"❌ Content that failed: {content[:500]}...")
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"❌ [CLAUDE] [{timestamp}] JSON Decode Error: {str(e)}")
+                print(f"❌ [CLAUDE] [{timestamp}] Error position: {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                print(f"❌ [CLAUDE] [{timestamp}] Content that failed (first 1000 chars): {content[:1000]}")
                 
                 # Try to extract JSON from text - improved regex
                 # Look for JSON that starts with a typical JSON structure
                 json_patterns = [
-                    r'\{[^{}]*"[^"]+"\s*:\s*[^{}]*\}',  # Simple JSON objects
-                    r'\{.*?"formula_name".*?\}',        # JSON with formula_name
+                    r'\{.*?"formula_name".*?\}',        # JSON with formula_name (for parse-wish)
+                    r'\{.*?"category".*?\}',            # JSON with category (for parse-wish)
+                    r'\{.*?"product_type".*?\}',        # JSON with product_type (for parse-wish)
+                    r'\{.*?"ingredients".*?\}',         # JSON with ingredients
                     r'\{.*?"analysis_date".*?\}',        # JSON with analysis_date
                     r'\{.*?"target_markets".*?\}',       # JSON with target_markets
                     r'\{.*?"critical_note".*?\}',        # JSON with critical_note
+                    r'\{[^{}]*"[^"]+"\s*:\s*[^{}]*\}',  # Simple JSON objects
                 ]
                 
                 for pattern in json_patterns:
@@ -679,9 +757,12 @@ async def call_ai_with_claude(
                                 json_str += '}' * (open_count - close_count)
                             
                             result = json.loads(json_str)
-                            print(f"✅ Extracted JSON using pattern: {pattern}")
+                            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                            print(f"✅ [CLAUDE] [{timestamp}] Extracted JSON using pattern: {pattern[:50]}...")
                             return result
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as pattern_error:
+                            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                            print(f"⚠️ [CLAUDE] [{timestamp}] Pattern {pattern[:50]}... failed: {str(pattern_error)}")
                             continue
                 
                 # Last resort - find the largest JSON-like structure
@@ -706,21 +787,30 @@ async def call_ai_with_claude(
                     try:
                         json_str = '\n'.join(json_lines)
                         result = json.loads(json_str)
-                        print(f"✅ Extracted JSON using line-by-line method")
+                        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                        print(f"✅ [CLAUDE] [{timestamp}] Extracted JSON using line-by-line method")
                         return result
                     except json.JSONDecodeError:
                         pass
                 
                 if attempt < max_retries - 1:
-                    import asyncio
+                    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"🔄 [CLAUDE] [{timestamp}] Retrying JSON parsing (attempt {attempt + 2}/{max_retries})...")
                     await asyncio.sleep(1)
                     continue
                 else:
-                    raise ValueError(f"Failed to parse JSON from Claude response. Content: {content[:500]}")
+                    # Provide more detailed error message
+                    error_msg = f"Failed to parse JSON from Claude response after {max_retries} attempts."
+                    error_msg += f"\nJSON Error: {str(e)}"
+                    error_msg += f"\nContent preview (first 1000 chars): {content[:1000]}"
+                    if hasattr(e, 'pos') and e.pos:
+                        error_msg += f"\nError at position: {e.pos}"
+                        if e.pos < len(content):
+                            error_msg += f"\nContext around error: ...{content[max(0, e.pos-50):e.pos+50]}..."
+                    raise ValueError(error_msg)
         
         except Exception as e:
             if attempt < max_retries - 1:
-                import asyncio
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
                 continue
             else:
@@ -734,34 +824,77 @@ async def call_ai_with_claude(
 # COMPLETE PIPELINE FUNCTION
 # ============================================================================
 
+# ============================================================================
+# SYSTEM PROMPT
+# ============================================================================
+
+SYSTEM_PROMPT = """You are Formulynx's AI Formulation Engine. Your job is to:
+
+1. Understand the user's product wish from natural language
+2. Extract structured parameters
+3. Present relevant ACTIVE INGREDIENT OPTIONS for their concern (BEFORE generating formula)
+4. Generate a complete, professional formula
+5. Output in a structured format for the UI to render
+
+You are operating in a simplified mode - this means:
+- Use simple, layman-friendly language
+- Explain ingredients in terms of benefits, not chemistry
+- Group ingredients by benefit (not by phase) for user view
+- Include business context (costs, profits, market comparison)
+- Provide Q&A, trends, and confidence-building content
+- Compare to known brands at every opportunity
+- Present active ingredient options FIRST, then generate formula
+
+You have access to a comprehensive ingredient database including:
+- Brightening/Hyperpigmentation actives (Vitamin C derivatives, Alpha Arbutin, Tranexamic Acid, Niacinamide, Kojic Acid, Azelaic Acid, etc.)
+- Anti-aging actives (Retinol, Bakuchiol, Peptides like Matrixyl, Argireline, Syn-Ake, etc.)
+- Hydration actives (Hyaluronic Acid, Glycerin, Squalane, Ceramides, Panthenol, etc.)
+- Acne/Oil control actives (Salicylic Acid, Niacinamide, Zinc PCA, Tea Tree Oil, Azelaic Acid, etc.)
+- Soothing/Sensitive skin actives (Centella Asiatica, Bisabolol, Allantoin, Aloe Vera, Oat Extract, etc.)
+- Eye-specific actives (Haloxyl, Eyeliss, Eyeseryl, Regu-Age, Caffeine, Vitamin K, etc.)
+
+For each ingredient, you know:
+- Typical concentration ranges
+- Efficacy ratings (1-5 stars)
+- Cost impact (Low/Medium/High/Very High)
+- Mechanism of action
+- Best use cases
+
+IMPORTANT RULES:
+1. Group ingredients by BENEFIT for user view, by PHASE for technical view
+2. No individual ingredient costs shown - only total formula cost
+3. Always explain WHY ingredients work, especially for premium actives
+4. Compare to known brands at every opportunity
+5. Segment-appropriate actives (don't suggest luxury peptides for mass market)
+6. Include myth busters where relevant
+7. Build confidence throughout
+8. Present 3-4 active ingredient options per concern BEFORE generating the final formula
+"""
+
+# ============================================================================
+# FORMULA GENERATION FUNCTION
+# ============================================================================
+
 async def generate_formula_from_wish(wish_data: dict) -> dict:
     """
-    Complete pipeline for generating a formula from user wish.
+    Generate formula from user wish data.
     
-    Supports two modes:
-    - "basic": Simplified flow for layman users (Formulynx Make a Wish flow)
-    - "advanced": Full 5-stage pipeline for formulators/scientists (default)
+    This follows the Formulynx Make a Wish flow:
+    1. Parameter Extraction
+    2. Active Ingredient Options Presentation
+    3. Complete Formula Generation
+    4. Business Context
+    5. Supporting Content
     
     Args:
         wish_data: Dictionary containing user requirements
-                  - mode: "basic" or "advanced" (default: "advanced")
         
     Returns:
         Complete formula with all analysis
     """
-    
-    # Check mode and route accordingly
-    mode = wish_data.get("mode", "advanced").lower()
-    
-    if mode == "basic":
-        # Use basic mode generator
-        from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import (
-            generate_formula_basic_mode
-        )
-        return await generate_formula_basic_mode(wish_data)
-    
-    # Continue with advanced mode (existing flow)
-    print("🚀 Starting Make a Wish pipeline (ADVANCED MODE)...")
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🚀 [FORMULA_GEN] [{timestamp}] Starting Make a Wish pipeline...")
+    print(f"📋 [FORMULA_GEN] [{timestamp}] Wish data: category={wish_data.get('category')}, productType={wish_data.get('productType')}")
     
     # Validate and apply rules engine
     rules_engine = get_rules_engine()
@@ -782,141 +915,31 @@ async def generate_formula_from_wish(wish_data: dict) -> dict:
     # Use fixed wish data (with auto-selections applied)
     wish_data = fixed_wish_data
     
-    # Stage 1: Ingredient Selection
-    print("📋 Stage 1: Ingredient Selection...")
-    selection_prompt = generate_ingredient_selection_prompt(wish_data)
+    # Generate complete formula response
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"📋 [FORMULA_GEN] [{timestamp}] Generating complete formula...")
+    from app.ai_ingredient_intelligence.logic.make_wish_prompts import generate_basic_mode_prompt
+    user_prompt = generate_basic_mode_prompt(wish_data)
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"📝 [FORMULA_GEN] [{timestamp}] Prompt generated, calling Claude AI...")
     
-    # Use async version if MongoDB, sync version if Excel
-    if USE_MONGODB_FOR_COSTS:
-        system_prompt = await get_ingredient_selection_system_prompt_async()
-    else:
-        system_prompt = get_ingredient_selection_system_prompt()
-    
-    selected_ingredients = await call_ai_with_claude(
-        system_prompt=system_prompt,
-        user_prompt=selection_prompt,
-        prompt_type="ingredient_selection"
-    )
-    print(f"✅ Selected {len(selected_ingredients.get('ingredients', []))} ingredients")
-    
-    # Stage 2: Formula Optimization
-    print("🔧 Stage 2: Formula Optimization...")
-    optimization_prompt = generate_optimization_prompt(
-        wish_data,
-        selected_ingredients.get('ingredients', [])
-    )
-    optimized_formula = await call_ai_with_claude(
-        system_prompt=FORMULA_OPTIMIZATION_SYSTEM_PROMPT,
-        user_prompt=optimization_prompt,
-        prompt_type="formula_optimization"
-    )
-    print(f"✅ Optimized formula: {optimized_formula.get('optimized_formula', {}).get('total_percentage', 0)}%")
-    
-    # Stages 3, 4, 5: Run in parallel for better performance
-    # These stages are independent and can run concurrently
-    print("🚀 Stages 3-5: Running Manufacturing, Cost Analysis, and Compliance in parallel...")
-    
-    import asyncio
-    
-    async def run_stage_3():
-        print("🏭 Stage 3: Manufacturing Process...")
-        manufacturing_prompt = generate_manufacturing_prompt(optimized_formula)
+    try:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🤖 [FORMULA_GEN] [{timestamp}] Calling call_ai_with_claude...")
         result = await call_ai_with_claude(
-            system_prompt=MANUFACTURING_PROCESS_SYSTEM_PROMPT,
-            user_prompt=manufacturing_prompt,
-            prompt_type="manufacturing_process"
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            prompt_type="formula_generation"
         )
-        print(f"✅ Generated {len(result.get('manufacturing_steps', []))} manufacturing steps")
+        
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [FORMULA_GEN] [{timestamp}] Formula generated successfully!")
+        print(f"🎉 [FORMULA_GEN] [{timestamp}] Make a Wish pipeline complete!")
         return result
-    
-    def clean_cost_analysis_units(cost_data: dict, unit: str) -> dict:
-        """Post-process cost analysis to fix any /100g or /100ml that AI might have added"""
-        import json
-        import re
         
-        # Convert to string, fix, convert back
-        cost_str = json.dumps(cost_data)
-        
-        # Replace /100g and /100ml with actual unit (case-insensitive)
-        cost_str = re.sub(r'/100g', f'/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'/100ml', f'/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100g', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100 g', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'per 100 ml', f'per {unit}', cost_str, flags=re.IGNORECASE)
-        # Also catch variations like "₹13.98/100g" or "₹13.98 per 100g"
-        cost_str = re.sub(r'₹([0-9.]+)/100g', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'₹([0-9.]+)/100ml', rf'₹\1/{unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'₹([0-9.]+) per 100g', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'₹([0-9.]+) per 100ml', rf'₹\1 per {unit}', cost_str, flags=re.IGNORECASE)
-        # Clean competitor_comparison section specifically
-        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100g"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
-        cost_str = re.sub(r'"price_per_unit_display":\s*"₹([0-9.]+)/100ml"', rf'"price_per_unit_display": "₹\1/{unit}"', cost_str, flags=re.IGNORECASE)
-        
-        try:
-            return json.loads(cost_str)
-        except json.JSONDecodeError:
-            # If JSON parsing fails, return original (shouldn't happen but safety check)
-            print("⚠️ Warning: Failed to parse cleaned cost analysis JSON, returning original")
-            return cost_data
-    
-    async def run_stage_4():
-        print("💰 Stage 4: Cost Analysis...")
-        cost_prompt = generate_cost_prompt(optimized_formula, wish_data)
-        result = await call_ai_with_claude(
-            system_prompt=COST_ANALYSIS_SYSTEM_PROMPT,
-            user_prompt=cost_prompt,
-            prompt_type="cost_analysis"
-        )
-        product_type = wish_data.get('productType', 'serum')
-        unit = get_unit_for_product_type(product_type)
-        
-        # Clean up any /100g or /100ml that might have slipped through
-        result = clean_cost_analysis_units(result, unit)
-        
-        # Apply new cost calculation rules (post-processing)
-        print("   Applying new cost calculation rules (20% formula margin, wastage, manufacturer margin)...")
-        result = post_process_cost_analysis(result, product_type)
-        
-        print(f"✅ Cost analysis complete: ₹{result.get('raw_material_cost', {}).get('adjusted_per_100g', result.get('raw_material_cost', {}).get('total_per_100g', 0))}/{unit}")
-        return result
-    
-    async def run_stage_5():
-        print("✅ Stage 5: Compliance Check...")
-        compliance_prompt = generate_compliance_prompt(optimized_formula)
-        result = await call_ai_with_claude(
-            system_prompt=COMPLIANCE_CHECK_SYSTEM_PROMPT,
-            user_prompt=compliance_prompt,
-            prompt_type="compliance_check"
-        )
-        print(f"✅ Compliance: {result.get('overall_status', 'UNKNOWN')}")
-        return result
-    
-    # Run stages 3, 4, and 5 in parallel
-    manufacturing_process, cost_analysis, compliance = await asyncio.gather(
-        run_stage_3(),
-        run_stage_4(),
-        run_stage_5()
-    )
-    
-    # Combine all results
-    result = {
-        "wish_data": wish_data,
-        "ingredient_selection": selected_ingredients,
-        "optimized_formula": optimized_formula,
-        "manufacturing": manufacturing_process,
-        "cost_analysis": cost_analysis,
-        "compliance": compliance,
-        "metadata": {
-            "generated_at": datetime.now().isoformat(),
-            "formula_version": "1.0",
-            "mode": "advanced",
-            "ai_model": claude_model or "claude-sonnet-4-5-20250929",
-            "cache_stats": get_cache_manager().get_cache_stats()
-        }
-    }
-    
-    print("🎉 Make a Wish pipeline complete (ADVANCED MODE)!")
-    
-    return result
+    except Exception as e:
+        print(f"❌ Error in formula generation: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
