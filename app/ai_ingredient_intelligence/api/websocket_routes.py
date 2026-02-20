@@ -9,23 +9,20 @@ Routes:
 """
 
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
 from app.ai_ingredient_intelligence.logic.websocket_manager import get_websocket_manager
-from app.ai_ingredient_intelligence.auth import verify_jwt_token
+from app.ai_ingredient_intelligence.auth.jwt_auth import verify_access_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["WebSocket"])
 
-# Security scheme for WebSocket (optional - can use query params or headers)
-security = HTTPBearer(auto_error=False)
-
 
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
-    user_id: str
+    user_id: str,
+    token: str = Query(None, description="JWT token for authentication (query parameter)")
 ):
     """
     WebSocket endpoint for real-time notifications.
@@ -33,17 +30,58 @@ async def websocket_endpoint(
     Connects a user's WebSocket and keeps the connection alive.
     Sends periodic ping messages to keep the connection active.
     
+    Authentication:
+    - Token can be provided as query parameter: ?token=<jwt_token>
+    - Or in Authorization header: Authorization: Bearer <jwt_token>
+    - Token is verified before accepting the connection
+    - user_id in path must match the authenticated user from token
+    
     Args:
         websocket: WebSocket connection
-        user_id: User identifier (should match authenticated user)
-        
-    Note:
-        In production, you may want to verify the user_id matches
-        the authenticated user from a token or session.
+        user_id: User identifier (must match authenticated user from token)
+        token: JWT token for authentication (optional query parameter, can also be in header)
     """
     websocket_manager = get_websocket_manager()
     
-    # Accept the WebSocket connection
+    # Extract token from query parameter or headers
+    auth_token = token
+    if not auth_token:
+        # Try to get token from Authorization header
+        auth_header = websocket.headers.get("Authorization") or websocket.headers.get("authorization")
+        if auth_header:
+            if auth_header.startswith("Bearer ") or auth_header.startswith("bearer "):
+                auth_token = auth_header[7:].strip()
+    
+    # Verify token before accepting connection
+    if not auth_token:
+        logger.warning(f"❌ WebSocket connection rejected: No token provided for user {user_id}")
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+    
+    try:
+        # Verify the JWT token
+        payload = verify_access_token(auth_token)
+        authenticated_user_id = payload.get("user_id") or payload.get("_id")
+        
+        # Normalize user_id format (handle ObjectId strings)
+        if authenticated_user_id:
+            authenticated_user_id = str(authenticated_user_id)
+        user_id_normalized = str(user_id)
+        
+        # Verify user_id matches authenticated user
+        if authenticated_user_id != user_id_normalized:
+            logger.warning(f"❌ WebSocket auth failed: user_id mismatch. Path: {user_id}, Token: {authenticated_user_id}")
+            await websocket.close(code=1008, reason="User ID mismatch")
+            return
+        
+        logger.info(f"✅ WebSocket authentication successful for user: {user_id}")
+        
+    except Exception as auth_error:
+        logger.error(f"❌ WebSocket authentication failed for user {user_id}: {auth_error}")
+        await websocket.close(code=1008, reason="Authentication failed")
+        return
+    
+    # Accept the WebSocket connection after authentication
     try:
         await websocket.accept()
         logger.info(f"🔌 WebSocket connection accepted for user: {user_id}")
