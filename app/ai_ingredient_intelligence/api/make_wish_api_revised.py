@@ -636,6 +636,7 @@ async def generate_formula_revised(
             try:
                 history_doc = {
                     "_id": ObjectId(history_id),
+                    "mode": "basic",
                     "user_id": user_id,
                     "name": name,
                     "tag": request.tag,
@@ -664,6 +665,7 @@ async def generate_formula_revised(
         else:
             # Update existing history record to in_progress
             try:
+                from bson import ObjectId
                 update_doc = {
                     "status": "in_progress",
                     "request_received_at": request_received_at.isoformat(),
@@ -694,15 +696,14 @@ async def generate_formula_revised(
         print(f"✅ [MAIN] [{timestamp}] Background task created and scheduled (task_id: {id(task)})")
         
         # Return immediate acknowledgment (DB already saved, processing in background)
-        # Response model requires: success, formula_id, history_id
+        # Response model requires: success, history_id
         # Note: success=True means "request accepted", NOT "formula completed"
         # The actual completion notification is sent via WebSocket when background task finishes
         response = MakeWishBasicResponseRevised(
             success=True,
-            formula_id=formula_id,
             history_id=history_id
         )
-        print(f"📤 [MAIN] [{timestamp}] Returning response: success={response.success}, formula_id={response.formula_id}, history_id={response.history_id}")
+        print(f"📤 [MAIN] [{timestamp}] Returning response: success={response.success}, history_id={response.history_id}")
         return response
     
     except HTTPException:
@@ -847,17 +848,46 @@ async def process_generate_revised_background(
         # Yield control after formula generation
         await asyncio.sleep(0)
         
-        # Trend data fetching removed - it's now a separate endpoint
-        # Market trends are fetched separately via /market-trends/{history_id} endpoint
-        # Not included in make a wish flow to keep it fast
-        
+        # Extract hero ingredients for trend analysis
+        hero_ingredients = []
+        try:
+            # Try to get from activeOptions -> recommendedFormula -> heroActives
+            active_options = basic_result.get("activeOptions", {})
+            recommended_formula = active_options.get("recommendedFormula", {})
+            hero_actives = recommended_formula.get("heroActives", [])
+            hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+
+            # Fallback to detected ingredients from wish_data
+            if not hero_ingredients:
+                hero_ingredients = wish_data.get("heroIngredients", [])
+        except Exception as e:
+            print(f"⚠️ [BACKGROUND] Error extracting hero ingredients: {e}")
+            hero_ingredients = wish_data.get("heroIngredients", [])
+
+        # Fetch trend data for hero ingredients (detailed analysis)
+        trend_data = {}
+        if hero_ingredients:
+            try:
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"📊 [BACKGROUND] [{timestamp}] Fetching trend data for {len(hero_ingredients)} hero ingredients...")
+                trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"✅ [BACKGROUND] [{timestamp}] Trend data fetched successfully")
+            except Exception as e:
+                print(f"⚠️ [BACKGROUND] Error fetching trend data: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Market trends removed - use standalone /market-trends endpoint instead
+
         processing_time = time.time() - start_time
         processing_time_seconds = round(processing_time, 2)
         print(f"✅ Make a Wish formula generated in {processing_time_seconds}s")
         
-        # Update database with completed status
+        # Update database with completed status (including trend data)
         update_doc = {
             "basic_mode_result": basic_result,
+            "trend_data": trend_data,  # Store trend analysis data
             "status": "completed",
             "processing_time": processing_time_seconds,
             "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
