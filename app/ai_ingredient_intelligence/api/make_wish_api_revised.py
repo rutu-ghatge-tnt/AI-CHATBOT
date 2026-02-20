@@ -939,20 +939,43 @@ async def process_generate_revised_background(
             "status": "completed",
             "type": "make_wish_revised"
         }
+        
+        # Add credit info to notification data - CRITICAL: Always include credit info in notification
         if deduct_credits_result:
             # Use actual values from third-party API response (not hardcoded)
             credits_deducted = deduct_credits_result.get("creditsDeducted")
             credits_remaining = deduct_credits_result.get("creditsRemaining")
+            deducted = deduct_credits_result.get("deducted", True)
+            
+            # Ensure values are not None (convert to 0 if None)
+            if credits_deducted is None:
+                credits_deducted = 0
+            if credits_remaining is None:
+                credits_remaining = 0
+            
             print(f"💰 [BACKGROUND] Credit info from API: deducted={credits_deducted}, remaining={credits_remaining}")
+            print(f"💰 [BACKGROUND] Full deduct_credits_result: {deduct_credits_result}")
+            
+            # Add credit info in multiple places to ensure it's accessible
+            # 1. Nested in deduct_credits object (for structured access)
             notification_data["deduct_credits"] = {
-                "deducted": deduct_credits_result.get("deducted"),
-                "creditsDeducted": credits_deducted,
-                "creditsRemaining": credits_remaining,
+                "deducted": bool(deducted),
+                "creditsDeducted": int(credits_deducted),
+                "creditsRemaining": int(credits_remaining),
             }
+            
+            # 2. Also at top level of meta for direct access (for backward compatibility)
+            notification_data["creditsDeducted"] = int(credits_deducted)
+            notification_data["creditsRemaining"] = int(credits_remaining)
+            notification_data["deducted"] = bool(deducted)
+            
+            print(f"💰 [BACKGROUND] Credit info added to notification_data: {notification_data.get('deduct_credits')}")
+        else:
+            print(f"⚠️ [BACKGROUND] No credit deduction result available - credit info not included in notification")
         
         # Send real-time WebSocket notification using enhanced notification module (ONLY after completion)
         try:
-            await notify_user_enhanced(
+            notification_result = await notify_user_enhanced(
                 user_id=user_id,
                 module="make-wish",
                 notification_type="success",
@@ -965,7 +988,14 @@ async def process_generate_revised_background(
                 ),
                 meta=notification_data
             )
+            # Log the notification that was sent to verify credit info is included
+            notification_dict = notification_result.model_dump() if hasattr(notification_result, 'model_dump') else {}
             print(f"✅ [BACKGROUND] Success notification sent via WebSocket")
+            print(f"📋 [BACKGROUND] Full notification meta: {notification_dict.get('meta', {})}")
+            if notification_dict.get('meta', {}).get('deduct_credits'):
+                print(f"✅ [BACKGROUND] Credit info confirmed in notification: {notification_dict.get('meta', {}).get('deduct_credits')}")
+            else:
+                print(f"⚠️ [BACKGROUND] WARNING: Credit info NOT found in notification meta!")
         except Exception as ws_error:
             print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
         
