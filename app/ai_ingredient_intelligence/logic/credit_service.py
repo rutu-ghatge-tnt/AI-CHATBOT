@@ -36,19 +36,21 @@ async def deduct_credits(
     reference_id: str,
     credit_key: CreditKey,
     transaction_type: Optional[str] = None,
-    description: Optional[str] = None
+    description: Optional[str] = None,
+    bearer_token: Optional[str] = None
 ) -> Optional[dict]:
     """
     Deduct credits for a user operation.
     Sends a DeductCreditsRequest body: { "taskKey": "<credit_key>" }.
-    The API identifies the user from the request (e.g. auth); user_id/reference_id are for logging only.
+    The API identifies the user from the JWT in Authorization: Bearer <token>.
     
     Args:
-        user_id: User ID (for logging; API may resolve user from auth)
+        user_id: User ID (for logging)
         reference_id: Reference ID (e.g., history_id) for logging
         credit_key: Credit key from CreditKey enum → sent as taskKey
         transaction_type: Optional; unused in request body (kept for caller compatibility)
         description: Optional; unused in request body (kept for caller compatibility)
+        bearer_token: Optional. If set, sent as Authorization header (e.g. "Bearer <jwt>") for auth.
     
     Returns:
         Dict with keys: deducted (bool), creditsDeducted (int), creditsRemaining (int)
@@ -68,13 +70,21 @@ async def deduct_credits(
     # Use enum value as the task key (API expects DeductCreditsRequest with taskKey only)
     task_key = credit_key.value
     
+    headers: dict = {}
+    if bearer_token and bearer_token.strip():
+        headers["Authorization"] = (
+            bearer_token
+            if bearer_token.strip().lower().startswith("bearer ")
+            else f"Bearer {bearer_token.strip()}"
+        )
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             payload: dict = {"taskKey": task_key}
             
             response = await client.post(
                 credit_api_url,
-                json=payload
+                json=payload,
+                headers=headers or None
             )
             
             if response.status_code == 200:

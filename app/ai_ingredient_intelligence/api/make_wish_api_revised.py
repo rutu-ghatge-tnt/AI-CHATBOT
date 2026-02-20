@@ -569,7 +569,8 @@ async def parse_natural_language_wish(
 @router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
-    current_user: dict = Depends(verify_jwt_token)
+    current_user: dict = Depends(verify_jwt_token),
+    authorization: Optional[str] = Header(None, alias="Authorization")
 ):
     """
     Generate formula using basic mode flow.
@@ -689,7 +690,8 @@ async def generate_formula_revised(
             name=name,
             formula_id=formula_id,
             request_received_at=request_received_at,
-            is_new_history=not bool(request.history_id)
+            is_new_history=not bool(request.history_id),
+            bearer_token=authorization
         )
         # Fire and forget - don't await, don't store reference
         task = asyncio.create_task(handle_background_task_safely(background_coro))
@@ -748,7 +750,8 @@ async def process_generate_revised_background_with_semaphore(
     name: str,
     formula_id: str,
     request_received_at: datetime,
-    is_new_history: bool = True
+    is_new_history: bool = True,
+    bearer_token: Optional[str] = None
 ):
     """
     Wrapper that acquires semaphore before running background task.
@@ -769,7 +772,8 @@ async def process_generate_revised_background_with_semaphore(
             name=name,
             formula_id=formula_id,
             request_received_at=request_received_at,
-            is_new_history=is_new_history
+            is_new_history=is_new_history,
+            bearer_token=bearer_token
         )
         timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
         print(f"🔓 [BACKGROUND] [{timestamp}] Semaphore released for history_id: {history_id}")
@@ -786,7 +790,8 @@ async def process_generate_revised_background(
     name: str,
     formula_id: str,
     request_received_at: datetime,
-    is_new_history: bool = True
+    is_new_history: bool = True,
+    bearer_token: Optional[str] = None
 ):
     """
     Background task to process revised Make a Wish formula generation.
@@ -917,7 +922,8 @@ async def process_generate_revised_background(
                 reference_id=history_id,
                 credit_key=CreditKey.MAKE_WISH_GENERATE,
                 transaction_type="make_wish_generation_revised",
-                description=f"Make a Wish formula generation (revised) - {history_id}"
+                description=f"Make a Wish formula generation (revised) - {history_id}",
+                bearer_token=bearer_token
             )
             if deduct_credits_result is None:
                 print(f"ℹ️ [BACKGROUND] Credit deduction skipped (credits API not available)")
