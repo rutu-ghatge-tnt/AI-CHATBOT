@@ -21,7 +21,9 @@ import httpx
 import os
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
-from bson import ObjectId
+from bson import ObjectId as BSONObjectId
+# Alias for backward compatibility
+ObjectId = BSONObjectId
 import time
 import json
 import uuid
@@ -666,7 +668,6 @@ async def generate_formula_revised(
         else:
             # Update existing history record to in_progress
             try:
-                from bson import ObjectId
                 update_doc = {
                     "status": "in_progress",
                     "request_received_at": request_received_at.isoformat(),
@@ -698,14 +699,15 @@ async def generate_formula_revised(
         print(f"✅ [MAIN] [{timestamp}] Background task created and scheduled (task_id: {id(task)})")
         
         # Return immediate acknowledgment (DB already saved, processing in background)
-        # Response model requires: success, history_id
+        # Response model requires: success, formula_id, history_id
         # Note: success=True means "request accepted", NOT "formula completed"
         # The actual completion notification is sent via WebSocket when background task finishes
         response = MakeWishBasicResponseRevised(
             success=True,
+            formula_id=formula_id,
             history_id=history_id
         )
-        print(f"📤 [MAIN] [{timestamp}] Returning response: success={response.success}, history_id={response.history_id}")
+        print(f"📤 [MAIN] [{timestamp}] Returning response: success={response.success}, formula_id={response.formula_id}, history_id={response.history_id}")
         return response
     
     except HTTPException:
