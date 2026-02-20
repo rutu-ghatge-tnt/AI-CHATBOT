@@ -585,7 +585,7 @@ async def generate_formula_revised(
     - Returns history_id instantly
     - Processes in background
     - Deducts credits on success
-    - Sends OneSignal notifications
+    - Sends WebSocket notifications
     """
     timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{'='*80}")
@@ -797,7 +797,7 @@ async def process_generate_revised_background(
     - Market trends
     - Synthesis
     - Credit deduction (on success only)
-    - OneSignal push notifications (success/failure)
+    - WebSocket notifications (success/failure)
     - Database updates
     """
     start_time = time.time()
@@ -908,18 +908,6 @@ async def process_generate_revised_background(
                 "creditsRemaining": deduct_credits_result.get("creditsRemaining"),
             }
         
-        # Send success notification via OneSignal (ONLY after status is confirmed as "completed")
-        try:
-            await send_onesignal_notification(
-                user_id=user_id,
-                title="Formula Generated Successfully!",
-                message=f"Your formula '{name}' has been generated and is ready to view.",
-                data=notification_data
-            )
-            print(f"✅ [BACKGROUND] Success notification sent via OneSignal")
-        except Exception as notif_error:
-            print(f"⚠️ [BACKGROUND] Failed to send success notification: {notif_error}")
-        
         # Send real-time WebSocket notification using enhanced notification module (ONLY after completion)
         try:
             await notify_user_enhanced(
@@ -965,17 +953,6 @@ async def process_generate_revised_background(
         except Exception as db_error:
             print(f"❌ [BACKGROUND] Failed to update failed status: {db_error}")
         
-        # Send failure notification via OneSignal (don't deduct credits on failure)
-        try:
-            await send_onesignal_notification(
-                user_id=user_id,
-                title="Formula Generation Failed",
-                message=f"Sorry, we couldn't generate your formula '{name}'. Please try again.",
-                data={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message}
-            )
-        except Exception as notif_error:
-            print(f"⚠️ [BACKGROUND] Failed to send failure notification: {notif_error}")
-        
         # Send real-time WebSocket notification using enhanced notification module
         try:
             await notify_user_enhanced(
@@ -996,82 +973,6 @@ async def process_generate_revised_background(
 
 # Credit deduction is now handled by the reusable credit_service
 # The deduct_credits function is imported above
-
-
-async def send_onesignal_notification(
-    user_id: str,
-    title: str,
-    message: str,
-    data: Optional[Dict[str, Any]] = None
-):
-    """
-    Send push notification via OneSignal.
-    """
-    onesignal_app_id = os.getenv("ONESIGNAL_APP_ID")
-    onesignal_api_key = os.getenv("ONESIGNAL_API_KEY")
-    onesignal_api_url = os.getenv("ONESIGNAL_API_URL", "https://onesignal.com/api/v1/notifications")
-    
-    if not onesignal_app_id or not onesignal_api_key:
-        print(f"⚠️ [ONESIGNAL] OneSignal credentials not configured, skipping notification")
-        return
-    
-    try:
-        # First, get the OneSignal player_id for this user from database
-        from app.ai_ingredient_intelligence.db.collections import users_col
-        
-        # Handle both ObjectId and string user_id
-        user_doc = None
-        if ObjectId.is_valid(user_id):
-            # Try as ObjectId first
-            user_doc = await users_col.find_one({"_id": ObjectId(user_id)})
-            if not user_doc:
-                # Try as user_id field
-                user_doc = await users_col.find_one({"user_id": user_id})
-        else:
-            # Try as string _id or user_id field
-            user_doc = await users_col.find_one({"_id": user_id})
-            if not user_doc:
-                user_doc = await users_col.find_one({"user_id": user_id})
-        
-        if not user_doc:
-            print(f"⚠️ [ONESIGNAL] User {user_id} not found")
-            return
-        
-        # Get player_id from user document (adjust field name as needed)
-        player_id = user_doc.get("onesignal_player_id") or user_doc.get("player_id")
-        
-        if not player_id:
-            print(f"⚠️ [ONESIGNAL] No OneSignal player_id found for user {user_id}")
-            return
-        
-        # Prepare OneSignal notification payload
-        payload = {
-            "app_id": onesignal_app_id,
-            "include_player_ids": [player_id],
-            "headings": {"en": title},
-            "contents": {"en": message},
-            "data": data or {}
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                onesignal_api_url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Basic {onesignal_api_key}"
-                }
-            )
-            
-            if response.status_code == 200:
-                print(f"✅ [ONESIGNAL] Notification sent successfully to user {user_id}")
-            else:
-                print(f"⚠️ [ONESIGNAL] OneSignal API returned status {response.status_code}: {response.text}")
-                raise Exception(f"OneSignal notification failed: {response.status_code}")
-                
-    except Exception as e:
-        print(f"❌ [ONESIGNAL] Error sending notification: {e}")
-        raise
 
 
 # ============================================================================
