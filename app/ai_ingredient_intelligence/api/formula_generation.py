@@ -48,6 +48,10 @@ from app.ai_ingredient_intelligence.logic.make_wish_generator import (
 )
 from app.ai_ingredient_intelligence.db.collections import wish_history_col
 
+# Import notification helpers
+from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user_enhanced
+from app.ai_ingredient_intelligence.models.notification_schemas import NotificationAction
+
 router = APIRouter(prefix="/formula", tags=["Formula Generation"])
 
 
@@ -1213,6 +1217,17 @@ async def update_wish_history(
         if not update_doc:
             raise HTTPException(status_code=400, detail="No fields to update")
         
+        # Get the wish item before update to get the name for notification
+        wish_item = await wish_history_col.find_one({"_id": ObjectId(history_id), "user_id": user_id})
+        
+        if not wish_item:
+            raise HTTPException(
+                status_code=404,
+                detail="History item not found or you don't have permission to update it"
+            )
+        
+        wish_name = wish_item.get("name", "Wish")
+        
         # Only update if it belongs to the user
         result = await wish_history_col.update_one(
             {"_id": ObjectId(history_id), "user_id": user_id},
@@ -1224,6 +1239,31 @@ async def update_wish_history(
                 status_code=404,
                 detail="History item not found or you don't have permission to update it"
             )
+        
+        # Send notification for successful update
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="success",
+                title="Wish Updated Successfully!",
+                message=f"Your wish '{wish_name}' has been updated.",
+                action=NotificationAction(
+                    label="View Wish",
+                    kind="route",
+                    to=f"/make-wish/{history_id}"
+                ),
+                meta={
+                    "history_id": history_id,
+                    "status": "updated",
+                    "type": "make_wish_updated",
+                    "updated_fields": list(update_doc.keys())
+                }
+            )
+            print(f"✅ [UPDATE] Notification sent for wish update: {history_id}")
+        except Exception as notify_error:
+            print(f"⚠️ [UPDATE] Failed to send notification: {notify_error}")
+            # Don't fail the request if notification fails
         
         return UpdateWishHistoryResponse(
             success=True,
@@ -1274,6 +1314,17 @@ async def delete_wish_history(
         if not ObjectId.is_valid(history_id):
             raise HTTPException(status_code=400, detail="Invalid history ID")
         
+        # Get the wish item before deletion to get the name for notification
+        wish_item = await wish_history_col.find_one({"_id": ObjectId(history_id), "user_id": user_id})
+        
+        if not wish_item:
+            raise HTTPException(
+                status_code=404,
+                detail="History item not found or you don't have permission to delete it"
+            )
+        
+        wish_name = wish_item.get("name", "Wish")
+        
         # Delete only if it belongs to the user
         result = await wish_history_col.delete_one(
             {"_id": ObjectId(history_id), "user_id": user_id}
@@ -1284,6 +1335,26 @@ async def delete_wish_history(
                 status_code=404,
                 detail="History item not found or you don't have permission to delete it"
             )
+        
+        # Send notification for successful deletion
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="info",
+                title="Wish Deleted",
+                message=f"Your wish '{wish_name}' has been deleted successfully.",
+                meta={
+                    "history_id": history_id,
+                    "status": "deleted",
+                    "type": "make_wish_deleted",
+                    "wish_name": wish_name
+                }
+            )
+            print(f"✅ [DELETE] Notification sent for wish deletion: {history_id}")
+        except Exception as notify_error:
+            print(f"⚠️ [DELETE] Failed to send notification: {notify_error}")
+            # Don't fail the request if notification fails
         
         return DeleteWishHistoryResponse(
             success=True,

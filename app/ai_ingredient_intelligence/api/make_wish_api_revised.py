@@ -1186,6 +1186,15 @@ async def edit_formula_metadata(
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
+        # Get the wish item before update to get the name for notification
+        wish_item = await wish_history_col.find_one({"_id": obj_id, "user_id": user_id})
+        
+        if not wish_item:
+            raise HTTPException(404, "Formula not found or access denied")
+        
+        # Use updated name if name was changed, otherwise use existing name
+        wish_name = data.get("name") if "name" in data else wish_item.get("name", "Wish")
+        
         # Atomic update (ownership enforced)
         result = await wish_history_col.update_one(
             {"_id": obj_id, "user_id": user_id},
@@ -1195,6 +1204,32 @@ async def edit_formula_metadata(
         # Not found or unauthorized
         if result.matched_count == 0:
             raise HTTPException(404, "Formula not found or access denied")
+
+        # Send notification for successful metadata update
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="success",
+                title="Formula Updated!",
+                message=f"Your formula '{wish_name}' metadata has been updated successfully.",
+                action=NotificationAction(
+                    label="View Formula",
+                    kind="route",
+                    to=f"/make-wish/{wishId}"
+                ),
+                meta={
+                    "history_id": wishId,
+                    "status": "updated",
+                    "type": "make_wish_metadata_updated",
+                    "updated_fields": list(data.keys()),
+                    "wish_name": wish_name
+                }
+            )
+            print(f"✅ [METADATA UPDATE] Notification sent for formula metadata update: {wishId}")
+        except Exception as notify_error:
+            print(f"⚠️ [METADATA UPDATE] Failed to send notification: {notify_error}")
+            # Don't fail the request if notification fails
 
         return {
             "success": True,
