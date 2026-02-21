@@ -1258,7 +1258,8 @@ async def update_wish_history(
                     "status": "updated",
                     "type": "make_wish_updated",
                     "updated_fields": list(update_doc.keys())
-                }
+                },
+                send_websocket=False
             )
             print(f"✅ [UPDATE] Notification sent for wish update: {history_id}")
         except Exception as notify_error:
@@ -1336,12 +1337,12 @@ async def delete_wish_history(
                 detail="History item not found or you don't have permission to delete it"
             )
         
-        # Send notification for successful deletion
+        # Save notification for successful deletion (no WebSocket push)
         try:
             await notify_user_enhanced(
                 user_id=user_id,
                 module="make-wish",
-                notification_type="info",
+                notification_type="delete",
                 title="Wish Deleted",
                 message=f"Your wish '{wish_name}' has been deleted successfully.",
                 meta={
@@ -1349,9 +1350,10 @@ async def delete_wish_history(
                     "status": "deleted",
                     "type": "make_wish_deleted",
                     "wish_name": wish_name
-                }
+                },
+                send_websocket=False
             )
-            print(f"✅ [DELETE] Notification sent for wish deletion: {history_id}")
+            print(f"✅ [DELETE] Notification saved for wish deletion: {history_id}")
         except Exception as notify_error:
             print(f"⚠️ [DELETE] Failed to send notification: {notify_error}")
             # Don't fail the request if notification fails

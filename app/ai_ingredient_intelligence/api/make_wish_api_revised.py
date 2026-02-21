@@ -985,7 +985,8 @@ async def process_generate_revised_background(
                     kind="route",
                     to=f"/make-wish/{history_id}"
                 ),
-                meta=notification_data
+                meta=notification_data,
+                send_websocket=True
             )
             # Log the notification that was sent to verify credit info is included
             notification_dict = notification_result.model_dump() if hasattr(notification_result, 'model_dump') else {}
@@ -1032,7 +1033,8 @@ async def process_generate_revised_background(
                 notification_type="error",
                 title="Formula Generation Failed",
                 message=f"Sorry, we couldn't generate your formula '{name}'. Please try again.",
-                meta={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message}
+                meta={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message},
+                send_websocket=True
             )
         except Exception as ws_error:
             print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
@@ -1223,7 +1225,8 @@ async def edit_formula_metadata(
                     "type": "make_wish_metadata_updated",
                     "updated_fields": list(data.keys()),
                     "wish_name": wish_name
-                }
+                },
+                send_websocket=False
             )
             print(f"✅ [METADATA UPDATE] Notification sent for formula metadata update: {wishId}")
         except Exception as notify_error:
