@@ -15,7 +15,7 @@ from datetime import datetime
 NotificationModule = Literal["compare", "formulation", "market-research", "general", "boards", "make-wish"]
 
 # Notification Types
-NotificationType = Literal["loading", "success", "error", "info"]
+NotificationType = Literal["loading", "success", "error", "info", "delete"]
 
 
 class NotificationAction(BaseModel):
@@ -30,7 +30,7 @@ class NotificationItem(BaseModel):
     """Notification item matching the TypeScript interface"""
     id: str = Field(..., description="Unique notification ID")
     module: NotificationModule = Field(..., description="Module that generated the notification")
-    type: NotificationType = Field(..., description="Notification type: loading, success, error, or info")
+    type: NotificationType = Field(..., description="Notification type: loading, success, error, info, or delete")
     title: str = Field(..., description="Notification title")
     message: Optional[str] = Field(None, description="Optional notification message")
     createdAt: int = Field(..., description="Unix timestamp in milliseconds")

@@ -334,7 +334,8 @@ async def notify_user_enhanced(
     message: Optional[str] = None,
     dismissible: bool = True,
     action: Optional[NotificationAction] = None,
-    meta: Optional[Dict[str, Any]] = None
+    meta: Optional[Dict[str, Any]] = None,
+    send_websocket: bool = False
 ) -> NotificationItem:
     """
     Enhanced notification function that creates and stores notifications.
@@ -343,12 +344,13 @@ async def notify_user_enhanced(
     Args:
         user_id: User ID
         module: Notification module (e.g., "make-wish", "compare", "formulation")
-        notification_type: Type of notification ("loading", "success", "error", "info")
+        notification_type: Type of notification ("loading", "success", "error", "info", "delete")
         title: Notification title
         message: Optional message
         dismissible: Whether notification can be dismissed
         action: Optional action button
         meta: Optional metadata
+        send_websocket: If True, push notification via WebSocket; if False, only store. Default False.
         
     Returns:
         Created notification item
@@ -377,6 +379,6 @@ async def notify_user_enhanced(
         dismissible=dismissible,
         action=action,
         meta=meta,
-        send_websocket=True
+        send_websocket=send_websocket
     )
 

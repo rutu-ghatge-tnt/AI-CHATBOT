@@ -117,7 +117,7 @@ async def notify_user(
                     to=route_path
                 )
         
-        # Use enhanced notification service
+        # Use enhanced notification service (push via WebSocket for backward compat)
         await _notify_user_enhanced(
             user_id=user_id,
             module=module,
@@ -125,7 +125,8 @@ async def notify_user(
             title=title,
             message=message,
             action=action,
-            meta=data
+            meta=data,
+            send_websocket=True
         )
         
         return True
