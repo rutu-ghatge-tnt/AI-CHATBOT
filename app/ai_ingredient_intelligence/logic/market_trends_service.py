@@ -8,6 +8,7 @@ Provides formatted data ready for frontend visualization.
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+import asyncio
 import statistics
 from collections import defaultdict
 
@@ -241,22 +242,25 @@ class MarketTrendsService:
                 primary_query = unique_variations[0] if unique_variations else ingredient
                 print(f"   📊 Primary query: '{primary_query}'")
                 
-                # Fetch trends for primary query
-                trends_data = self.serpapi_client.get_trends_timeseries(
+                # Fetch trends for primary query (run in thread pool to avoid blocking event loop)
+                trends_data = await asyncio.to_thread(
+                    self.serpapi_client.get_trends_timeseries,
                     query=primary_query,
                     time_range="today 12-m",
                     geo="IN"
                 )
                 
                 # Fetch related queries to discover more variations
-                related_data = self.serpapi_client.get_trends_related_queries(
+                related_data = await asyncio.to_thread(
+                    self.serpapi_client.get_trends_related_queries,
                     query=primary_query,
                     time_range="today 12-m",
                     geo="IN"
                 )
                 
                 # Fetch regional data
-                regional_data = self.serpapi_client.get_trends_regional(
+                regional_data = await asyncio.to_thread(
+                    self.serpapi_client.get_trends_regional,
                     query=primary_query,
                     time_range="today 12-m",
                     geo="IN"
@@ -301,7 +305,8 @@ class MarketTrendsService:
                     for related_query in related_queries_to_fetch[:3]:  # Limit to 3 to avoid rate limits
                         try:
                             print(f"   🔗 Fetching related query: '{related_query}'")
-                            related_trends = self.serpapi_client.get_trends_timeseries(
+                            related_trends = await asyncio.to_thread(
+                                self.serpapi_client.get_trends_timeseries,
                                 query=related_query,
                                 time_range="today 12-m",
                                 geo="IN"
@@ -382,22 +387,25 @@ class MarketTrendsService:
                     primary_benefit_query = unique_benefit_variations[0] if unique_benefit_variations else benefit
                     print(f"   📊 Primary benefit query: '{primary_benefit_query}'")
                     
-                    # Fetch trends
-                    trends_data = self.serpapi_client.get_trends_timeseries(
+                    # Fetch trends (run in thread pool to avoid blocking event loop)
+                    trends_data = await asyncio.to_thread(
+                        self.serpapi_client.get_trends_timeseries,
                         query=primary_benefit_query,
                         time_range="today 12-m",
                         geo="IN"
                     )
                     
                     # Fetch related queries to discover more variations
-                    related_data = self.serpapi_client.get_trends_related_queries(
+                    related_data = await asyncio.to_thread(
+                        self.serpapi_client.get_trends_related_queries,
                         query=primary_benefit_query,
                         time_range="today 12-m",
                         geo="IN"
                     )
                     
                     # Fetch regional data
-                    regional_data = self.serpapi_client.get_trends_regional(
+                    regional_data = await asyncio.to_thread(
+                        self.serpapi_client.get_trends_regional,
                         query=primary_benefit_query,
                         time_range="today 12-m",
                         geo="IN"
@@ -438,7 +446,8 @@ class MarketTrendsService:
                         for related_query in related_benefit_queries[:3]:
                             try:
                                 print(f"   🔗 Fetching related benefit query: '{related_query}'")
-                                related_trends = self.serpapi_client.get_trends_timeseries(
+                                related_trends = await asyncio.to_thread(
+                                    self.serpapi_client.get_trends_timeseries,
                                     query=related_query,
                                     time_range="today 12-m",
                                     geo="IN"
