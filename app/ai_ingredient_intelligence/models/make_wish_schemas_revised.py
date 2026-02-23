@@ -19,7 +19,6 @@ from datetime import datetime
 class ParseWishRequest(BaseModel):
     """Request schema for parsing natural language wish"""
     wish_text: str = Field(..., min_length=30, description="Natural language wish description (minimum 30 characters)")
-    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Wish mode: 'basic' or 'advanced'")
 
 
 class ProductTypeInfo(BaseModel):
@@ -74,7 +73,6 @@ class ParsedWishData(BaseModel):
     detected_hair_concerns: List[str] = Field(default_factory=list, description="Hair concerns mentioned")
     auto_texture: TextureInfo = Field(..., description="Auto-detected texture")
     needs_clarification: List[Dict[str, Any]] = Field(default_factory=list, description="Simple clarification questions from AI")
-    mode: Literal["basic", "advanced"] = Field(default="advanced", description="Wish mode: 'basic' or 'advanced'")
 
 
 class ParseWishResponse(BaseModel):
@@ -219,18 +217,17 @@ class MakeWishBasicResponseRevised(BaseModel):
 
 
 class MakeWishResponseRevised(BaseModel):
-    """Revised response schema for Make a Wish formula generation (advanced mode).
-    Response shape is always the same: formula, insights, manufacturing, compliance,
-    and basic_mode_result are always present (basic_mode_result is {} when mode is advanced).
+    """Revised response schema for Make a Wish formula generation.
+    Note: Only one mode exists now. This schema is kept for backward compatibility.
     """
     success: bool = Field(..., description="Whether generation was successful")
     formula_id: str = Field(..., description="Unique ID for this formula")
     history_id: str = Field(..., description="History tracking ID")
     
-    # Mode: basic (layman) vs advanced (formulator)
-    mode: Literal["basic", "advanced"] = Field(default="advanced", description="'basic' or 'advanced'")
-    # Always an object: full result when mode is 'basic', empty dict when 'advanced'
-    basic_mode_result: Dict[str, Any] = Field(default_factory=dict, description="Full result when mode is 'basic'; {} when advanced")
+    # Kept for backward compatibility (always "basic" now)
+    mode: Literal["basic", "advanced"] = Field(default="basic", description="Always 'basic' - kept for compatibility")
+    # Always contains the full result
+    basic_mode_result: Dict[str, Any] = Field(default_factory=dict, description="Full formula result")
     
     # Formula core - always present (minimal placeholder in basic mode)
     formula: FormulaOutput = Field(..., description="Complete formula")

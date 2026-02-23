@@ -123,7 +123,8 @@ async def analyze_ingredients_core(ingredients: List[str]) -> AnalyzeInciRespons
         )
         for key, val in detected_dict.items()
     ]
-    # Sort by number of INCI: more INCI first, then lower, single at last
+    # Sort by number of INCI: more INCI first (grouped ingredients at top), then individual ingredients below
+    # Primary sort: number of INCI (descending - more INCI first)
     detected.sort(key=lambda x: len(x.inci_list), reverse=True)
 
     # Filter out water-related BIS cautions

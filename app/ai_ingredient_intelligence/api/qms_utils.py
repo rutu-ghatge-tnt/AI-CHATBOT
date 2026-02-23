@@ -186,3 +186,191 @@ async def create_query_from_payment(
 # No longer needed since commercialization_requests collection was removed
 # All commercialization requests are now created directly as QMS queries
 
+
+
+async def create_query_from_payment(
+
+    user_id: str,
+
+    payment_id: str,
+
+    wish_history_id: str,
+
+    formula_id: str,
+
+    formula_name: str,
+
+    experience_level: str,
+
+    timeline: str,
+
+    quantity_interest: Optional[str] = None,
+
+    additional_notes: Optional[str] = None
+
+) -> str:
+
+    """
+
+    Create a QMS query from a successful payment.
+
+    
+
+    This is a wrapper around create_query_from_commercialization that requires payment_id.
+
+    Use this when payment is verified.
+
+    
+
+    Args:
+
+        user_id: User ID from JWT token
+
+        payment_id: Payment record ID (required)
+
+        wish_history_id: Make A Wish history ID
+
+        formula_id: Formula ID
+
+        formula_name: Formula name
+
+        experience_level: Experience level
+
+        timeline: Timeline
+
+        quantity_interest: Optional quantity interest
+
+        notes: Optional notes
+
+    
+
+    Returns:
+
+        Query ID (MongoDB ObjectId as string)
+
+    """
+
+    return await create_query_from_commercialization(
+
+        user_id=user_id,
+
+        wish_history_id=wish_history_id,
+
+        formula_id=formula_id,
+
+        formula_name=formula_name,
+
+        experience_level=experience_level,
+
+        timeline=timeline,
+
+        quantity_interest=quantity_interest,
+
+        additional_notes=additional_notes,
+
+        payment_id=payment_id
+
+    )
+
+
+
+
+
+
+
+
+
+
+async def create_query_from_payment(
+
+    user_id: str,
+
+    payment_id: str,
+
+    wish_history_id: str,
+
+    formula_id: str,
+
+    formula_name: str,
+
+    experience_level: str,
+
+    timeline: str,
+
+    quantity_interest: Optional[str] = None,
+
+    additional_notes: Optional[str] = None
+
+) -> str:
+
+    """
+
+    Create a QMS query from a successful payment.
+
+    
+
+    This is a wrapper around create_query_from_commercialization that requires payment_id.
+
+    Use this when payment is verified.
+
+    
+
+    Args:
+
+        user_id: User ID from JWT token
+
+        payment_id: Payment record ID (required)
+
+        wish_history_id: Make A Wish history ID
+
+        formula_id: Formula ID
+
+        formula_name: Formula name
+
+        experience_level: Experience level
+
+        timeline: Timeline
+
+        quantity_interest: Optional quantity interest
+
+        notes: Optional notes
+
+    
+
+    Returns:
+
+        Query ID (MongoDB ObjectId as string)
+
+    """
+
+    return await create_query_from_commercialization(
+
+        user_id=user_id,
+
+        wish_history_id=wish_history_id,
+
+        formula_id=formula_id,
+
+        formula_name=formula_name,
+
+        experience_level=experience_level,
+
+        timeline=timeline,
+
+        quantity_interest=quantity_interest,
+
+        additional_notes=additional_notes,
+
+        payment_id=payment_id
+
+    )
+
+
+
+
+
+# REMOVED: create_query_from_commercialization_request function
+
+# No longer needed since commercialization_requests collection was removed
+
+# All commercialization requests are now created directly as QMS queries

@@ -1,13 +1,12 @@
 """
-Make a Wish - AI Prompt System
-===============================
+Make A Wish - AI Prompts (Consolidated)
+========================================
 
-This module contains all system prompts for the 5-stage "Make a Wish" AI pipeline:
-1. Ingredient Selection
-2. Formula Optimization
-3. Manufacturing Process
-4. Cost Analysis
-5. Compliance Check
+This module contains all AI prompts for the Make A Wish feature:
+- Revised flow prompts (parse wish, ingredient selection, optimization, insights, alternatives)
+- Basic mode prompt (Formulynx-style comprehensive prompt)
+
+All prompts are organized in one place for clarity and maintainability.
 """
 
 # Configuration: Use MongoDB for costs (True) or Excel file (False)
@@ -173,6 +172,7 @@ def get_enhanced_cost_reference_anchors() -> str:
     """
     Get cost reference anchors with database data included.
     Uses MongoDB if available, otherwise falls back to Excel file.
+    Falls back to base anchors if database lookup fails or returns empty.
     """
     base_anchors = COST_REFERENCE_ANCHORS
     
@@ -185,8 +185,10 @@ def get_enhanced_cost_reference_anchors() -> str:
             else:
                 # Excel version is synchronous
                 db_table = get_cost_reference_table()
-                if db_table:
+                if db_table and db_table.strip():  # Check for non-empty string
                     return db_table + "\n\n" + base_anchors
+                else:
+                    print("Warning: Excel cost lookup returned empty. Using default anchors only.")
         except Exception as e:
             print(f"Warning: Could not load cost data: {e}. Using default anchors only.")
     
@@ -197,6 +199,7 @@ async def get_enhanced_cost_reference_anchors_async() -> str:
     """
     Async version that works with MongoDB.
     Use this when calling from async functions.
+    Falls back to base anchors if MongoDB fails or returns empty.
     """
     base_anchors = COST_REFERENCE_ANCHORS
     
@@ -205,14 +208,18 @@ async def get_enhanced_cost_reference_anchors_async() -> str:
             if USE_MONGODB_FOR_COSTS:
                 # MongoDB async version
                 db_table = await get_cost_reference_table_from_mongo()
-                if db_table:
+                if db_table and db_table.strip():  # Check for non-empty string
                     return db_table + "\n\n" + base_anchors
+                else:
+                    print("Warning: MongoDB cost lookup returned empty. Using default anchors only.")
             else:
                 # Excel synchronous version (can be called in async context)
                 import asyncio
                 db_table = await asyncio.to_thread(get_cost_reference_table)
-                if db_table:
+                if db_table and db_table.strip():  # Check for non-empty string
                     return db_table + "\n\n" + base_anchors
+                else:
+                    print("Warning: Excel cost lookup returned empty. Using default anchors only.")
         except Exception as e:
             print(f"Warning: Could not load cost data: {e}. Using default anchors only.")
     
@@ -328,194 +335,156 @@ After calculating costs, include a "validation_report" section:
 """
 
 # ============================================================================
-# STAGE 1: INGREDIENT SELECTION
+# REVISED FLOW PROMPTS
 # ============================================================================
 
-INGREDIENT_SELECTION_SYSTEM_PROMPT = """
-You are an expert cosmetic chemist with 20+ years of experience formulating skincare and haircare products for the Indian market. Your task is to select appropriate ingredients for a NEW cosmetic formula based on user requirements.
+# STAGE 1: PARSE WISH PROMPT
+PARSE_WISH_PROMPT = """
+Parse this cosmetic wish and extract structured information. Keep it simple and fast - just extract what the user wants, don't generate a full formula.
 
-CRITICAL: This is a BRAND NEW formula being created from scratch. There is NO "original formulation" or "previous version". Do NOT reference any "original formulation" in your insights or warnings. Focus only on creating the best new formula based on the user's requirements.
+Wish: {wish_text}
 
-## YOUR EXPERTISE INCLUDES:
+## YOUR TASK:
 
-- Deep knowledge of INCI nomenclature and ingredient functions
-- Understanding of ingredient synergies and incompatibilities
-- Familiarity with Indian cosmetic regulations (BIS IS 4707)
-- Knowledge of both commodity and branded/patented ingredients
-- Cost optimization for Indian market (pricing in ₹/kg)
-- Ayurvedic and natural ingredient alternatives
-
-## CRITICAL RULES:
-
-### 1. INGREDIENT SELECTION
-
-- Select ingredients that directly deliver the requested benefits
-- Prioritize efficacy-proven ingredients with clinical backing
-- Consider ingredient stability and compatibility
-- Include both active and supporting ingredients
-- Suggest branded alternatives where beneficial (e.g., Sepineo™, Zincidone®)
-
-### 2. EXCLUSIONS (STRICT)
-
-- NEVER include ingredients matching user exclusions
-- If user says "Silicone-free", exclude ALL silicones (Dimethicone, Cyclomethicone, etc.)
-- If user says "Sulfate-free", exclude ALL sulfates (SLS, SLES, ALS, etc.)
-- If user says "Paraben-free", exclude ALL parabens
-- If user says "Fragrance-free", exclude Parfum/Fragrance AND essential oils unless therapeutic
-
-### 3. PHASE ORGANIZATION
-
-For SKINCARE (Serums, Moisturizers, etc.):
-
-- Phase A: Water Phase (aqueous ingredients, heated)
-- Phase B: Oil Phase (oils, emollients, heated) - if emulsion
-- Phase C: Active Phase (heat-sensitive actives, cool down)
-- Phase D: Preservation & pH Adjustment
-
-For HAIRCARE (Shampoos):
-
-- Phase A: Water Phase (water, humectants)
-- Phase B: Surfactant Phase (primary + secondary surfactants)
-- Phase C: Conditioning Phase (conditioning agents)
-- Phase D: Active Phase (actives, extracts)
-- Phase E: Preservation & pH Adjustment
-
-For HAIRCARE (Conditioners, Masks):
-
-- Phase A: Water Phase (water, humectants)
-- Phase B: Emulsion Phase (cetyl alcohol, BTMS, etc.)
-- Phase C: Oil/Butter Phase (oils, butters)
-- Phase D: Active Phase (proteins, extracts)
-- Phase E: Preservation & pH Adjustment
-
-For HAIRCARE (Serums, Oils):
-
-- Phase A: Oil Phase (carrier oils, silicones if allowed)
-- Phase B: Active Phase (heat-sensitive actives)
-- Phase C: Fragrance (if applicable)
-
-### 4. COST CONSIDERATIONS
-
-**IMPORTANT: Unit varies by product type:**
-- Liquid products (serum, toner, shampoo, conditioner, oil): Use **ml** (e.g., ₹30-60/ml)
-- Solid/semi-solid products (cream, lotion, mask, gel, balm): Use **g** (e.g., ₹30-60/g)
-
-**Cost Ranges:**
-- Budget (₹30-60 per unit): Use commodity ingredients, higher water content
-- Mid-range (₹60-120 per unit): Include 1-2 premium actives
-- Premium (₹120-200 per unit): Multiple actives, branded ingredients
-- Luxury (₹200+ per unit): Patented ingredients, high concentrations
-
-**When generating cost information, ALWAYS use the appropriate unit:**
-- For serums, toners, shampoos, conditioners, oils → use "/ml"
-- For creams, lotions, masks, gels, balms → use "/g"
-
-### 5. MANDATORY INGREDIENTS
-
-Always include appropriate:
-
-- Solvent/Base (Water for aqueous, oils for anhydrous)
-- Preservation system (unless anhydrous with no water activity)
-- pH adjustment system (for aqueous products)
-- Texture/viscosity modifier
+Extract the following information from the natural language wish:
+1. Category (skincare or haircare)
+2. Product type (serum, moisturizer, shampoo, etc.)
+3. Ingredients mentioned (if any)
+4. Benefits requested
+5. Exclusions mentioned (silicone-free, sulfate-free, etc.)
+6. Skin types or hair concerns (if mentioned)
+7. Any compatibility issues between mentioned ingredients
 
 ## OUTPUT FORMAT (JSON):
 
+{{
+  "category": "skincare|haircare",
+  "product_type": {{
+    "id": "serum|moisturizer|cleanser|shampoo|conditioner|mask|toner|oil|gel|balm|etc.",
+    "name": "Display name (e.g., 'Serum', 'Moisturizer', 'Shampoo')",
+    "icon": "lucide icon name (e.g., 'droplet', 'sparkles', 'beaker')",
+    "confidence": 0.95
+  }},
+  "detected_ingredients": [
+    {{
+      "name": "Ingredient name as mentioned (e.g., 'Vitamin C', 'Niacinamide')",
+      "confidence": 0.9,
+      "has_alternatives": true
+    }}
+  ],
+  "detected_benefits": [
+    "List of benefits mentioned (e.g., 'brightening', 'anti-aging', 'hydration')"
+  ],
+  "detected_exclusions": [
+    "List of exclusions mentioned (e.g., 'silicone-free', 'sulfate-free', 'paraben-free')"
+  ],
+  "detected_skin_types": [
+    "List of skin types mentioned (e.g., 'oily', 'dry', 'sensitive') - empty if not mentioned"
+  ],
+  "detected_hair_concerns": [
+    "List of hair concerns mentioned (e.g., 'dandruff', 'hair fall') - empty if not mentioned"
+  ],
+  "compatibility_issues": [
+    {{
+      "severity": "critical|warning",
+      "title": "Brief issue title",
+      "problem": "Description of the compatibility issue",
+      "solution": "Suggested solution",
+      "ingredients_involved": ["Ingredient1", "Ingredient2"]
+    }}
+  ],
+  "needs_clarification": [
+    {{
+      "question": "Question if wish is ambiguous",
+      "reason": "Why clarification is needed"
+    }}
+  ]
+}}
+
+## IMPORTANT RULES:
+
+1. **Keep it simple**: Only extract what's explicitly mentioned or clearly implied. Don't generate a full formula.
+2. **Product type**: Use common IDs like: serum, moisturizer, cleanser, toner, mask, shampoo, conditioner, oil, gel, balm, sunscreen, face_wash
+3. **Icon names**: Use Lucide icon names like: droplet, sparkles, beaker, flask, test-tube, syringe, etc.
+4. **Confidence**: Use high confidence (0.8-1.0) if clear, lower (0.5-0.7) if ambiguous
+5. **Ingredients**: Only list ingredients explicitly mentioned. Use common names (e.g., "Vitamin C" not "L-Ascorbic Acid")
+6. **Benefits**: Extract from phrases like "for brightening", "gives glow", "reduces wrinkles", etc.
+7. **Exclusions**: Look for words like "free", "without", "no" (e.g., "silicone-free" → exclude silicones)
+8. **Compatibility issues**: Only flag if multiple incompatible ingredients are mentioned together
+
+Return ONLY the JSON, no additional text.
+"""
+
+
+# ============================================================================
+# INGREDIENT SELECTION SYSTEM PROMPT (Base)
+# ============================================================================
+
+INGREDIENT_SELECTION_SYSTEM_PROMPT = """You are an expert cosmetic formulator. Your task is to select appropriate ingredients for a cosmetic formula based on user requirements.
+
+CRITICAL RULES:
+1. Select ingredients that match the requested benefits
+2. Respect all exclusions (e.g., if "Silicone-free", don't include any silicones)
+3. Prioritize hero ingredients if specified
+4. Consider cost targets
+5. Include necessary base ingredients (water, preservatives, pH adjusters)
+6. Select appropriate functional ingredients (humectants, emollients, actives, etc.)
+7. Organize ingredients into phases (Water Phase, Active Phase, Preservation, etc.)
+
+OUTPUT FORMAT (JSON):
 {
-  "formula_name": "Suggested product name based on benefits",
-  "formula_type": "serum|moisturizer|cleanser|shampoo|conditioner|etc.",
-  "target_ph": {"min": 5.0, "max": 6.0},
-  
-  "ingredients": [
-    {
-      "ingredient_name": "Common/Trade Name",
-      "inci_name": "INCI Name",
-      "inci_aliases": ["Alternative INCI names if any"],
-      "functional_category": "Primary function category",
-      "sub_functions": ["Additional functions"],
-      "phase": "A|B|C|D|E",
-      "usage_range": {"min": 0.5, "max": 2.0},
-      "recommended_percent": 1.0,
-      "cost_per_kg_inr": 35000,
-      "cost_estimation": {
-        "cost_per_kg_inr_low": 25000,
-        "cost_per_kg_inr_high": 45000,
-        "cost_per_kg_inr_mid": 35000,
-        "estimation_method": "reference_table | analogous_ingredient | specialty_estimate",
-        "reasoning": "Patented Seppic ingredient, no generic available. Referenced from Category D anchor table. Seppic lipopeptides typically ₹25,000-45,000/kg from Indian distributors.",
-        "confidence": "high | medium | low",
-        "is_import_dependent": true,
-        "primary_source_country": "France",
-        "indian_suppliers": ["IMCD India", "Seppic India Pvt Ltd"],
-        "price_volatile": false
-      },
-      "is_hero": true|false,
-      "is_active": true|false,
-      "branded_alternative": {
-        "trade_name": "Branded version if available",
-        "manufacturer": "Company name",
-        "benefit": "Why use branded version"
-      },
-      "notes": "Important formulation notes"
-    }
-  ],
-  
-  "phases": [
-    {
-      "id": "A",
-      "name": "Water Phase",
-      "process_temp": "70-75°C",
-      "instructions": "Heat water and add water-soluble ingredients",
-      "ingredient_names": ["Purified Water", "Glycerin", "Niacinamide"]
-    }
-  ],
-  
-  "insights": [
-    {
-      "icon": "lightbulb",
-      "category": "efficacy|stability|cost|safety",
-      "title": "Niacinamide at 5%",
-      "text": "Clinical studies show 5% niacinamide provides optimal brightening benefits while minimizing potential flushing."
-    }
-  ],
-  
-  "warnings": [
-    {
-      "severity": "critical|caution|info",
-      "category": "stability|safety|compatibility|regulatory",
-      "text": "Warning message",
-      "solution": "How to address this"
-    }
-  ],
-  
-  "ingredient_synergies": [
-    {
-      "ingredients": ["Niacinamide", "Zinc PCA"],
-      "benefit": "Enhanced oil control and pore minimizing effect"
-    }
-  ],
-  
-  "ingredient_conflicts": [
-    {
-      "ingredients": ["Vitamin C (L-AA)", "Niacinamide"],
-      "issue": "Can cause flushing at low pH",
-      "solution": "Use stable Vitamin C derivative or separate application"
-    }
-  ],
-  
-  "reasoning": "Detailed explanation of why these ingredients were selected and how they work together to deliver the requested benefits."
+    "ingredients": [
+        {
+            "ingredient_name": "Niacinamide",
+            "inci_names": ["Niacinamide"],
+            "functional_categories": ["Skin Lightening Agents", "Antioxidants"],
+            "estimated_cost_per_kg": 5000,
+            "usage_range": {"min": 2, "max": 5},
+            "function": "Brightening agent",
+            "is_hero": false,
+            "phase": "B"
+        }
+    ],
+    "phases": [
+        {
+            "id": "A",
+            "name": "Water Phase",
+            "temp": "70°C",
+            "ingredients": ["Purified Water", "Glycerin"]
+        },
+        {
+            "id": "B",
+            "name": "Active Phase",
+            "temp": "40°C",
+            "ingredients": ["Niacinamide", "3-O-Ethyl Ascorbic Acid"]
+        }
+    ],
+    "insights": [
+        {
+            "icon": "💡",
+            "title": "Niacinamide",
+            "text": "Effective at 2-5% for brightening and oil control"
+        }
+    ],
+    "warnings": [
+        {
+            "type": "info",
+            "text": "pH must be maintained at 5.0-6.5 for optimal stability"
+        }
+    ],
+    "reasoning": "Brief explanation of ingredient choices"
 }
 
-IMPORTANT NOTES:
-- All costs in Indian Rupees (₹) per kilogram
-- Use standard INCI nomenclature
-- Provide realistic, safe usage ranges
+IMPORTANT:
+- Use standard INCI names
+- Provide realistic cost estimates in ₹/kg (Indian Rupees per kilogram)
+- Provide safe usage percentage ranges
 - Mark hero ingredients with is_hero: true
-- Mark actives with is_active: true
-- Include 8-15 ingredients for complete formula
-- Consider Indian climate (humidity, heat) in formulation
-- Suggest preservative systems effective in tropical climates
-
+- Include at least 5-10 ingredients for a complete formula
+- Always include: Water (Aqua), Preservative, pH Adjuster
+- Organize into phases: Water Phase (A), Active Phase (B), Preservation (C/D)
+- Generate insights explaining key ingredient choices
+- Add warnings for important considerations (pH, stability, etc.)
 """
 
 
@@ -767,98 +736,502 @@ You are a cosmetic manufacturing expert. Generate detailed manufacturing instruc
       {"item": "Beaker (500ml)", "purpose": "Mixing vessel"},
       {"item": "Hot plate with stirrer", "purpose": "Heating and mixing"},
       {"item": "pH meter", "purpose": "pH measurement"}
+>>>>>>> dev
     ],
-    "recommended": [
-      {"item": "Homogenizer", "purpose": "Fine emulsion"}
-    ]
-  },
-  
-  "manufacturing_steps": [
-    {
-      "step_number": 1,
-      "phase": "A",
-      "title": "Prepare Water Phase",
-      "ingredients": ["Purified Water", "Glycerin", "Niacinamide"],
-      "instructions": [
-        "Weigh purified water into main beaker",
-        "Add glycerin and mix until uniform",
-        "Add niacinamide and stir until dissolved"
-      ],
-      "temperature": "Room temperature (25°C)",
-      "mixing_speed": "300-500 RPM",
-      "duration": "5-10 minutes",
-      "checkpoint": {
-        "parameter": "Visual",
-        "expected": "Clear, colorless solution",
-        "action_if_fail": "Continue mixing until dissolved"
-      }
-    }
-  ],
-  
-  "critical_parameters": [
-    {
-      "parameter": "pH",
-      "stage": "Final",
-      "target": "5.0-5.5",
-      "method": "pH meter",
-      "adjustment": "Use citric acid to lower, triethanolamine to raise"
-    },
-    {
-      "parameter": "Viscosity",
-      "stage": "After thickener addition",
-      "target": "5000-10000 cP",
-      "method": "Viscometer or visual assessment"
-    }
-  ],
-  
-  "troubleshooting": [
-    {
-      "issue": "Separation/instability",
-      "cause": "Inadequate homogenization",
-      "solution": "Re-homogenize at 4000 RPM for 5 minutes"
-    },
-    {
-      "issue": "pH too high",
-      "cause": "Insufficient acid",
-      "solution": "Add citric acid solution dropwise with mixing"
-    }
-  ],
-  
-  "packaging_guidelines": {
-    "recommended_packaging": ["Airless pump", "Dropper bottle"],
-    "avoid": ["Jar packaging (hygiene)", "Clear glass (light sensitivity)"],
-    "fill_temperature": "Below 35°C",
-    "storage": "Cool, dry place away from direct sunlight"
-  },
-  
-  "quality_control": {
-    "in_process": [
-      "Visual inspection at each phase",
-      "pH check before and after adjustment",
-      "Temperature monitoring"
-    ],
-    "final_product": [
-      "pH: 5.0-5.5",
-      "Viscosity: Within specification",
-      "Appearance: Clear/white, no separation",
-      "Microbial: <100 CFU/g",
-      "Stability: No separation at 40°C/75% RH for 3 months"
-    ]
-  },
-  
-  "scale_up_notes": [
-    "Increase mixing time proportionally with batch size",
-    "Use jacketed vessel for better temperature control",
-    "Consider in-line homogenization for batches >10kg"
-  ],
-  
-  "safety_precautions": [
-    "Wear appropriate PPE (gloves, lab coat, safety glasses)",
-    "Handle acids with care",
-    "Ensure adequate ventilation"
-  ]
-}
+    "detected_benefits": ["brightening"],
+    "detected_exclusions": ["paraben-free"],
+    "detected_skin_types": [],
+    "detected_hair_concerns": [],
+    "auto_texture": {{
+        "id": "watery",
+        "label": "Light & Fast-Absorbing",
+        "auto_selected": true
+    }},
+    "needs_clarification": [],
+    "compatibility_issues": []
+}}
+
+Analyze the wish and fill in actual values. Return only JSON.
 """
+
+# STAGE 2: INGREDIENT SELECTION WITH COMPLEXITY
+INGREDIENT_SELECTION_COMPLEXITY_PROMPT = """
+Select {max_ingredients} ingredients for {complexity} {product_type} with {active_slots} hero actives.
+
+Requirements: {benefits}, {exclusions}, {texture}
+Base: {base_ingredients}
+
+Return JSON:
+{{
+    "selected_ingredients": [
+        {{
+            "id": "vitamin_c",
+            "inci_name": "Ascorbic Acid",
+            "display_name": "Vitamin C",
+            "icon": "flask",
+            "percentage_range": "10-15%",
+            "phase": "C",
+            "purpose": "brightening",
+            "is_hero": true,
+            "is_base": false,
+            "has_alternatives": true
+        }}
+    ],
+    "selection_summary": {{
+        "total_ingredients": {max_ingredients},
+        "hero_actives": {active_slots},
+        "complexity_compliance": true
+    }}
+}}
+
+Be concise.
+"""
+
+# STAGE 3: FORMULA OPTIMIZATION (REVISED)
+FORMULA_OPTIMIZATION_REVISED_PROMPT = """
+Optimize {product_type} ({texture}) formula to 100%:
+
+{ingredients_list}
+
+Rules: Total 100%, Water 60-80%, Preservative 1%, pH adjuster 0.2%
+
+Return JSON:
+{{
+    "optimized_formula": {{
+        "name": "Formula Name",
+        "complexity": "{complexity}",
+        "total_percentage": 100.0
+    }},
+    "ingredients": [
+        {{
+            "id": "water",
+            "name": "Water",
+            "inci": "Aqua",
+            "percentage": "70.00%",
+            "phase": "A",
+            "function": "solvent",
+            "is_hero": false,
+            "is_base": true
+        }}
+    ]
+}}
+
+Be fast.
+"""
+
+# STAGE 4: INSIGHTS GENERATION
+INSIGHTS_GENERATION_PROMPT = """
+Generate insights for {formula_name} ({product_type}) with {complexity} complexity.
+
+Key ingredients: {key_ingredients}
+Benefits: {benefits}
+
+Return JSON:
+{{
+    "why_these_ingredients": [
+        {{
+            "ingredient_name": "Ingredient Name",
+            "icon": "flask",
+            "explanation": "Why chosen",
+            "complexity_reason": "Why for {complexity}"
+        }}
+    ],
+    "challenges": [
+        {{
+            "title": "Challenge Title",
+            "icon": "alert-triangle",
+            "description": "What to expect",
+            "tip": "How to handle",
+            "severity": "info|attention"
+        }}
+    ],
+    "marketing_tips": [
+        {{
+            "title": "Tip Title",
+            "icon": "lightbulb",
+            "content": "Actionable advice",
+            "category": "positioning|pricing|targeting"
+        }}
+    ],
+    "faq": [
+        {{
+            "question": "Common question",
+            "answer": "Clear answer"
+        }}
+    ]
+}}
+
+Be practical and marketing-focused.
+"""
+
+# STAGE 5: ALTERNATIVES ANALYSIS
+ALTERNATIVES_ANALYSIS_PROMPT = """
+Analyze alternatives for {ingredient_name} in {product_type} ({complexity} complexity).
+
+Current: {current_variant}
+Available alternatives:
+{alternatives_list}
+
+Return JSON:
+{{
+    "current_analysis": {{
+        "name": "{current_variant}",
+        "inci": "INCI Name",
+        "icon": "flask",
+        "description": "Current ingredient description",
+        "benefit_tag": "Key benefit",
+        "suggested_percentage": "X-X%",
+        "cost_impact": "baseline",
+        "complexity_fit": ["{complexity}"]
+    }},
+    "alternatives": [
+        {{
+            "name": "Alternative Name",
+            "inci": "INCI Name",
+            "icon": "leaf",
+            "description": "Description",
+            "benefit_tag": "Unique benefit",
+            "suggested_percentage": "X-X%",
+            "cost_impact": "higher|similar|lower",
+            "complexity_fit": ["complexity1", "complexity2"],
+            "considerations": "Usage notes"
+        }}
+    ],
+    "recommendation": {{
+        "best_alternative": "Alternative Name",
+        "reasoning": "Why best choice"
+    }}
+}}
+
+Focus on practical formulation considerations.
+"""
+
+# ============================================================================
+# BASIC MODE PROMPT (Formulynx-style)
+# ============================================================================
+
+def generate_basic_mode_prompt(wish_data: dict) -> str:
+    """
+    Generate the complete basic mode prompt following Formulynx flow.
+    This is used for the simplified layman-friendly formula generation.
+    """
+    # Extract data from wish
+    category = wish_data.get('category', 'skincare')
+    product_type = wish_data.get('productType', 'serum')
+    benefits = wish_data.get('benefits', [])
+    exclusions = wish_data.get('exclusions', [])
+    hero_ingredients = wish_data.get('heroIngredients', [])
+    texture = wish_data.get('texture', 'lightweight')
+    cost_min = wish_data.get('costMin', 30)
+    cost_max = wish_data.get('costMax', 60)
+    claims = wish_data.get('claims', [])
+    target_audience = wish_data.get('targetAudience', [])
+    additional_notes = wish_data.get('additionalNotes', '') or wish_data.get('notes', '')
+    
+    # Build natural language input from structured data
+    natural_language_parts = []
+    
+    if product_type:
+        natural_language_parts.append(f"{product_type}")
+    
+    if benefits:
+        natural_language_parts.append(f"for {', '.join(benefits)}")
+    
+    if target_audience:
+        natural_language_parts.append(f"for {', '.join(target_audience)}")
+    
+    # Infer price segment from cost range
+    if cost_max <= 40:
+        price_segment = "Mass Market"
+    elif cost_max <= 80:
+        price_segment = "Masstige"
+    elif cost_max <= 150:
+        price_segment = "Premium"
+    else:
+        price_segment = "Luxury"
+    
+    natural_language_input = " ".join(natural_language_parts) if natural_language_parts else product_type
+    
+    prompt = f"""# FORMULYNX FORMULA GENERATION PROMPT - BASIC MODE
+
+## INPUT
+User wish: "{natural_language_input}"
+Category: {category}
+Product Type: {product_type}
+Benefits: {', '.join(benefits) if benefits else 'General'}
+Price Segment: {price_segment} (Cost target: ₹{cost_min}-₹{cost_max}/100g)
+Exclusions: {', '.join(exclusions) if exclusions else 'None'}
+Hero Ingredients: {', '.join(hero_ingredients) if hero_ingredients else 'None specified'}
+Texture: {texture}
+Claims: {', '.join(claims) if claims else 'None'}
+Target Audience: {', '.join(target_audience) if target_audience else 'General'}
+Additional Notes: {additional_notes if additional_notes else 'None'}
+
+## PROCESS
+
+### Step 1: Extract Parameters
+Parse the input to identify:
+- Category (Skincare/Haircare/etc.)
+- Product Type (Eye Cream/Serum/etc.)
+- Primary Concern (Dark Circles/Acne/etc.)
+- Secondary Concerns
+- Price Segment (Mass/Masstige/Premium/Luxury)
+- Any specific requirements
+
+### Step 2: Present Active Options
+For the identified concerns, present:
+- 3-4 active ingredient options per concern
+- Include: name, concentration, efficacy rating (1-5), cost impact, why it's good
+- Highlight recommended options
+- Explain WHY certain combinations work
+
+### Step 3: Generate Formula
+Based on selections (or recommendations), generate:
+- Complete formula with all ingredients
+- Grouped by benefit (not by phase) for user view
+- Technical formula with phases for manufacturer
+- Total cost per unit
+
+### Step 4: Generate Business Context
+- Packaging options with costs
+- Profit calculations at different MRPs
+- Market comparison with competitors
+- Cost factors that affect real pricing
+
+### Step 5: Generate Supporting Content
+- Key features (3 main benefit cards)
+- Q&A cards (3-4 questions users would ask)
+- Category trends
+- Claim guidance (can say / avoid)
+- Pro tips for customization
+- Confidence builder
+
+## OUTPUT FORMAT
+Return JSON matching this structure:
+
+{{
+  "extractedParameters": {{
+    "category": "Skincare",
+    "productType": "Eye Cream",
+    "primaryConcern": "Dark Circles",
+    "secondaryConcerns": ["Puffiness/Bags"],
+    "targetArea": "Under-eye",
+    "priceSegment": "Premium",
+    "texture": "Rich cream",
+    "targetAudience": {{
+      "gender": "All",
+      "ageGroup": "25-55"
+    }}
+  }},
+  "activeOptions": {{
+    "activeOptionsIntro": {{
+      "message": "For your [Product] targeting [Concerns], here are the active ingredients we can use:",
+      "note": "[Price Segment] segment allows us to use [appropriate actives]. I'll recommend a combination, but you can customize."
+    }},
+    "concernWiseOptions": [
+      {{
+        "concern": "[Concern Name]",
+        "icon": "🎯",
+        "explanation": "[How this concern works]",
+        "options": [
+          {{
+            "name": "Ingredient Name",
+            "concentration": "2%",
+            "efficacy": 5,
+            "costImpact": "High",
+            "whyGood": "Explanation of why this works",
+            "recommended": true
+          }}
+        ],
+        "recommendation": "Recommendation text"
+      }}
+    ],
+    "recommendedFormula": {{
+      "heroActives": [
+        {{ "name": "Ingredient", "percentage": 2, "targets": "What it targets" }}
+      ],
+      "totalActivePercentage": 13,
+      "positioning": "Product positioning statement",
+      "estimatedActiveCost": "₹XX-XX per [size] (actives only)"
+    }},
+    "userChoice": {{
+      "prompt": "This is my recommended formula. Would you like to:",
+      "options": [
+        "Proceed with this recommendation",
+        "Swap some actives",
+        "Add more actives",
+        "See a budget-friendly version"
+      ]
+    }}
+  }},
+  "formula": {{
+    "formulaName": "Product Name",
+    "formulaCode": "CODE-001",
+    "version": "1.0",
+    "keyFeatures": [
+      {{
+        "icon": "✨",
+        "title": "Feature Title",
+        "subtitle": "Feature Subtitle",
+        "explanation": "Feature explanation"
+      }}
+    ],
+    "additionalFeatures": [
+      {{ "label": "Feature Label", "tip": "Feature tip" }}
+    ],
+    "ingredientGroups": [
+      {{
+        "id": "hero",
+        "icon": "✨",
+        "title": "Group Title",
+        "subtitle": "Group Subtitle",
+        "isHighlighted": true,
+        "ingredients": [
+          {{
+            "name": "Ingredient Name",
+            "commonName": "Common Name",
+            "benefit": "What it does",
+            "percentage": 2.0,
+            "isHero": true
+          }}
+        ],
+        "insightBox": {{
+          "type": "why",
+          "content": "Insight explanation"
+        }}
+      }}
+    ],
+    "technicalFormula": {{
+      "phases": [
+        {{
+          "phase": "A",
+          "name": "Water Phase",
+          "temperature": "Room temp",
+          "ingredients": [
+            {{ "name": "Ingredient", "inci": "INCI Name", "function": "Function", "percentage": 68.20 }}
+          ]
+        }}
+      ],
+      "totalPercentage": 100.00,
+      "totalCostPer100g": 145.00,
+      "shelfLife": "6 months",
+      "pH": "5.5-6.0",
+      "viscosity": "Medium cream"
+    }},
+    "packagingOptions": {{
+      "recommendedSizes": [
+        {{ "size": "15g", "description": "Standard size", "popular": true }}
+      ],
+      "recommendedTypes": [
+        {{ "type": "jar", "description": "Classic feel", "note": "Use spatula" }}
+      ],
+      "recommendation": "Packaging recommendation"
+    }},
+    "businessNumbers": {{
+      "costPer15g": {{
+        "formula": 21.75,
+        "packaging": {{ "jar": 15, "airlessPump": 25, "tube": 12 }},
+        "label": 3,
+        "total": {{ "withJar": 39.75, "withAirless": 49.75, "withTube": 36.75 }}
+      }},
+      "profitExamples": [
+        {{ "mrp": 599, "cost": 49.75, "profit": 549.25, "margin": "92%" }}
+      ],
+      "marketComparison": [
+        {{ "brand": "Competitor", "price": 549, "size": "30g", "pricePerGram": 18.30 }}
+      ]
+    }},
+    "costFactors": [
+      {{
+        "factor": "Factor Name",
+        "icon": "📈",
+        "explanation": "Explanation",
+        "impact": "±10-15%"
+      }}
+    ],
+    "questionsAndAnswers": [
+      {{
+        "id": "q1",
+        "question": "Question text",
+        "answer": {{
+          "headline": "Answer headline",
+          "explanation": "Detailed explanation",
+          "evidence": "Supporting evidence"
+        }}
+      }}
+    ],
+    "categoryTrends": [
+      {{
+        "trend": "Trend name",
+        "growth": "+45%",
+        "note": "Your formula is aligned",
+        "status": "aligned"
+      }}
+    ],
+    "claimGuidance": {{
+      "canSay": ["Claim 1", "Claim 2"],
+      "avoidSaying": [
+        {{ "claim": "Bad claim", "reason": "Why to avoid" }}
+      ]
+    }},
+    "proTips": [
+      {{
+        "if": "Condition",
+        "then": "Action",
+        "impact": "Impact description"
+      }}
+    ],
+    "confidenceBuilder": {{
+      "headline": "You Can Do This!",
+      "message": "Encouraging message",
+      "keyPoints": ["Point 1", "Point 2"]
+    }}
+  }}
+}}
+
+## KEY RULES
+1. Use simple, layman-friendly language throughout
+2. Group ingredients by BENEFIT for user view, by PHASE for technical view
+3. No individual ingredient costs shown - only total formula cost
+4. Always explain WHY ingredients work, especially for premium actives
+5. Compare to known brands at every opportunity
+6. Segment-appropriate actives (don't suggest luxury peptides for mass market)
+7. Include myth busters where relevant
+8. Build confidence throughout
+
+Generate the complete response now.
+"""
+    
+    return prompt
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def format_ingredients_list(ingredients):
+    """Format ingredients for prompt"""
+    return "\n".join([
+        f"- {ing.get('display_name', ing.get('name', 'Unknown'))} ({ing.get('inci_name', 'Unknown')})\n"
+        f"  Purpose: {ing.get('purpose', 'Unknown')}\n"
+        f"  Range: {ing.get('percentage_range', 'Unknown')}\n"
+        f"  Phase: {ing.get('phase', 'Unknown')}\n"
+        f"  Hero: {ing.get('is_hero', False)}"
+        for ing in ingredients
+    ])
+
+
+def format_alternatives_list(alternatives):
+    """Format alternatives for prompt"""
+    return "\n".join([
+        f"- {alt.get('name', 'Unknown')} ({alt.get('inci_name', 'Unknown')})\n"
+        f"  Description: {alt.get('description', 'Unknown')}\n"
+        f"  Benefit: {alt.get('benefit_tag', 'Unknown')}\n"
+        f"  Suggested %: {alt.get('suggested_percentage', 'Unknown')}\n"
+        f"  Cost Impact: {alt.get('cost_impact', 'Unknown')}"
+        for alt in alternatives
+    ])
+
 
 # ============================================================================
 # STAGE 4: COST ANALYSIS
@@ -1363,3 +1736,14 @@ You are a regulatory affairs specialist for cosmetics with expertise in BIS (Bur
 }
 """
 
+def format_alternatives_list(alternatives):
+    """Format alternatives for prompt"""
+    return "\n".join([
+        f"- {alt.get('name', 'Unknown')}\n"
+        f"  INCI: {alt.get('inci', 'Unknown')}\n"
+        f"  Benefit: {alt.get('benefit', 'Unknown')}\n"
+        f"  Percentage: {alt.get('percentage', 'Unknown')}\n"
+        f"  Cost: {alt.get('cost_tier', 'Unknown')}\n"
+        f"  Complexities: {', '.join(alt.get('complexity', []))}"
+        for alt in alternatives
+    ])

@@ -12,17 +12,36 @@ This module implements the new API endpoints for the revised Make A Wish flow:
 
 The new flow features natural language parsing, complexity selection, 
 ingredient alternatives, formula editing, and commercialization.
+
+All AI operations use Claude Opus (claude-opus-4-5-20251101) for optimal quality.
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, Query, BackgroundTasks, Body
+import httpx
+import os
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
-from bson import ObjectId
+from bson import ObjectId as BSONObjectId
+# Alias for backward compatibility
+ObjectId = BSONObjectId
 import time
 import json
 import uuid
-import httpx
+import asyncio
+import logging
 from pydantic import BaseModel, Field
+
+# Semaphore to limit concurrent background tasks and prevent event loop blocking
+# Initialize lazily in async context to ensure event loop exists
+_background_task_semaphore = None
+
+async def get_background_task_semaphore():
+    """Get or create the background task semaphore (must be called in async context)."""
+    global _background_task_semaphore
+    if _background_task_semaphore is None:
+        # Increased to 10 to allow more concurrent tasks without blocking other API calls
+        _background_task_semaphore = asyncio.Semaphore(10)
+    return _background_task_semaphore
 
 # Import authentication
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
@@ -31,6 +50,7 @@ from app.ai_ingredient_intelligence.auth import verify_jwt_token
 from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     ParseWishRequest, ParseWishResponse,
     MakeWishRequestRevised, MakeWishResponseRevised,
+    MakeWishBasicResponseRevised,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
@@ -48,17 +68,26 @@ from app.ai_ingredient_intelligence.logic.make_wish_config import (
 from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon, replace_icon_emoji_values
 
 # Import AI prompts
-from app.ai_ingredient_intelligence.logic.make_wish_prompts_revised import (
+from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
     PARSE_WISH_PROMPT, INGREDIENT_SELECTION_COMPLEXITY_PROMPT,
     INSIGHTS_GENERATION_PROMPT, ALTERNATIVES_ANALYSIS_PROMPT,
     format_ingredients_list, format_alternatives_list
 )
 
-# Import existing generator for backward compatibility
+# Import existing generator
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     call_ai_with_claude, generate_formula_from_wish
 )
-from app.ai_ingredient_intelligence.logic.make_wish_basic_mode import generate_formula_basic_mode
+
+# Import credit service
+from app.ai_ingredient_intelligence.logic.credit_service import (
+    deduct_credits,
+    CreditKey
+)
+
+# Import WebSocket notification helper (enhanced version)
+from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user_enhanced
+from app.ai_ingredient_intelligence.models.notification_schemas import NotificationAction
 
 # Import trend analyzer for market intelligence
 from app.ai_ingredient_intelligence.logic.trend_analyzer import TrendAnalyzer
@@ -408,10 +437,17 @@ async def parse_natural_language_wish(
                             print(f"   First Issue (not dict): {type(first_issue).__name__}")
             
         except Exception as ai_error:
-            print(f"❌ AI parsing error: {ai_error}")
+            timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"❌ [PARSE-WISH] [{timestamp}] AI parsing error: {ai_error}")
+            import traceback
+            traceback.print_exc()
+            # Provide more helpful error message
+            error_detail = str(ai_error)
+            if "JSON" in error_detail or "json" in error_detail.lower():
+                error_detail = "AI returned invalid JSON format. Please try again or rephrase your wish."
             raise HTTPException(
                 status_code=500,
-                detail=f"Error parsing wish: {str(ai_error)}"
+                detail=f"Error parsing wish: {error_detail}"
             )
         
         # Validate AI response structure
@@ -421,12 +457,16 @@ async def parse_natural_language_wish(
                 detail="Invalid parsing result from AI"
             )
         
-        # Always use basic mode (advanced mode removed)
-        parsed_result["mode"] = "basic"
-
         # Auto-detect texture if not provided
         product_type_id = parsed_result.get("product_type", {}).get("id", "serum")
-        auto_texture = get_texture_for_product_type(product_type_id)
+        auto_texture_raw = get_texture_for_product_type(product_type_id)
+        
+        # Transform texture to match schema (texture_id -> id, add auto_selected)
+        auto_texture = {
+            "id": auto_texture_raw.get("texture_id", "gel"),
+            "label": auto_texture_raw.get("label", "Balanced Texture"),
+            "auto_selected": True
+        }
         
         # Update parsed data with auto-detected texture
         if "auto_texture" not in parsed_result:
@@ -527,10 +567,11 @@ async def parse_natural_language_wish(
 # STAGE 2: REVISED GENERATE ENDPOINT
 # ============================================================================
 
-@router.post("/generate-revised", response_model=None)  # Return full data, not just history_id
+@router.post("/generate-revised", response_model=MakeWishBasicResponseRevised)
 async def generate_formula_revised(
     request: MakeWishRequestRevised,
-    current_user: dict = Depends(verify_jwt_token)
+    current_user: dict = Depends(verify_jwt_token),
+    authorization: Optional[str] = Header(None, alias="Authorization")
 ):
     """
     Generate formula using basic mode flow.
@@ -540,13 +581,33 @@ async def generate_formula_revised(
     - Selected complexity level (minimalist/classic/luxe)
     - Auto-detected texture
     - Active ingredient options with business context
+    
+    NOW WITH ASYNC PATTERN:
+    - Saves request to DB immediately
+    - Returns history_id instantly
+    - Processes in background
+    - Deducts credits on success
+    - Sends WebSocket notifications
     """
-    start_time = time.time()
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"\n{'='*80}")
+    print(f"🚀 [MAIN] [{timestamp}] ========================================")
+    print(f"🚀 [MAIN] [{timestamp}] /generate-revised ENDPOINT CALLED")
+    print(f"🚀 [MAIN] [{timestamp}] ========================================")
+    
+    request_received_at = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     
     # Extract user info for auto-save
     user_id = current_user.get("user_id") or current_user.get("_id")
     name = request.name.strip()
-    history_id = None
+    history_id = request.history_id
+    
+    print(f"📋 [MAIN] [{timestamp}] Request details:")
+    print(f"   - User ID: {user_id}")
+    print(f"   - Name: {name}")
+    print(f"   - History ID: {history_id}")
+    print(f"   - Complexity: {request.complexity}")
+    print(f"{'='*80}\n")
     
     # Validate required fields
     if not name:
@@ -562,132 +623,429 @@ async def generate_formula_revised(
         )
     
     try:
-        # Always use basic mode
-            # Cost range from complexity: minimalist 30-40, classic 40-60, luxe 60-100
-            cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
-            cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
-            wish_data = {
-                "category": request.parsed_data.category,
-                "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
-                "benefits": request.parsed_data.detected_benefits,
-                "exclusions": request.parsed_data.detected_exclusions,
-                "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
-                "texture": request.parsed_data.auto_texture.label,
-                "costMin": cost_min,
-                "costMax": cost_max,
-                "claims": request.claims or [],
-                "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
-                "additionalNotes": request.additional_notes or "",
-                "mode": "basic",
-            }
-            basic_result = await generate_formula_basic_mode(wish_data)
-            basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names (like advanced)
-            
-            # Extract hero ingredients for trend analysis
-            hero_ingredients = []
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔑 [MAIN] [{timestamp}] Generating IDs...")
+        # Generate IDs immediately
+        formula_id = str(uuid.uuid4())
+        if not history_id:
+            # Generate MongoDB ObjectId upfront
+            history_id = str(ObjectId())
+        print(f"✅ [MAIN] [{timestamp}] IDs generated - formula_id: {formula_id}, history_id: {history_id}")
+        
+        # CRITICAL: Save to DB FIRST so detail API can find it immediately
+        # This is a quick operation and ensures the record exists
+        if not request.history_id:
             try:
-                # Try to get from activeOptions -> recommendedFormula -> heroActives
-                active_options = basic_result.get("activeOptions", {})
-                recommended_formula = active_options.get("recommendedFormula", {})
-                hero_actives = recommended_formula.get("heroActives", [])
-                hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
-                
-                # Fallback to detected ingredients from wish_data
-                if not hero_ingredients:
-                    hero_ingredients = wish_data.get("heroIngredients", [])
+                history_doc = {
+                    "_id": ObjectId(history_id),
+                    "mode": "basic",
+                    "user_id": user_id,
+                    "name": name,
+                    "tag": request.tag,
+                    "additional_notes": request.additional_notes,
+                    "wish_text": request.wish_text,
+                    "parsed_data": request.parsed_data.model_dump(),
+                    "complexity": request.complexity,
+                    "formula_id": formula_id,
+                    "formula_data": None,
+                    "basic_mode_result": None,
+                    "status": "in_progress",
+                    "request_received_at": request_received_at.isoformat(),
+                    "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                }
+                await wish_history_col.insert_one(history_doc)
+                print(f"[AUTO-SAVE] Saved initial state with history_id: {history_id}")
             except Exception as e:
-                print(f"⚠️ Error extracting hero ingredients: {e}")
-                hero_ingredients = wish_data.get("heroIngredients", [])
-            
-            # Fetch trend data for hero ingredients (detailed analysis)
-            trend_data = {}
-            if hero_ingredients:
-                try:
-                    trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
-                except Exception as e:
-                    print(f"⚠️ Error fetching trend data: {e}")
-                    import traceback
-                    traceback.print_exc()
-            
-            # Market trends removed - use standalone /market-trends endpoint instead
-            
-            formula_id = str(uuid.uuid4())
-            if not history_id:
-                try:
-                    history_doc = {
-                        "mode": "basic",
-                        "user_id": user_id,
-                        "name": name,
-                        "tag": request.tag,
-                        "additional_notes": request.additional_notes,  # Store as additional_notes
-                        "wish_text": request.wish_text,
-                        "parsed_data": request.parsed_data.model_dump(),
-                        "complexity": request.complexity,
-                        "formula_id": formula_id,
-                        "formula_data": None,
-                        "basic_mode_result": basic_result,
-                        "trend_data": trend_data,  # Store trend analysis data
-                        "status": "completed",
-                        "created_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-                        "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-                    }
-                    result = await wish_history_col.insert_one(history_doc)
-                    history_id = str(result.inserted_id)
-                    print(f"[AUTO-SAVE] Created history record (basic mode): {history_id}")
-                except Exception as e:
-                    print(f"[AUTO-SAVE] Warning: Failed to save history: {e}")
-            else:
-                # Update existing history record
-                try:
-                    from bson import ObjectId
-                    update_doc = {
-                        "basic_mode_result": basic_result,
-                        "trend_data": trend_data,
-                        "status": "completed",
-                        "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-                    }
-                    await wish_history_col.update_one(
-                        {"_id": ObjectId(history_id), "user_id": user_id},
-                        {"$set": update_doc}
-                    )
-                    print(f"[AUTO-SAVE] Updated history record: {history_id}")
-                except Exception as e:
-                    print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
-            # Return full data, not just history_id
-            return {
-                "success": True,
-                "formula_id": formula_id,
-                "history_id": history_id or formula_id,
-                "mode": "basic",
-                "basic_mode_result": basic_result,
-                "formula": {
-                    "name": basic_result.get("formula", {}).get("formulaName", name),
-                    "ingredients": basic_result.get("formula", {}).get("technicalFormula", {}).get("ingredients", []),
-                    "phases": basic_result.get("formula", {}).get("technicalFormula", {}).get("phases", [])
-                },
-                "cost_analysis": {
-                    "packaging_options": basic_result.get("formula", {}).get("businessNumbers", {}).get("packagingOptions", {}),
-                    "packaging_by_size": basic_result.get("formula", {}).get("businessNumbers", {}).get("packagingBySize", {}),
-                    "cost_calculation_summary": basic_result.get("formula", {}).get("businessNumbers", {}).get("costCalculationSummary", {}),
-                    "raw_material_cost": {
-                        "total_per_100g": basic_result.get("formula", {}).get("technicalFormula", {}).get("totalCostPer100g", 0)
-                    }
-                },
-                "manufacturing": basic_result.get("formula", {}).get("manufacturing", {}),
-                "compliance": basic_result.get("formula", {}).get("compliance", {}),
-                "trend_data": trend_data  # Detailed trend analysis per ingredient
-            }
+                print(f"[AUTO-SAVE] Error: Failed to save initial state: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to save request: {str(e)}"
+                )
+        else:
+            # Update existing history record to in_progress
+            try:
+                update_doc = {
+                    "status": "in_progress",
+                    "request_received_at": request_received_at.isoformat(),
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+                }
+                await wish_history_col.update_one(
+                    {"_id": ObjectId(history_id), "user_id": user_id},
+                    {"$set": update_doc}
+                )
+                print(f"[AUTO-SAVE] Updated existing history {history_id} to in_progress")
+            except Exception as e:
+                print(f"[AUTO-SAVE] Warning: Failed to update history: {e}")
+        
+        # NOW start background task for heavy processing (formula generation, trends, etc.)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🚀 [MAIN] [{timestamp}] Creating background task for history_id: {history_id}")
+        background_coro = process_generate_revised_background_with_semaphore(
+            history_id=history_id,
+            user_id=user_id,
+            request=request,
+            name=name,
+            formula_id=formula_id,
+            request_received_at=request_received_at,
+            is_new_history=not bool(request.history_id),
+            bearer_token=authorization
+        )
+        # Fire and forget - don't await, don't store reference
+        task = asyncio.create_task(handle_background_task_safely(background_coro))
+        print(f"✅ [MAIN] [{timestamp}] Background task created and scheduled (task_id: {id(task)})")
+        
+        # Return immediate acknowledgment (DB already saved, processing in background)
+        # Response model requires: success, formula_id, history_id
+        # Note: success=True means "request accepted", NOT "formula completed"
+        # The actual completion notification is sent via WebSocket when background task finishes
+        response = MakeWishBasicResponseRevised(
+            success=True,
+            formula_id=formula_id,
+            history_id=history_id
+        )
+        print(f"📤 [MAIN] [{timestamp}] Returning response: success={response.success}, formula_id={response.formula_id}, history_id={response.history_id}")
+        return response
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Unexpected error generating revised formula: {e}")
+        print(f"❌ Unexpected error in generate_formula_revised: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+# ============================================================================
+# BACKGROUND TASK ERROR HANDLER
+# ============================================================================
+
+async def handle_background_task_safely(coro):
+    """
+    Wrapper to safely execute background tasks and catch any unhandled exceptions.
+    """
+    try:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔄 [BACKGROUND] [{timestamp}] Background task wrapper started")
+        await coro
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [BACKGROUND] [{timestamp}] Background task wrapper completed successfully")
+    except Exception as e:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ [BACKGROUND] [{timestamp}] Unhandled exception in background task: {e}", exc_info=True)
+        print(f"❌ [BACKGROUND] [{timestamp}] Unhandled exception in background task: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def process_generate_revised_background_with_semaphore(
+    history_id: str,
+    user_id: str,
+    request: MakeWishRequestRevised,
+    name: str,
+    formula_id: str,
+    request_received_at: datetime,
+    is_new_history: bool = True,
+    bearer_token: Optional[str] = None
+):
+    """
+    Wrapper that acquires semaphore before running background task.
+    This prevents too many concurrent tasks from blocking the event loop.
+    """
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🔒 [BACKGROUND] [{timestamp}] Waiting for semaphore for history_id: {history_id}")
+    semaphore = await get_background_task_semaphore()
+    async with semaphore:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [BACKGROUND] [{timestamp}] Semaphore acquired for history_id: {history_id}, starting processing...")
+        # Yield control to event loop before starting heavy work
+        await asyncio.sleep(0)
+        await process_generate_revised_background(
+            history_id=history_id,
+            user_id=user_id,
+            request=request,
+            name=name,
+            formula_id=formula_id,
+            request_received_at=request_received_at,
+            is_new_history=is_new_history,
+            bearer_token=bearer_token
+        )
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔓 [BACKGROUND] [{timestamp}] Semaphore released for history_id: {history_id}")
+
+
+# ============================================================================
+# BACKGROUND PROCESSING FUNCTION
+# ============================================================================
+
+async def process_generate_revised_background(
+    history_id: str,
+    user_id: str,
+    request: MakeWishRequestRevised,
+    name: str,
+    formula_id: str,
+    request_received_at: datetime,
+    is_new_history: bool = True,
+    bearer_token: Optional[str] = None
+):
+    """
+    Background task to process revised Make a Wish formula generation.
+    Handles:
+    - Prepare wish_data (moved from main endpoint for speed)
+    - Database save/update (first thing, to get real MongoDB ObjectId if needed)
+    - Formula generation
+    - Trend analysis
+    - Market trends
+    - Synthesis
+    - Credit deduction (on success only)
+    - WebSocket notifications (success/failure)
+    - Database updates
+    """
+    start_time = time.time()
+    processing_success = False
+    error_message = None
+    
+    try:
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🚀 [BACKGROUND] [{timestamp}] ========================================")
+        print(f"🚀 [BACKGROUND] [{timestamp}] STARTING processing for history_id: {history_id}")
+        print(f"🚀 [BACKGROUND] [{timestamp}] User: {user_id}, Formula ID: {formula_id}")
+        print(f"🚀 [BACKGROUND] [{timestamp}] ========================================")
+        
+        # Prepare wish data (moved here from main endpoint to return ASAP)
+        cost_by_complexity = {"minimalist": (30, 40), "classic": (40, 60), "luxe": (60, 100)}
+        cost_min, cost_max = cost_by_complexity.get(request.complexity, (40, 60))
+        wish_data = {
+            "category": request.parsed_data.category,
+            "productType": request.parsed_data.product_type.id or request.parsed_data.product_type.name,
+            "benefits": request.parsed_data.detected_benefits,
+            "exclusions": request.parsed_data.detected_exclusions,
+            "heroIngredients": [ing.name for ing in request.parsed_data.detected_ingredients],
+            "texture": request.parsed_data.auto_texture.label,
+            "costMin": cost_min,
+            "costMax": cost_max,
+            "claims": request.claims or [],
+            "targetAudience": request.parsed_data.detected_skin_types or request.parsed_data.detected_hair_concerns,
+            "additionalNotes": request.additional_notes or "",
+        }
+        
+        # DB is already saved in main endpoint, so we can skip saving here
+        # Just log that we're starting processing
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"📝 [BACKGROUND] [{timestamp}] DB already saved, starting formula generation...")
+        
+        # Yield control to event loop before starting heavy work
+        await asyncio.sleep(0)
+        
+        # Generate formula using basic mode (from dev)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🤖 [BACKGROUND] [{timestamp}] Calling AI to generate formula...")
+        basic_result = await generate_formula_from_wish(wish_data)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"✅ [BACKGROUND] [{timestamp}] Formula generation completed!")
+        basic_result = replace_icon_emoji_values(basic_result)  # emoji -> heroicon/lucide names
+        
+        # Yield control after formula generation
+        await asyncio.sleep(0)
+        
+        # Extract hero ingredients for trend analysis
+        hero_ingredients = []
+        try:
+            # Try to get from activeOptions -> recommendedFormula -> heroActives
+            active_options = basic_result.get("activeOptions", {})
+            recommended_formula = active_options.get("recommendedFormula", {})
+            hero_actives = recommended_formula.get("heroActives", [])
+            hero_ingredients = [ing.get("name", "") for ing in hero_actives if ing.get("name")]
+
+            # Fallback to detected ingredients from wish_data
+            if not hero_ingredients:
+                hero_ingredients = wish_data.get("heroIngredients", [])
+        except Exception as e:
+            print(f"⚠️ [BACKGROUND] Error extracting hero ingredients: {e}")
+            hero_ingredients = wish_data.get("heroIngredients", [])
+
+        # Fetch trend data for hero ingredients (detailed analysis)
+        trend_data = {}
+        if hero_ingredients:
+            try:
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"📊 [BACKGROUND] [{timestamp}] Fetching trend data for {len(hero_ingredients)} hero ingredients...")
+                trend_data = await fetch_trend_data_for_ingredients(hero_ingredients)
+                timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"✅ [BACKGROUND] [{timestamp}] Trend data fetched successfully")
+            except Exception as e:
+                print(f"⚠️ [BACKGROUND] Error fetching trend data: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Market trends removed - use standalone /market-trends endpoint instead
+
+        processing_time = time.time() - start_time
+        processing_time_seconds = round(processing_time, 2)
+        print(f"✅ Make a Wish formula generated in {processing_time_seconds}s")
+        
+        # Update database with completed status (including trend data)
+        update_doc = {
+            "basic_mode_result": basic_result,
+            "trend_data": trend_data,  # Store trend analysis data
+            "status": "completed",
+            "processing_time": processing_time_seconds,
+            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+        }
+        
+        await wish_history_col.update_one(
+            {"_id": ObjectId(history_id), "user_id": user_id},
+            {"$set": update_doc}
+        )
+        
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"💾 [BACKGROUND] [{timestamp}] Updating database with completed status...")
+        print(f"[BACKGROUND] ✅ Updated history {history_id} with completed status")
+        processing_success = True
+        
+        # Verify the status was actually updated to "completed" before sending notifications
+        verify_doc = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+        if not verify_doc or verify_doc.get("status") != "completed":
+            print(f"⚠️ [BACKGROUND] Status not confirmed as 'completed', skipping notifications")
+            return
+        
+        # Deduct credits on success (gracefully handle if credits API doesn't exist)
+        deduct_credits_result = None
+        try:
+            deduct_credits_result = await deduct_credits(
+                user_id=user_id,
+                reference_id=history_id,
+                credit_key=CreditKey.MAKE_WISH_GENERATE,
+                transaction_type="make_wish_generation_revised",
+                description=f"Make a Wish formula generation (revised) - {history_id}",
+                bearer_token=bearer_token
+            )
+            if deduct_credits_result is None:
+                print(f"ℹ️ [BACKGROUND] Credit deduction skipped (credits API not available)")
+        except Exception as credit_error:
+            print(f"⚠️ [BACKGROUND] Failed to deduct credits: {credit_error}")
+            # Don't fail the whole process if credit deduction fails
+        
+        # Build notification data; include credit info when available
+        notification_data = {
+            "history_id": history_id,
+            "status": "completed",
+            "type": "make_wish_revised"
+        }
+        
+        # Add credit info to notification data - CRITICAL: Always include credit info in notification
+        if deduct_credits_result:
+            # Use actual values from third-party API response (not hardcoded)
+            credits_deducted = deduct_credits_result.get("creditsDeducted")
+            credits_remaining = deduct_credits_result.get("creditsRemaining")
+            deducted = deduct_credits_result.get("deducted", True)
+            
+            # Ensure values are not None (convert to 0 if None)
+            if credits_deducted is None:
+                credits_deducted = 0
+            if credits_remaining is None:
+                credits_remaining = 0
+            
+            print(f"💰 [BACKGROUND] Credit info from API: deducted={credits_deducted}, remaining={credits_remaining}")
+            print(f"💰 [BACKGROUND] Full deduct_credits_result: {deduct_credits_result}")
+            
+            # Add credit info in multiple places to ensure it's accessible
+            # 1. Nested in deduct_credits object (for structured access)
+            notification_data["deduct_credits"] = {
+                "deducted": bool(deducted),
+                "creditsDeducted": int(credits_deducted),
+                "creditsRemaining": int(credits_remaining),
+            }
+            
+            # 2. Also at top level of meta for direct access (for backward compatibility)
+            notification_data["creditsDeducted"] = int(credits_deducted)
+            notification_data["creditsRemaining"] = int(credits_remaining)
+            notification_data["deducted"] = bool(deducted)
+            
+            print(f"💰 [BACKGROUND] Credit info added to notification_data: {notification_data.get('deduct_credits')}")
+        else:
+            print(f"⚠️ [BACKGROUND] No credit deduction result available - credit info not included in notification")
+        
+        # Send real-time WebSocket notification using enhanced notification module (ONLY after completion)
+        try:
+            notification_result = await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="success",
+                title="Formula Generated Successfully!",
+                message=f"Your formula '{name}' has been generated and is ready to view.",
+                action=NotificationAction(
+                    label="View Formula",
+                    kind="route",
+                    to=f"/make-wish/{history_id}"
+                ),
+                meta=notification_data,
+                send_websocket=True
+            )
+            # Log the notification that was sent to verify credit info is included
+            notification_dict = notification_result.model_dump() if hasattr(notification_result, 'model_dump') else {}
+            print(f"✅ [BACKGROUND] Success notification sent via WebSocket")
+            print(f"📋 [BACKGROUND] Full notification meta: {notification_dict.get('meta', {})}")
+            if notification_dict.get('meta', {}).get('deduct_credits'):
+                print(f"✅ [BACKGROUND] Credit info confirmed in notification: {notification_dict.get('meta', {}).get('deduct_credits')}")
+            else:
+                print(f"⚠️ [BACKGROUND] WARNING: Credit info NOT found in notification meta!")
+        except Exception as ws_error:
+            print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
+        
+    except Exception as e:
+        processing_success = False
+        error_message = str(e)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"❌ [BACKGROUND] [{timestamp}] ========================================")
+        print(f"❌ [BACKGROUND] [{timestamp}] ERROR processing wish {history_id}: {e}")
+        print(f"❌ [BACKGROUND] [{timestamp}] Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        print(f"❌ [BACKGROUND] [{timestamp}] ========================================")
+        
+        # Update database with failed status
+        try:
+            update_doc = {
+                "status": "failed",
+                "error_message": error_message,
+                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+            }
+            
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id), "user_id": user_id},
+                {"$set": update_doc}
+            )
+        except Exception as db_error:
+            print(f"❌ [BACKGROUND] Failed to update failed status: {db_error}")
+        
+        # Send real-time WebSocket notification using enhanced notification module
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="error",
+                title="Formula Generation Failed",
+                message=f"Sorry, we couldn't generate your formula '{name}'. Please try again.",
+                meta={"history_id": history_id, "status": "failed", "type": "make_wish_revised", "error": error_message},
+                send_websocket=True
+            )
+        except Exception as ws_error:
+            print(f"⚠️ [BACKGROUND] Failed to send WebSocket notification: {ws_error}")
+
+
+# ============================================================================
+# HELPER FUNCTIONS FOR CREDITS AND NOTIFICATIONS
+# ============================================================================
+
+# Credit deduction is now handled by the reusable credit_service
+# The deduct_credits function is imported above
 
 
 # ============================================================================
@@ -829,6 +1187,15 @@ async def edit_formula_metadata(
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
+        # Get the wish item before update to get the name for notification
+        wish_item = await wish_history_col.find_one({"_id": obj_id, "user_id": user_id})
+        
+        if not wish_item:
+            raise HTTPException(404, "Formula not found or access denied")
+        
+        # Use updated name if name was changed, otherwise use existing name
+        wish_name = data.get("name") if "name" in data else wish_item.get("name", "Wish")
+        
         # Atomic update (ownership enforced)
         result = await wish_history_col.update_one(
             {"_id": obj_id, "user_id": user_id},
@@ -838,6 +1205,33 @@ async def edit_formula_metadata(
         # Not found or unauthorized
         if result.matched_count == 0:
             raise HTTPException(404, "Formula not found or access denied")
+
+        # Send notification for successful metadata update
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="success",
+                title="Formula Updated!",
+                message=f"Your formula '{wish_name}' metadata has been updated successfully.",
+                action=NotificationAction(
+                    label="View Formula",
+                    kind="route",
+                    to=f"/make-wish/{wishId}"
+                ),
+                meta={
+                    "history_id": wishId,
+                    "status": "updated",
+                    "type": "make_wish_metadata_updated",
+                    "updated_fields": list(data.keys()),
+                    "wish_name": wish_name
+                },
+                send_websocket=False
+            )
+            print(f"✅ [METADATA UPDATE] Notification sent for formula metadata update: {wishId}")
+        except Exception as notify_error:
+            print(f"⚠️ [METADATA UPDATE] Failed to send notification: {notify_error}")
+            # Don't fail the request if notification fails
 
         return {
             "success": True,
@@ -892,11 +1286,8 @@ async def edit_formula(
                 detail="Formula not found or access denied"
             )
         
-        parsed = history_item.get("parsed_data") or {}
-        if parsed.get("mode") == "basic" and history_item.get("basic_mode_result"):
-            current_formula = history_item.get("basic_mode_result") or {}
-        else:
-            current_formula = history_item.get("formula_data") or {}
+        # Always use basic_mode_result (only one mode now)
+        current_formula = history_item.get("basic_mode_result") or {}
         current_complexity = history_item.get("complexity", "classic")
         
         # Validate operations
@@ -1518,7 +1909,6 @@ async def submit_commercialization_request(
 @router.post("/export-to-inspiration-board")
 async def export_make_wish_revised_to_board(
     request: dict,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)
 ):
     """Export revised make a wish formulations to inspiration board"""
@@ -1555,7 +1945,7 @@ async def export_make_wish_revised_to_board(
         
         # Call the inspiration boards export endpoint
         from app.ai_ingredient_intelligence.api.inspiration_boards import export_to_board_endpoint
-        result = await export_to_board_endpoint(export_request, background_tasks, current_user)
+        result = await export_to_board_endpoint(export_request, current_user)
         
         return result
         

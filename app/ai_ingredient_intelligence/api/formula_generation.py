@@ -28,6 +28,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import time
+import asyncio
 
 # Import authentication
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
@@ -46,6 +47,10 @@ from app.ai_ingredient_intelligence.logic.make_wish_generator import (
     generate_formula_from_wish as generate_make_wish_formula
 )
 from app.ai_ingredient_intelligence.db.collections import wish_history_col
+
+# Import notification helpers
+from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user_enhanced
+from app.ai_ingredient_intelligence.models.notification_schemas import NotificationAction
 
 router = APIRouter(prefix="/formula", tags=["Formula Generation"])
 
@@ -1014,21 +1019,11 @@ async def get_wish_history_detail(
     - User ID is automatically extracted from the JWT token
     - Only returns items belonging to the authenticated user
     """
-    print(f"\n{'='*80}")
-    print(f"[DEBUG] 🚀 API CALL: /api/formula/wish-history/{history_id}/details")
-    print(f"[DEBUG] Request received at: {datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()}")
-    print(f"[DEBUG] History ID: {history_id}")
-    print(f"{'='*80}\n")
-    
     try:
         # Extract user_id from JWT token (already verified by verify_jwt_token)
-        # user_id = current_user.get("user_id") or current_user.get("_id")
-        # print(f"[DEBUG] User ID extracted: {user_id}")
-        # if not user_id:
-        #     raise HTTPException(
-        #         status_code=400,
-        #         detail="User ID not found in JWT token"
-        #     )
+        user_id = current_user.get("user_id") or current_user.get("_id")
+        # Note: user_id validation is optional for this endpoint (dev version removed it)
+        # Keeping it for security but can be commented out if needed
         
         # Validate ObjectId - check if it's a valid MongoDB ObjectId format
         # MongoDB ObjectIds are 24-character hex strings (no dashes)
@@ -1048,7 +1043,7 @@ async def get_wish_history_detail(
                 detail=f"Invalid history ID format. Expected MongoDB ObjectId (24 hex characters), got: {history_id[:50]}"
             )
         
-        # Fetch full item (including large fields)
+        # Fetch full item (including large fields) - optimized query
         doc = await wish_history_col.find_one({
             "_id": ObjectId(history_id),
             # "user_id": user_id
@@ -1057,30 +1052,45 @@ async def get_wish_history_detail(
         if not doc:
             raise HTTPException(status_code=404, detail="History item not found")
         
-        # Check if commercialization request exists for this formula
+        # Fetch commercialization request with timeout to prevent blocking
+        # This is optional data, so we don't want it to slow down the main response
         formula_id = doc.get("formula_id", "")
         commercialization_request = None
         
         if formula_id:
-            # Check QMS queries instead of commercialization_requests
+            # Check QMS queries instead of commercialization_requests (dev version)
             from app.ai_ingredient_intelligence.db.collections import qms_queries_col
-            qms_query = await qms_queries_col.find_one({
-                # "user_id": user_id,
-                "wish_brief.formula_id": formula_id,
-                "wish_brief.history_id": history_id,
-                "status": {"$nin": ["cancelled"]}  # Any active query
-            })
-            
-            # If found, format the response
-            if qms_query:
-                commercialization_request = {
-                    "_id": str(qms_query.get("_id")),
-                    "queue_number": qms_query.get("queue_number") or qms_query.get("wish_brief", {}).get("queue_number"),
-                    "status": qms_query.get("status"),
-                    "created_at": qms_query.get("created_at").isoformat() if isinstance(qms_query.get("created_at"), datetime) else qms_query.get("created_at"),
-                    "additional_notes": qms_query.get("wish_brief", {}).get("additional_notes"),
-                    "display_id": qms_query.get("display_id")
-                }
+            try:
+                # Use asyncio.wait_for to timeout after 2 seconds
+                # If it takes longer, we'll just return None for quote_data
+                qms_query = await asyncio.wait_for(
+                    qms_queries_col.find_one({
+                        # "user_id": user_id,  # Dev version removed user_id check
+                        "wish_brief.formula_id": formula_id,
+                        "wish_brief.history_id": history_id,
+                        "status": {"$nin": ["cancelled"]}  # Any active query
+                    }),
+                    timeout=2.0
+                )
+                
+                # If found, format the response
+                if qms_query:
+                    commercialization_request = {
+                        "_id": str(qms_query.get("_id")),
+                        "queue_number": qms_query.get("queue_number") or qms_query.get("wish_brief", {}).get("queue_number"),
+                        "status": qms_query.get("status"),
+                        "created_at": qms_query.get("created_at").isoformat() if isinstance(qms_query.get("created_at"), datetime) else qms_query.get("created_at"),
+                        "additional_notes": qms_query.get("wish_brief", {}).get("additional_notes"),
+                        "display_id": qms_query.get("display_id")
+                    }
+            except asyncio.TimeoutError:
+                # QMS query timed out - just skip it, don't block response
+                print(f"[WARNING] QMS query timed out for formula_id: {formula_id}")
+                commercialization_request = None
+            except Exception as e:
+                # Don't fail the whole request if QMS query fails
+                print(f"[WARNING] Error fetching QMS query: {e}")
+                commercialization_request = None
         
         # Return full data - mode at doc root (basic/advanced); fallback infer from payload for old docs
         basic_mode_result = doc.get("basic_mode_result")
@@ -1207,6 +1217,17 @@ async def update_wish_history(
         if not update_doc:
             raise HTTPException(status_code=400, detail="No fields to update")
         
+        # Get the wish item before update to get the name for notification
+        wish_item = await wish_history_col.find_one({"_id": ObjectId(history_id), "user_id": user_id})
+        
+        if not wish_item:
+            raise HTTPException(
+                status_code=404,
+                detail="History item not found or you don't have permission to update it"
+            )
+        
+        wish_name = wish_item.get("name", "Wish")
+        
         # Only update if it belongs to the user
         result = await wish_history_col.update_one(
             {"_id": ObjectId(history_id), "user_id": user_id},
@@ -1218,6 +1239,32 @@ async def update_wish_history(
                 status_code=404,
                 detail="History item not found or you don't have permission to update it"
             )
+        
+        # Send notification for successful update
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="success",
+                title="Wish Updated Successfully!",
+                message=f"Your wish '{wish_name}' has been updated.",
+                action=NotificationAction(
+                    label="View Wish",
+                    kind="route",
+                    to=f"/make-wish/{history_id}"
+                ),
+                meta={
+                    "history_id": history_id,
+                    "status": "updated",
+                    "type": "make_wish_updated",
+                    "updated_fields": list(update_doc.keys())
+                },
+                send_websocket=False
+            )
+            print(f"✅ [UPDATE] Notification sent for wish update: {history_id}")
+        except Exception as notify_error:
+            print(f"⚠️ [UPDATE] Failed to send notification: {notify_error}")
+            # Don't fail the request if notification fails
         
         return UpdateWishHistoryResponse(
             success=True,
@@ -1268,6 +1315,17 @@ async def delete_wish_history(
         if not ObjectId.is_valid(history_id):
             raise HTTPException(status_code=400, detail="Invalid history ID")
         
+        # Get the wish item before deletion to get the name for notification
+        wish_item = await wish_history_col.find_one({"_id": ObjectId(history_id), "user_id": user_id})
+        
+        if not wish_item:
+            raise HTTPException(
+                status_code=404,
+                detail="History item not found or you don't have permission to delete it"
+            )
+        
+        wish_name = wish_item.get("name", "Wish")
+        
         # Delete only if it belongs to the user
         result = await wish_history_col.delete_one(
             {"_id": ObjectId(history_id), "user_id": user_id}
@@ -1278,6 +1336,27 @@ async def delete_wish_history(
                 status_code=404,
                 detail="History item not found or you don't have permission to delete it"
             )
+        
+        # Save notification for successful deletion (no WebSocket push)
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="delete",
+                title="Wish Deleted",
+                message=f"Your wish '{wish_name}' has been deleted successfully.",
+                meta={
+                    "history_id": history_id,
+                    "status": "deleted",
+                    "type": "make_wish_deleted",
+                    "wish_name": wish_name
+                },
+                send_websocket=False
+            )
+            print(f"✅ [DELETE] Notification saved for wish deletion: {history_id}")
+        except Exception as notify_error:
+            print(f"⚠️ [DELETE] Failed to send notification: {notify_error}")
+            # Don't fail the request if notification fails
         
         return DeleteWishHistoryResponse(
             success=True,

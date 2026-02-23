@@ -10,7 +10,7 @@ API endpoints for market research functionality including:
 Extracted from analyze_inci.py for better modularity.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Path, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Query, Path
 import time
 import os
 import json
@@ -82,7 +82,6 @@ router = APIRouter(tags=["Market Research"])
 @router.post("/export-to-inspiration-board")
 async def export_market_research_to_board(
     request: dict,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """Export market research results to inspiration board"""
@@ -119,7 +118,7 @@ async def export_market_research_to_board(
         
         # Call the inspiration boards export endpoint
         from app.ai_ingredient_intelligence.api.inspiration_boards import export_to_board_endpoint
-        result = await export_to_board_endpoint(export_request, background_tasks, current_user)
+        result = await export_to_board_endpoint(export_request, current_user)
         
         return result
         
@@ -528,7 +527,6 @@ async def fetch_platforms_background(history_id: str, user_id: str):
 async def update_market_research_history(
     history_id: str, 
     payload: dict,
-    background_tasks: BackgroundTasks,
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
@@ -589,7 +587,7 @@ async def update_market_research_history(
             raise HTTPException(status_code=404, detail="History item not found or you don't have permission to update it")
         
         # Trigger background task to fetch platforms
-        background_tasks.add_task(fetch_platforms_background, history_id, user_id)
+        asyncio.create_task(fetch_platforms_background(history_id, user_id))
         
         return {
             "success": True,
