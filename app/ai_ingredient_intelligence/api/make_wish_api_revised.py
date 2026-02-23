@@ -51,6 +51,7 @@ from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     ParseWishRequest, ParseWishResponse,
     MakeWishRequestRevised, MakeWishResponseRevised,
     MakeWishBasicResponseRevised,
+    MarketTrendsAcceptedResponse,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
@@ -2201,10 +2202,228 @@ async def check_ppt_status(
 
 
 # ============================================================================
+# MARKET TRENDS: HELPER AND BACKGROUND TASKS
+# ============================================================================
+
+def _extract_market_trends_context(history_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Extract hero_ingredients, benefits, product_type, category, parsed_data, and name from wish_history doc.
+    Returns None if parsed_data is missing or both hero_ingredients and benefits are empty.
+    """
+    parsed_data = history_doc.get("parsed_data") or {}
+    wish_data = history_doc.get("wish_data") or {}
+    hero_ingredients = []
+    detected_ingredients = parsed_data.get("detected_ingredients", [])
+    if detected_ingredients:
+        hero_ingredients = [
+            ing.get("name", str(ing)) if isinstance(ing, dict) else str(ing)
+            for ing in detected_ingredients
+        ]
+    else:
+        hero_ingredients = (
+            parsed_data.get("hero_ingredients") or
+            wish_data.get("hero_ingredients") or
+            history_doc.get("hero_ingredients") or
+            []
+        )
+    benefits = (
+        parsed_data.get("detected_benefits") or
+        parsed_data.get("benefits") or
+        wish_data.get("benefits") or
+        history_doc.get("benefits") or
+        []
+    )
+    product_type_obj = parsed_data.get("product_type", {})
+    if isinstance(product_type_obj, dict):
+        product_type = product_type_obj.get("id") or product_type_obj.get("name") or None
+    else:
+        product_type = str(product_type_obj) if product_type_obj else None
+    if not product_type:
+        product_type = wish_data.get("product_type") or history_doc.get("product_type") or None
+    category = (
+        parsed_data.get("category") or
+        wish_data.get("category") or
+        history_doc.get("category") or
+        "skincare"
+    )
+    name = (history_doc.get("name") or history_doc.get("wish_text") or "Wish")[:80]
+    if not parsed_data or (not hero_ingredients and not benefits):
+        return None
+    return {
+        "hero_ingredients": hero_ingredients,
+        "benefits": benefits,
+        "product_type": product_type,
+        "category": category,
+        "parsed_data": parsed_data,
+        "name": name,
+    }
+
+
+async def process_market_trends_background_with_semaphore(
+    history_id: str,
+    user_id: str,
+    max_age_days: int,
+    use_fallback: bool,
+):
+    """Acquire semaphore then run market trends background task (same pattern as generate-revised)."""
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🔒 [BACKGROUND-MT] [{timestamp}] Waiting for semaphore for history_id: {history_id}")
+    semaphore = await get_background_task_semaphore()
+    async with semaphore:
+        await asyncio.sleep(0)
+        await process_market_trends_background(
+            history_id=history_id,
+            user_id=user_id,
+            max_age_days=max_age_days,
+            use_fallback=use_fallback,
+        )
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🔓 [BACKGROUND-MT] [{timestamp}] Semaphore released for history_id: {history_id}")
+
+
+async def process_market_trends_background(
+    history_id: str,
+    user_id: str,
+    max_age_days: int,
+    use_fallback: bool,
+):
+    """
+    Background task: fetch market trends, save to wish_history, send WebSocket notifications.
+    Same notification pattern as generate-revised (success with action to view, error with message).
+    """
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🚀 [BACKGROUND-MT] [{timestamp}] Starting market trends for history_id: {history_id}")
+    error_message = None
+    try:
+        history_doc = await wish_history_col.find_one({
+            "_id": ObjectId(history_id),
+            "user_id": user_id,
+        })
+        if not history_doc:
+            error_message = "History item not found or access denied"
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_trends_status": "failed",
+                    "market_trends_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="error",
+                title="Market Trends Failed",
+                message=error_message,
+                meta={"history_id": history_id, "status": "failed", "type": "market_trends", "error": error_message},
+                send_websocket=True,
+            )
+            return
+        ctx = _extract_market_trends_context(history_doc)
+        if not ctx:
+            error_message = "parsed_data or hero ingredients/benefits missing. Parse the wish first."
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_trends_status": "failed",
+                    "market_trends_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="error",
+                title="Market Trends Failed",
+                message=error_message,
+                meta={"history_id": history_id, "status": "failed", "type": "market_trends", "error": error_message},
+                send_websocket=True,
+            )
+            return
+        trends_service = MarketTrendsService()
+        trends_data = await trends_service.fetch_trends_for_wish(
+            hero_ingredients=ctx["hero_ingredients"],
+            benefits=ctx["benefits"],
+            product_type=ctx["product_type"],
+            category=ctx["category"],
+            max_age_days=max_age_days,
+            use_fallback=use_fallback,
+            parsed_data=ctx["parsed_data"],
+        )
+        update_data = {
+            "market_trends": trends_data,
+            "market_trends_fetched_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            "market_trends_status": "completed",
+            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+        }
+        await wish_history_col.update_one(
+            {"_id": ObjectId(history_id)},
+            {"$set": update_data},
+        )
+        print(f"✅ [BACKGROUND-MT] Market trends saved for history_id: {history_id}")
+        notification_data = {
+            "history_id": history_id,
+            "status": "completed",
+            "type": "market_trends",
+        }
+        await notify_user_enhanced(
+            user_id=user_id,
+            module="make-wish",
+            notification_type="success",
+            title="Market Trends Ready",
+            message=f"Market trends for '{ctx['name']}' are ready to view.",
+            action=NotificationAction(
+                label="View Market Trends",
+                kind="route",
+                to=f"/make-wish/{history_id}",
+            ),
+            meta=notification_data,
+            send_websocket=True,
+        )
+        print(f"✅ [BACKGROUND-MT] Success notification sent for history_id: {history_id}")
+    except Exception as e:
+        error_message = str(e)
+        timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"❌ [BACKGROUND-MT] [{timestamp}] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id), "user_id": user_id},
+                {"$set": {
+                    "market_trends_status": "failed",
+                    "market_trends_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }},
+            )
+        except Exception as db_err:
+            print(f"❌ [BACKGROUND-MT] Failed to update failed status: {db_err}")
+        name = "Wish"
+        try:
+            doc = await wish_history_col.find_one({"_id": ObjectId(history_id)})
+            if doc:
+                name = (doc.get("name") or doc.get("wish_text") or name)[:80]
+        except Exception:
+            pass
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="error",
+                title="Market Trends Failed",
+                message=f"Sorry, we couldn't fetch market trends for '{name}'. Please try again.",
+                meta={"history_id": history_id, "status": "failed", "type": "market_trends", "error": error_message},
+                send_websocket=True,
+            )
+        except Exception as ws_error:
+            print(f"⚠️ [BACKGROUND-MT] Failed to send WebSocket notification: {ws_error}")
+
+
+# ============================================================================
 # MARKET TRENDS ENDPOINT
 # ============================================================================
 
-@router.post("/market-trends/{history_id}", response_model=None)
+@router.post("/market-trends/{history_id}", response_model=MarketTrendsAcceptedResponse)
 async def fetch_market_trends(
     history_id: str,
     max_age_days: int = Query(35, description="Maximum age of cached data in days"),
@@ -2212,12 +2431,12 @@ async def fetch_market_trends(
     current_user: dict = Depends(verify_jwt_token)  # JWT token validation
 ):
     """
-    Fetch market trends data for a wish using history_id from route.
+    Request market trends for a wish (async, same pattern as generate-revised).
     
-    This endpoint fetches wish data from the database using history_id, then provides
-    market intelligence data using Claude synthesis for structured intelligence.
-    
-    The market trends data is automatically saved to wish_history for future reference.
+    Returns immediately with success and history_id. Processing runs in the background.
+    When finished, market trends are saved to wish_history and a WebSocket notification
+    is sent (success with "View Market Trends" or error). Use the same WebSocket channel
+    as generate-revised (make-wish module).
     
     PATH PARAMETER:
     - history_id: MongoDB ObjectId of the wish history item
@@ -2226,161 +2445,48 @@ async def fetch_market_trends(
     - max_age_days: Maximum age of cached data in days (default: 35)
     - use_fallback: Whether to use SerpAPI if MongoDB has no data (default: true)
     
-    EXAMPLE:
-    POST /api/make-wish/market-trends/507f1f77bcf86cd799439011?max_age_days=35&use_fallback=true
-    
-    RESPONSE:
-    Synthesized structured intelligence:
-    - executive_summary: High-level overview
-    - opportunity_analysis: Market opportunities with scoring
-    - competitive_intelligence: Competitive landscape
-    - recommendations: Actionable recommendations
+    RESPONSE (immediate):
+    - success: true (request accepted)
+    - history_id: use to poll detail or listen for WebSocket notification
     """
+    user_id_value = current_user.get("user_id") or current_user.get("_id")
+    if not user_id_value:
+        raise HTTPException(status_code=400, detail="User ID not found in JWT token")
+    if not ObjectId.is_valid(history_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid history_id format. Expected MongoDB ObjectId, got: {history_id[:50]}"
+        )
+    history_doc = await wish_history_col.find_one({
+        "_id": ObjectId(history_id),
+        "user_id": user_id_value,
+    })
+    if not history_doc:
+        raise HTTPException(status_code=404, detail="History item not found or doesn't belong to user")
+    ctx = _extract_market_trends_context(history_doc)
+    if not ctx:
+        raise HTTPException(
+            status_code=400,
+            detail="parsed_data is required and at least one of hero ingredients or benefits. Parse the wish first using /parse-wish."
+        )
     try:
-        # Extract user_id from JWT token
-        user_id_value = current_user.get("user_id") or current_user.get("_id")
-        if not user_id_value:
-            raise HTTPException(status_code=400, detail="User ID not found in JWT token")
-        
-        # Validate ObjectId
-        if not ObjectId.is_valid(history_id):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid history_id format. Expected MongoDB ObjectId, got: {history_id[:50]}"
-            )
-        
-        # Fetch wish data from database
-        history_doc = await wish_history_col.find_one({
-            "_id": ObjectId(history_id),
-            "user_id": user_id_value
-        })
-        
-        if not history_doc:
-            raise HTTPException(
-                status_code=404,
-                detail=f"History item not found or doesn't belong to user"
-            )
-        
-        # Extract data from wish_history document
-        parsed_data = history_doc.get("parsed_data") or {}
-        wish_data = history_doc.get("wish_data") or {}
-        
-        # Extract hero_ingredients from parsed_data or wish_data
-        hero_ingredients = []
-        detected_ingredients = parsed_data.get("detected_ingredients", [])
-        if detected_ingredients:
-            hero_ingredients = [
-                ing.get("name", str(ing)) if isinstance(ing, dict) else str(ing)
-                for ing in detected_ingredients
-            ]
-        else:
-            # Fallback to wish_data or direct field
-            hero_ingredients = (
-                parsed_data.get("hero_ingredients") or
-                wish_data.get("hero_ingredients") or
-                history_doc.get("hero_ingredients") or
-                []
-            )
-        
-        # Extract benefits
-        benefits = (
-            parsed_data.get("detected_benefits") or
-            parsed_data.get("benefits") or
-            wish_data.get("benefits") or
-            history_doc.get("benefits") or
-            []
-        )
-        
-        # Extract product_type
-        product_type_obj = parsed_data.get("product_type", {})
-        if isinstance(product_type_obj, dict):
-            product_type = product_type_obj.get("id") or product_type_obj.get("name") or None
-        else:
-            product_type = str(product_type_obj) if product_type_obj else None
-        
-        if not product_type:
-            product_type = (
-                wish_data.get("product_type") or
-                history_doc.get("product_type") or
-                None
-            )
-        
-        # Extract category
-        category = (
-            parsed_data.get("category") or
-            wish_data.get("category") or
-            history_doc.get("category") or
-            "skincare"
-        )
-        
-        # Validate that we have parsed_data (REQUIRED for synthesis)
-        if not parsed_data:
-            raise HTTPException(
-                status_code=400,
-                detail="parsed_data is required for market trends synthesis. Please ensure the wish has been parsed first using /parse-wish endpoint."
-            )
-        
-        # Validate that we have at least hero_ingredients or benefits
-        if not hero_ingredients and not benefits:
-            raise HTTPException(
-                status_code=400,
-                detail="No hero ingredients or benefits found in wish data. Please ensure the wish has been parsed first."
-            )
-        
-        # Debug logging
-        print(f"[DEBUG] Market Trends Request:")
-        print(f"   hero_ingredients: {hero_ingredients}")
-        print(f"   benefits: {benefits}")
-        print(f"   product_type: {product_type}")
-        print(f"   category: {category}")
-        
-        # Fetch market trends (synthesis only - no legacy format)
-        trends_service = MarketTrendsService()
-        
-        try:
-            trends_data = await trends_service.fetch_trends_for_wish(
-                hero_ingredients=hero_ingredients,
-                benefits=benefits,
-                product_type=product_type,
-                category=category,
-                max_age_days=max_age_days,
-                use_fallback=use_fallback,
-                parsed_data=parsed_data
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        
-        # Save market trends data to wish_history
-        update_data = {
-            "market_trends": trends_data,
-            "market_trends_fetched_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-        }
-        
         await wish_history_col.update_one(
             {"_id": ObjectId(history_id)},
-            {"$set": update_data}
+            {"$set": {
+                "market_trends_status": "in_progress",
+                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            }},
         )
-        
-        print(f"[DEBUG] ✅ Market trends fetched and saved to wish_history: {history_id}")
-        
-        return {
-            "success": True,
-            "market_trends": trends_data,
-            "history_id": history_id,
-            "timestamp": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
-        }
-    
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"❌ Error fetching market trends: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching market trends: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to set market trends status: {str(e)}")
+    background_coro = process_market_trends_background_with_semaphore(
+        history_id=history_id,
+        user_id=user_id_value,
+        max_age_days=max_age_days,
+        use_fallback=use_fallback,
+    )
+    asyncio.create_task(handle_background_task_safely(background_coro))
+    return MarketTrendsAcceptedResponse(success=True, history_id=history_id)
 
 
 # ============================================================================
