@@ -390,7 +390,7 @@ except ImportError as e:
     print(f"Warning: Could not import timing_stats router: {e}")
     print("   Timing Statistics API will not be available.")
 
-# ✅ Credits API: Using third-party API via CREDITS_API_URL environment variable
+# ✅ Credits API: Using third-party API via CREDITS_API_BASE_URL (paths in credit_service.py)
 # credit_service.py handles all credit deduction calls to external API
 
 # ✅ New image-to-JSON API - Commented out - module doesn't exist
