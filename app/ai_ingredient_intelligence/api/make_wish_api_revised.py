@@ -2487,7 +2487,7 @@ async def fetch_market_trends(
     )
     asyncio.create_task(handle_background_task_safely(background_coro))
     await asyncio.sleep(0)  # Yield so response is sent immediately and other requests aren't delayed
-    return MarketTrendsAcceptedResponse(success=True, history_id=history_id)
+    return MarketTrendsAcceptedResponse(success=True, history_id=history_id, status="in_progress")
 
 
 # ============================================================================
