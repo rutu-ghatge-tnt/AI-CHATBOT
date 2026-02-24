@@ -928,6 +928,8 @@ async def get_wish_history(
                 "created_at": 1,
                 "tag": 1,
                 "status": 1,
+                "market_trends_status": 1,
+                "market_trends_error": 1,
                 "wish_text": 1,
                 "query_id": 1,
             }
@@ -970,6 +972,8 @@ async def get_wish_history(
                 "tag": doc.get("tag", ""),
                 "wish_text": doc.get("wish_text", ""),
                 "status": doc.get("status", ""),
+                "market_trends_status": doc.get("market_trends_status"),
+                "market_trends_error": doc.get("market_trends_error"),
                 "notes": doc.get("notes", ""),
                 "created_at": doc.get("created_at", ""),
                 "query_id": doc.get("query_id"),  # Include query_id for reference
@@ -1130,6 +1134,8 @@ async def get_wish_history_detail(
             "notes": doc.get("notes", ""),
             "wish_text": doc.get("wish_text", ""),
             "status": doc.get("status", ""),
+            "market_trends_status": doc.get("market_trends_status"),
+            "market_trends_error": doc.get("market_trends_error"),
             "tag": doc.get("tag", ""),
             "parsed_data": doc.get("parsed_data"),
             "complexity": doc.get("complexity", ""),
