@@ -15,7 +15,8 @@ Cost: ~₹4-7 per wish (vs ₹25-50 with SerpAPI) = 85% cost reduction
 
 import os
 import json
-from typing import Dict, Any, Optional, List
+import asyncio
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
 # Claude API setup
@@ -1629,6 +1630,47 @@ def validate_trend_synthesis(data: Dict[str, Any]) -> bool:
 
 
 # ============================================================================
+# SYNC HELPERS (run in thread pool to avoid blocking the event loop)
+# ============================================================================
+
+def _stream_claude_sync(client: Any, api_params: Dict[str, Any]) -> Tuple[str, Optional[str], int]:
+    """
+    Synchronously call Claude streaming API and collect content.
+    Must be run via asyncio.to_thread() so the event loop is not blocked.
+    Returns (content, stop_reason, event_count).
+    """
+    content = ""
+    stop_reason = None
+    event_count = 0
+    with client.messages.stream(**api_params) as stream:
+        for event in stream:
+            event_count += 1
+            if event.type == "content_block_delta":
+                try:
+                    if hasattr(event, "delta"):
+                        if hasattr(event.delta, "text"):
+                            content += event.delta.text
+                        elif hasattr(event.delta, "type") and event.delta.type == "text_delta":
+                            if hasattr(event.delta, "text"):
+                                content += event.delta.text
+                except Exception:
+                    pass
+            elif event.type == "message_delta":
+                try:
+                    if hasattr(event, "delta") and hasattr(event.delta, "stop_reason"):
+                        stop_reason = event.delta.stop_reason
+                except Exception:
+                    pass
+            elif event.type == "message_stop":
+                try:
+                    if hasattr(event, "message") and hasattr(event.message, "stop_reason"):
+                        stop_reason = event.message.stop_reason
+                except Exception:
+                    pass
+    return (content, stop_reason, event_count)
+
+
+# ============================================================================
 # MAIN SYNTHESIS FUNCTION
 # ============================================================================
 
@@ -1711,9 +1753,10 @@ async def synthesize_trends(
     
     print(f"[TREND SYNTHESIS]   Estimated tokens - System: ~{estimated_system_tokens}, User: ~{estimated_user_tokens}, Total: ~{estimated_total}")
     
-    # Use actual token counting if available
+    # Use actual token counting if available (run in thread to avoid blocking event loop)
     try:
-        token_count = claude_client.messages.count_tokens(
+        token_count = await asyncio.to_thread(
+            claude_client.messages.count_tokens,
             model=CLAUDE_MODEL,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}]
@@ -1727,9 +1770,10 @@ async def synthesize_trends(
             truncated_trends = truncate_trend_data_for_prompt(matched_trends, parsed_data=parsed_data, max_tokens=150000)
             user_prompt = build_trend_synthesis_user_prompt(parsed_data, truncated_trends)
             
-            # Re-count tokens
+            # Re-count tokens (in thread)
             try:
-                token_count = claude_client.messages.count_tokens(
+                token_count = await asyncio.to_thread(
+                    claude_client.messages.count_tokens,
                     model=CLAUDE_MODEL,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}]
@@ -1797,56 +1841,12 @@ async def synthesize_trends(
         # Call Claude API with streaming (required for requests that may take >10 minutes)
         print(f"[TREND SYNTHESIS] 📡 Calling Claude API with streaming (required for long requests)...")
         
-        # Collect streaming response
-        content = ""
-        stop_reason = None
-        event_count = 0
-        last_log_time = datetime.now()
-        
-        print(f"[TREND SYNTHESIS]   Starting to receive stream events...")
-        # Use stream() method which returns MessageStreamManager
-        # The context manager gives us the actual stream to iterate over
+        # Run Claude streaming in thread pool so the event loop is not blocked
+        print(f"[TREND SYNTHESIS]   Starting to receive stream events (running in thread pool)...")
         try:
-            with claude_client.messages.stream(**api_params) as stream:
-                for event in stream:
-                    event_count += 1
-                    
-                    # Log progress every 100 events or every 5 seconds
-                    current_time = datetime.now()
-                    if event_count % 100 == 0 or (current_time - last_log_time).total_seconds() > 5:
-                        print(f"[TREND SYNTHESIS]   Received {event_count} events, content length: {len(content)} chars")
-                        last_log_time = current_time
-                    
-                    if event.type == "content_block_delta":
-                        # Accumulate text deltas
-                        try:
-                            if hasattr(event, 'delta'):
-                                if hasattr(event.delta, 'text'):
-                                    content += event.delta.text
-                                elif hasattr(event.delta, 'type') and event.delta.type == "text_delta":
-                                    if hasattr(event.delta, 'text'):
-                                        content += event.delta.text
-                        except Exception as e:
-                            print(f"[TREND SYNTHESIS]   ⚠️ Error processing content_block_delta: {e}")
-                    
-                    elif event.type == "message_delta":
-                        # Get stop reason from message_delta event
-                        try:
-                            if hasattr(event, 'delta') and hasattr(event.delta, 'stop_reason'):
-                                stop_reason = event.delta.stop_reason
-                                print(f"[TREND SYNTHESIS]   Stop reason: {stop_reason}")
-                        except Exception as e:
-                            print(f"[TREND SYNTHESIS]   ⚠️ Error processing message_delta: {e}")
-                    
-                    elif event.type == "message_stop":
-                        # Final event - message is complete
-                        try:
-                            if hasattr(event, 'message') and hasattr(event.message, 'stop_reason'):
-                                stop_reason = event.message.stop_reason
-                                print(f"[TREND SYNTHESIS]   Message complete, stop reason: {stop_reason}")
-                        except Exception as e:
-                            print(f"[TREND SYNTHESIS]   ⚠️ Error processing message_stop: {e}")
-            
+            content, stop_reason, event_count = await asyncio.to_thread(
+                _stream_claude_sync, claude_client, api_params
+            )
             print(f"[TREND SYNTHESIS]   ✅ Stream complete: {event_count} total events, {len(content)} chars received")
         except Exception as stream_init_err:
             print(f"[TREND SYNTHESIS] ❌ Error initializing or processing stream: {stream_init_err}")
