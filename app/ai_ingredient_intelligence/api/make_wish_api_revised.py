@@ -68,11 +68,7 @@ from app.ai_ingredient_intelligence.logic.make_wish_config import (
 from app.ai_ingredient_intelligence.logic.make_wish_icon_mapping import emoji_to_icon, replace_icon_emoji_values
 
 # Import AI prompts
-from app.ai_ingredient_intelligence.logic.make_wish_prompts import (
-    PARSE_WISH_PROMPT, INGREDIENT_SELECTION_COMPLEXITY_PROMPT,
-    INSIGHTS_GENERATION_PROMPT, ALTERNATIVES_ANALYSIS_PROMPT,
-    format_ingredients_list, format_alternatives_list
-)
+from app.ai_ingredient_intelligence.logic.make_wish_prompts import PARSE_WISH_PROMPT
 
 # Import existing generator
 from app.ai_ingredient_intelligence.logic.make_wish_generator import (
@@ -109,10 +105,7 @@ from app.ai_ingredient_intelligence.logic.gamma_ppt_generator import (
     generate_ppt_from_data,
     is_gamma_available
 )
-from app.ai_ingredient_intelligence.logic.claude_prompt_generator import (
-    generate_business_strategy_prompt,
-    get_default_business_strategy_prompt
-)
+from app.ai_ingredient_intelligence.logic.claude_prompt_generator import generate_business_strategy_prompt
 
 # Import database collections
 from app.ai_ingredient_intelligence.db.collections import (
