@@ -16,6 +16,17 @@ from app.ai_ingredient_intelligence.db.collections import ingredient_costs_col
 router = APIRouter(prefix="/ingredient-costs", tags=["Ingredient Costs"])
 
 
+def _parse_hide(value) -> bool:
+    """Parse hide flag: accept bool or string 'true'/'false' so frontend can't accidentally set hide=True when unhiding."""
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    return bool(value)
+
+
 def _serialize_doc(doc: dict) -> dict:
     """Convert MongoDB doc to JSON-serializable dict; _id -> id."""
     if not doc:
@@ -250,7 +261,7 @@ async def create_ingredient_cost(
         source = str(payload.get("source", "api")).strip() or "api"
         now = datetime.utcnow()
 
-        hide = bool(payload.get("hide", False))
+        hide = _parse_hide(payload.get("hide", False))
         doc = {
             "inci_name": inci_name,
             "inci_name_normalized": inci_name_normalized,
@@ -313,7 +324,7 @@ async def update_ingredient_cost(
     if "source" in payload:
         update_fields["source"] = str(payload["source"]).strip() or "api"
     if "hide" in payload:
-        update_fields["hide"] = bool(payload["hide"])
+        update_fields["hide"] = _parse_hide(payload["hide"])
 
     if not update_fields:
         return _serialize_doc(existing)
@@ -342,7 +353,7 @@ async def set_ingredient_cost_hidden(
         raise HTTPException(status_code=400, detail="Invalid ingredient cost ID")
     if "hide" not in payload:
         raise HTTPException(status_code=400, detail="Body must include 'hide': true or false")
-    hide = bool(payload["hide"])
+    hide = _parse_hide(payload["hide"])
     existing = await ingredient_costs_col.find_one({"_id": oid})
     if not existing:
         raise HTTPException(status_code=404, detail="Ingredient cost not found")
