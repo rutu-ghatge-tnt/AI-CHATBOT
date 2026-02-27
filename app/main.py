@@ -47,6 +47,7 @@ from app.ai_ingredient_intelligence.api.cost_calculator import router as cost_ca
 from app.ai_ingredient_intelligence.api.ingredient_search import router as ingredient_search_router
 from app.ai_ingredient_intelligence.api.market_research import router as market_research_router
 from app.ai_ingredient_intelligence.api.distributor_management import router as distributor_management_router
+from app.ai_ingredient_intelligence.api.ingredient_costs import router as ingredient_costs_router
 from app.ai_ingredient_intelligence.api.ingredient_history import router as ingredient_history_router
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.health_checks import router as health_checks_router
@@ -305,6 +306,9 @@ app.include_router(market_research_router, prefix="/api")
 
 # ✅ Add distributor management API
 app.include_router(distributor_management_router, prefix="/api")
+
+# ✅ Add ingredient costs CRUD API
+app.include_router(ingredient_costs_router, prefix="/api")
 
 # ✅ Add ingredient history API
 app.include_router(ingredient_history_router, prefix="/api")
