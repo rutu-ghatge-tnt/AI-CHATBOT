@@ -11,10 +11,7 @@ from datetime import datetime
 from bson import ObjectId
 
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
-from app.ai_ingredient_intelligence.db.collections import (
-    ingredient_costs_col,
-    INGREDIENT_COST_NOT_HIDDEN_QUERY as NOT_HIDDEN_QUERY,
-)
+from app.ai_ingredient_intelligence.db.collections import ingredient_costs_col
 
 router = APIRouter(prefix="/ingredient-costs", tags=["Ingredient Costs"])
 
@@ -40,9 +37,8 @@ def _build_filter_query(
     min_cost: Optional[float] = None,
     max_cost: Optional[float] = None,
     q: Optional[str] = None,
-    include_hidden: bool = False,
 ) -> dict:
-    """Build MongoDB query from INCI, branded name, supplier, cost range, and optional text q."""
+    """Build MongoDB query from INCI, branded name, supplier, cost range, and optional text q. List shows all (hidden + visible)."""
     conditions: List[dict] = []
 
     if inci_name and inci_name.strip():
@@ -100,8 +96,8 @@ def _build_filter_query(
             ]
         })
 
-    if not include_hidden:
-        conditions.append(NOT_HIDDEN_QUERY)
+    # List/search always show ALL (admin). Hidden is only excluded in feature queries (make a wish, cost lookup).
+    # So we do NOT add NOT_HIDDEN_QUERY here.
 
     if not conditions:
         return {}
@@ -121,14 +117,12 @@ async def list_ingredient_costs(
     supplier: Optional[str] = Query(None, description="Filter by primary supplier (partial match)"),
     min_cost: Optional[float] = Query(None, ge=0, description="Minimum avg_cost (₹/kg)"),
     max_cost: Optional[float] = Query(None, ge=0, description="Maximum avg_cost (₹/kg)"),
-    include_hidden: bool = Query(False, description="If true, include hidden ingredients (admin)"),
     sort_by: str = Query("updated_at", description="Sort field: inci_name, branded_ingredient, avg_cost, updated_at"),
     sort_order: str = Query("desc", description="asc or desc"),
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
-    List ingredient costs with pagination. Filters: INCI name, branded name, supplier, cost range (min_cost, max_cost).
-    Hidden ingredients are excluded by default; use include_hidden=true for admin. All filters are AND.
+    List ingredient costs with pagination. Returns ALL ingredients (hidden + visible). Filters: INCI, brand, supplier, cost range. All filters are AND.
     """
     try:
         query = _build_filter_query(
@@ -137,7 +131,6 @@ async def list_ingredient_costs(
             supplier=supplier,
             min_cost=min_cost,
             max_cost=max_cost,
-            include_hidden=include_hidden,
         )
         total = await ingredient_costs_col.count_documents(query)
         sort_field = "updated_at"
@@ -170,7 +163,6 @@ async def search_ingredient_costs(
     supplier: Optional[str] = Query(None, description="Filter by primary supplier (partial match)"),
     min_cost: Optional[float] = Query(None, ge=0, description="Minimum avg_cost (₹/kg)"),
     max_cost: Optional[float] = Query(None, ge=0, description="Maximum avg_cost (₹/kg)"),
-    include_hidden: bool = Query(False, description="If true, include hidden ingredients (admin)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     sort_by: str = Query("updated_at", description="Sort field: inci_name, branded_ingredient, avg_cost, updated_at"),
@@ -178,7 +170,7 @@ async def search_ingredient_costs(
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
-    Search ingredient costs. Use q for free-text search; or use specific filters. Hidden ingredients excluded by default; use include_hidden=true for admin.
+    Search ingredient costs. Returns ALL (hidden + visible). Use q for free-text search or specific filters.
     """
     query = _build_filter_query(
         inci_name=inci_name,
@@ -187,7 +179,6 @@ async def search_ingredient_costs(
         min_cost=min_cost,
         max_cost=max_cost,
         q=q,
-        include_hidden=include_hidden,
     )
     total = await ingredient_costs_col.count_documents(query)
     sort_field = "updated_at"
@@ -212,11 +203,15 @@ async def get_ingredient_cost(
     id: str,
     current_user: dict = Depends(verify_jwt_token),
 ):
-    """Get a single ingredient cost by ID (view)."""
+    """
+    Get a single ingredient cost by ID. Returns the ingredient regardless of hide status
+    (admin can always fetch by ID whether hidden or not). No filter by hide is applied.
+    """
     try:
         oid = ObjectId(id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ingredient cost ID")
+    # No hide filter: admin must be able to fetch any ingredient by ID
     doc = await ingredient_costs_col.find_one({"_id": oid})
     if not doc:
         raise HTTPException(status_code=404, detail="Ingredient cost not found")
