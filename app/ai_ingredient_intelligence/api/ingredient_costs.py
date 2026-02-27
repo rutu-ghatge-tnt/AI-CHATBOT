@@ -2,11 +2,11 @@
 Ingredient Costs CRUD API
 ========================
 Full CRUD and search for the ingredient_costs collection.
-Search by brand name (branded_ingredient) and INCI name.
+Filters: INCI name, branded ingredient, primary supplier, cost range (min/max).
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Optional, Any
+from typing import Optional, Any, List
 from datetime import datetime
 from bson import ObjectId
 
@@ -29,34 +29,106 @@ def _serialize_doc(doc: dict) -> dict:
     return out
 
 
+def _build_filter_query(
+    inci_name: Optional[str] = None,
+    brand_name: Optional[str] = None,
+    supplier: Optional[str] = None,
+    min_cost: Optional[float] = None,
+    max_cost: Optional[float] = None,
+    q: Optional[str] = None,
+) -> dict:
+    """Build MongoDB query from INCI, branded name, supplier, cost range, and optional text q."""
+    conditions: List[dict] = []
+
+    if inci_name and inci_name.strip():
+        s = inci_name.strip()
+        s_lower = s.lower()
+        conditions.append({
+            "$or": [
+                {"inci_name": {"$regex": s, "$options": "i"}},
+                {"inci_name_normalized": {"$regex": s_lower, "$options": "i"}},
+            ]
+        })
+
+    if brand_name and brand_name.strip():
+        conditions.append({
+            "branded_ingredient": {"$regex": brand_name.strip(), "$options": "i"}
+        })
+
+    if supplier and supplier.strip():
+        conditions.append({
+            "primary_supplier": {"$regex": supplier.strip(), "$options": "i"}
+        })
+
+    min_val = None
+    max_val = None
+    if min_cost is not None:
+        try:
+            v = float(min_cost)
+            if v >= 0:
+                min_val = v
+        except (TypeError, ValueError):
+            pass
+    if max_cost is not None:
+        try:
+            v = float(max_cost)
+            if v >= 0:
+                max_val = v
+        except (TypeError, ValueError):
+            pass
+    if min_val is not None and max_val is not None:
+        conditions.append({"avg_cost": {"$gte": min_val, "$lte": max_val}})
+    elif min_val is not None:
+        conditions.append({"avg_cost": {"$gte": min_val}})
+    elif max_val is not None:
+        conditions.append({"avg_cost": {"$lte": max_val}})
+
+    if q and q.strip():
+        s = q.strip()
+        s_lower = s.lower()
+        conditions.append({
+            "$or": [
+                {"inci_name": {"$regex": s, "$options": "i"}},
+                {"inci_name_normalized": {"$regex": s_lower, "$options": "i"}},
+                {"branded_ingredient": {"$regex": s, "$options": "i"}},
+                {"primary_supplier": {"$regex": s, "$options": "i"}},
+            ]
+        })
+
+    if not conditions:
+        return {}
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"$and": conditions}
+
+
 # ----- List (with search and pagination) -----
 
 @router.get("")
 async def list_ingredient_costs(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    brand_name: Optional[str] = Query(None, description="Search by branded ingredient / brand name"),
-    inci_name: Optional[str] = Query(None, description="Search by INCI name"),
+    inci_name: Optional[str] = Query(None, description="Filter by INCI name (partial match)"),
+    brand_name: Optional[str] = Query(None, description="Filter by branded ingredient / brand name (partial match)"),
+    supplier: Optional[str] = Query(None, description="Filter by primary supplier (partial match)"),
+    min_cost: Optional[float] = Query(None, ge=0, description="Minimum avg_cost (₹/kg)"),
+    max_cost: Optional[float] = Query(None, ge=0, description="Maximum avg_cost (₹/kg)"),
     sort_by: str = Query("updated_at", description="Sort field: inci_name, branded_ingredient, avg_cost, updated_at"),
     sort_order: str = Query("desc", description="asc or desc"),
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
-    List ingredient costs with pagination and optional search by brand name and/or INCI name.
+    List ingredient costs with pagination. Filters: INCI name, branded name, supplier, cost range (min_cost, max_cost).
+    All filters are combined with AND (partial, case-insensitive match for text).
     """
     try:
-        query = {}
-        if brand_name and brand_name.strip():
-            query["branded_ingredient"] = {"$regex": brand_name.strip(), "$options": "i"}
-        if inci_name and inci_name.strip():
-            query["$or"] = [
-                {"inci_name": {"$regex": inci_name.strip(), "$options": "i"}},
-                {"inci_name_normalized": {"$regex": inci_name.strip().lower(), "$options": "i"}},
-            ]
-            # If we already had brand_name, combine with $and
-            if "branded_ingredient" in query:
-                query = {"$and": [{"branded_ingredient": query["branded_ingredient"]}, {"$or": query["$or"]}]}
-
+        query = _build_filter_query(
+            inci_name=inci_name,
+            brand_name=brand_name,
+            supplier=supplier,
+            min_cost=min_cost,
+            max_cost=max_cost,
+        )
         total = await ingredient_costs_col.count_documents(query)
         sort_field = "updated_at"
         if sort_by in ("inci_name", "branded_ingredient", "avg_cost", "updated_at", "inci_name_normalized"):
@@ -82,36 +154,35 @@ async def list_ingredient_costs(
 
 @router.get("/search/query")
 async def search_ingredient_costs(
-    q: Optional[str] = Query(None, description="Search in INCI name and brand name"),
+    q: Optional[str] = Query(None, description="Search text in INCI, branded ingredient, and supplier"),
+    inci_name: Optional[str] = Query(None, description="Filter by INCI name (partial match)"),
+    brand_name: Optional[str] = Query(None, description="Filter by branded ingredient (partial match)"),
+    supplier: Optional[str] = Query(None, description="Filter by primary supplier (partial match)"),
+    min_cost: Optional[float] = Query(None, ge=0, description="Minimum avg_cost (₹/kg)"),
+    max_cost: Optional[float] = Query(None, ge=0, description="Maximum avg_cost (₹/kg)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("updated_at", description="Sort field: inci_name, branded_ingredient, avg_cost, updated_at"),
+    sort_order: str = Query("desc", description="asc or desc"),
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
-    Search ingredient costs by a single query string (matches both INCI name and branded ingredient).
+    Search ingredient costs. Use q for free-text search across INCI, brand, supplier; or use specific filters (inci_name, brand_name, supplier, min_cost, max_cost). All conditions are ANDed.
     """
-    if not q or not q.strip():
-        total = await ingredient_costs_col.count_documents({})
-        cursor = ingredient_costs_col.find({}).sort("updated_at", -1).skip(skip).limit(limit)
-        items = await cursor.to_list(length=limit)
-        return {
-            "items": [_serialize_doc(d) for d in items],
-            "total": total,
-            "skip": skip,
-            "limit": limit,
-            "hasMore": (skip + limit) < total,
-        }
-    s = q.strip()
-    s_lower = s.lower()
-    query = {
-        "$or": [
-            {"inci_name": {"$regex": s, "$options": "i"}},
-            {"inci_name_normalized": {"$regex": s_lower, "$options": "i"}},
-            {"branded_ingredient": {"$regex": s, "$options": "i"}},
-        ]
-    }
+    query = _build_filter_query(
+        inci_name=inci_name,
+        brand_name=brand_name,
+        supplier=supplier,
+        min_cost=min_cost,
+        max_cost=max_cost,
+        q=q,
+    )
     total = await ingredient_costs_col.count_documents(query)
-    cursor = ingredient_costs_col.find(query).sort("updated_at", -1).skip(skip).limit(limit)
+    sort_field = "updated_at"
+    if sort_by in ("inci_name", "branded_ingredient", "avg_cost", "updated_at", "inci_name_normalized"):
+        sort_field = sort_by
+    order = -1 if sort_order == "desc" else 1
+    cursor = ingredient_costs_col.find(query).sort(sort_field, order).skip(skip).limit(limit)
     items = await cursor.to_list(length=limit)
     return {
         "items": [_serialize_doc(d) for d in items],
