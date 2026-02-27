@@ -1101,7 +1101,19 @@ async def get_wish_history_detail(
         formula_data = doc.get("formula_data")
         trend_data = doc.get("trend_data", {})  # Get trend analysis data
         market_trends = doc.get("market_trends")  # Get market trends data
+        market_position = doc.get("market_position")  # Your Market Position from externalproducts (via /market-position endpoint)
         synthesis_data = doc.get("synthesis_data", {})  # Get synthesis data
+
+        # Build competitorComparison from market_position for frontend compatibility (camelCase, same shape as old cost_analysis)
+        competitor_comparison = None
+        if market_position and isinstance(market_position, dict):
+            similar = market_position.get("similar_products", [])
+            competitor_comparison = {
+                "similarProducts": similar,
+                "yourProduct": market_position.get("your_product", {}),
+                "competitivePosition": market_position.get("competitive_position", ""),
+                "advantages": market_position.get("advantages", []),
+            }
         
         # Get query/commercialization info if available (fetch from QMS queries collection)
         query_info = None
@@ -1136,6 +1148,8 @@ async def get_wish_history_detail(
             "status": doc.get("status", ""),
             "market_trends_status": doc.get("market_trends_status"),
             "market_trends_error": doc.get("market_trends_error"),
+            "market_position_status": doc.get("market_position_status"),
+            "market_position_error": doc.get("market_position_error"),
             "tag": doc.get("tag", ""),
             "parsed_data": doc.get("parsed_data"),
             "complexity": doc.get("complexity", ""),
@@ -1147,6 +1161,8 @@ async def get_wish_history_detail(
             "formula_data": formula_data,
             "trend_data": trend_data,  # Include trend analysis data in response
             "market_trends": market_trends,  # Include market trends data in response
+            "market_position": market_position,  # Your Market Position from externalproducts (via /market-position endpoint)
+            "competitorComparison": competitor_comparison,  # Alias from market_position (camelCase) for frontend
             "synthesis_data": synthesis_data,  # Include synthesis data in response
             "query_info": query_info,  # Include query/commercialization info if available
             "gamma_ppt": doc.get("gamma_ppt"),  # Include Gamma PPT info (download_url, edit_url, etc.)

@@ -52,6 +52,7 @@ from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import (
     MakeWishRequestRevised, MakeWishResponseRevised,
     MakeWishBasicResponseRevised,
     MarketTrendsAcceptedResponse,
+    MarketPositionAcceptedResponse,
     GetAlternativesRequest, GetAlternativesResponse,
     EditFormulaRequest, EditFormulaResponse,
     RequestQuoteRequest, RequestQuoteResponse,
@@ -93,6 +94,7 @@ from app.ai_ingredient_intelligence.logic.market_trends_storage import (
     get_stored_trend_data_for_ingredients
 )
 from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
+from app.ai_ingredient_intelligence.logic.market_position_service import fetch_market_position_from_external_products
 
 # Import packaging data
 from app.ai_ingredient_intelligence.logic.packaging_data import (
@@ -2481,6 +2483,217 @@ async def fetch_market_trends(
     asyncio.create_task(handle_background_task_safely(background_coro))
     await asyncio.sleep(0)  # Yield so response is sent immediately and other requests aren't delayed
     return MarketTrendsAcceptedResponse(success=True, history_id=history_id, status="in_progress")
+
+
+# ============================================================================
+# MARKET POSITION (YOUR MARKET POSITION) - externalproducts collection
+# ============================================================================
+
+def _extract_market_position_context(history_doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Extract hero_ingredients, product_type, category, and your_product (from basic_mode_result) for market position.
+    Returns None if no hero ingredients and formula not yet generated.
+    """
+    parsed_data = history_doc.get("parsed_data") or {}
+    hero_ingredients = []
+    for ing in parsed_data.get("detected_ingredients", []) or []:
+        name = ing.get("name", str(ing)) if isinstance(ing, dict) else str(ing)
+        if name:
+            hero_ingredients.append(name)
+    if not hero_ingredients:
+        hero_ingredients = parsed_data.get("hero_ingredients") or history_doc.get("hero_ingredients") or []
+    product_type_obj = parsed_data.get("product_type", {})
+    product_type = product_type_obj.get("id") or product_type_obj.get("name") if isinstance(product_type_obj, dict) else str(product_type_obj) if product_type_obj else None
+    category = parsed_data.get("category") or history_doc.get("category") or "skincare"
+    name = (history_doc.get("name") or history_doc.get("wish_text") or "Wish")[:80]
+
+    your_product = {}
+    basic_result = history_doc.get("basic_mode_result")
+    if basic_result and isinstance(basic_result, dict):
+        formula = basic_result.get("formula", {}) or {}
+        tech = formula.get("technicalFormula", {}) or {}
+        cost_per_100g = tech.get("totalCostPer100g") or tech.get("total_cost_per_100g")
+        your_product["formula_name"] = formula.get("formulaName") or formula.get("formula_name") or name
+        your_product["cost_per_100g"] = cost_per_100g
+        bn = formula.get("businessNumbers", {}) or {}
+        rec_sizes = bn.get("packagingOptions", {}).get("recommendedSizes") or bn.get("recommendedSizes") or []
+        if rec_sizes:
+            first = rec_sizes[0]
+            your_product["size"] = first.get("size", "30g") if isinstance(first, dict) else str(first)
+        else:
+            your_product["size"] = "30g"
+
+    if not hero_ingredients and not your_product.get("formula_name"):
+        return None
+    return {
+        "hero_ingredients": hero_ingredients,
+        "product_type": product_type,
+        "category": category,
+        "your_product": your_product,
+        "name": name,
+    }
+
+
+async def process_market_position_background_with_semaphore(
+    history_id: str,
+    user_id: str,
+):
+    """Acquire semaphore then run market position background task (same pattern as market-trends)."""
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🔒 [BACKGROUND-MP] [{timestamp}] Waiting for semaphore for history_id: {history_id}")
+    semaphore = await get_background_task_semaphore()
+    async with semaphore:
+        await asyncio.sleep(0)
+        await process_market_position_background(history_id=history_id, user_id=user_id)
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🔓 [BACKGROUND-MP] [{timestamp}] Semaphore released for history_id: {history_id}")
+
+
+async def process_market_position_background(history_id: str, user_id: str):
+    """
+    Background task: fetch market position from externalproducts, save to wish_history, send WebSocket notification.
+    Same notification pattern as market-trends.
+    """
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🚀 [BACKGROUND-MP] [{timestamp}] Starting market position for history_id: {history_id}")
+    error_message = None
+    try:
+        history_doc = await wish_history_col.find_one({"_id": ObjectId(history_id), "user_id": user_id})
+        if not history_doc:
+            error_message = "History item not found or access denied"
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_position_status": "failed",
+                    "market_position_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="error",
+                title="Market Position Failed",
+                message=error_message,
+                meta={"history_id": history_id, "status": "failed", "type": "market_position", "error": error_message},
+                send_websocket=True,
+            )
+            return
+        ctx = _extract_market_position_context(history_doc)
+        if not ctx:
+            error_message = "Hero ingredients or formula data missing. Generate the formula first or ensure parsed_data has detected_ingredients."
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_position_status": "failed",
+                    "market_position_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="make-wish",
+                notification_type="error",
+                title="Market Position Failed",
+                message=error_message,
+                meta={"history_id": history_id, "status": "failed", "type": "market_position", "error": error_message},
+                send_websocket=True,
+            )
+            return
+        position_data = await fetch_market_position_from_external_products(
+            hero_ingredients=ctx["hero_ingredients"],
+            product_type=ctx.get("product_type"),
+            category=ctx.get("category", "skincare"),
+            your_product=ctx.get("your_product"),
+        )
+        await wish_history_col.update_one(
+            {"_id": ObjectId(history_id)},
+            {"$set": {
+                "market_position": position_data,
+                "market_position_fetched_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                "market_position_status": "completed",
+                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            }}
+        )
+        print(f"✅ [BACKGROUND-MP] Market position saved for history_id: {history_id}")
+        await notify_user_enhanced(
+            user_id=user_id,
+            module="make-wish",
+            notification_type="success",
+            title="Market Position Ready",
+            message=f"Your market position for '{ctx.get('name', '')}' is ready to view.",
+            action=NotificationAction(
+                label="View Market Position",
+                kind="route",
+                to=f"/make-wish/{history_id}",
+            ),
+            meta={"history_id": history_id, "status": "completed", "type": "market_position"},
+            send_websocket=True,
+        )
+    except Exception as e:
+        error_message = str(e)
+        print(f"❌ [BACKGROUND-MP] Market position failed: {error_message}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await wish_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_position_status": "failed",
+                    "market_position_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+        except Exception:
+            pass
+        await notify_user_enhanced(
+            user_id=user_id,
+            module="make-wish",
+            notification_type="error",
+            title="Market Position Failed",
+            message=f"Sorry, we couldn't fetch market position. Please try again.",
+            meta={"history_id": history_id, "status": "failed", "type": "market_position", "error": error_message},
+            send_websocket=True,
+        )
+
+
+@router.post("/market-position/{history_id}", response_model=MarketPositionAcceptedResponse)
+async def fetch_market_position(
+    history_id: str,
+    current_user: dict = Depends(verify_jwt_token),
+):
+    """
+    Request market position (Your Market Position) for a wish. Uses externalproducts collection only (no clause search).
+    Same async pattern as /market-trends: returns immediately; data saved to wish_history and WebSocket notification when done.
+    """
+    user_id_value = current_user.get("user_id") or current_user.get("_id")
+    if not user_id_value:
+        raise HTTPException(status_code=400, detail="User ID not found in JWT token")
+    if not ObjectId.is_valid(history_id):
+        raise HTTPException(status_code=400, detail=f"Invalid history_id format. Expected MongoDB ObjectId, got: {history_id[:50]}")
+    history_doc = await wish_history_col.find_one({"_id": ObjectId(history_id), "user_id": user_id_value})
+    if not history_doc:
+        raise HTTPException(status_code=404, detail="History item not found or doesn't belong to user")
+    ctx = _extract_market_position_context(history_doc)
+    if not ctx:
+        raise HTTPException(
+            status_code=400,
+            detail="Hero ingredients or formula data missing. Generate the formula first or ensure parsed_data has detected_ingredients."
+        )
+    try:
+        await wish_history_col.update_one(
+            {"_id": ObjectId(history_id)},
+            {"$set": {
+                "market_position_status": "in_progress",
+                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            }},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set market position status: {str(e)}")
+    background_coro = process_market_position_background_with_semaphore(history_id=history_id, user_id=user_id_value)
+    asyncio.create_task(handle_background_task_safely(background_coro))
+    await asyncio.sleep(0)
+    return MarketPositionAcceptedResponse(success=True, history_id=history_id, status="in_progress")
 
 
 # ============================================================================
