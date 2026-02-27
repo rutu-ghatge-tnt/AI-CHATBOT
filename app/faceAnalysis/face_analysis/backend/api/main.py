@@ -50,6 +50,14 @@ analyzer = FaceAnalyzer()
 filter_module = FaceFilter()
 recommendation_engine = RecommendationEngine()
 
+# Optional: ensemble skin analysis (classical CV + deep + Claude). Fails gracefully if deps missing.
+try:
+    from ..ensemble.routes import router as ensemble_router
+    app.include_router(ensemble_router)
+except Exception as e:
+    import warnings
+    warnings.warn(f"Ensemble skin analysis routes not loaded: {e}")
+
 # Create necessary directories
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.RESULTS_DIR, exist_ok=True)
