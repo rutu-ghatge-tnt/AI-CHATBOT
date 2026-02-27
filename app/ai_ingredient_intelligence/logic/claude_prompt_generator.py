@@ -196,14 +196,3 @@ Return ONLY the prompt text that should be sent to Gamma API's additionalInstruc
         import traceback
         traceback.print_exc()
         return DEFAULT_BUSINESS_STRATEGY_PROMPT
-
-
-def get_default_business_strategy_prompt() -> str:
-    """
-    Get the default business strategy prompt (fallback when Claude is unavailable).
-    
-    Returns:
-        str: Default business strategy prompt
-    """
-    return DEFAULT_BUSINESS_STRATEGY_PROMPT
-
