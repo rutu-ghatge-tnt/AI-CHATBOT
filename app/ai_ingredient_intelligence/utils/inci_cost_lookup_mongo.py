@@ -13,10 +13,15 @@ Usage:
 
 from typing import Optional, Dict, List
 import re
-from app.ai_ingredient_intelligence.db.collections import db
+from app.ai_ingredient_intelligence.db.collections import db, INGREDIENT_COST_NOT_HIDDEN_QUERY
 
 # Collection for ingredient costs
 ingredient_costs_col = db["ingredient_costs"]
+
+
+def _query_visible(q: dict) -> dict:
+    """Merge query with not-hidden condition so hidden ingredients are never returned."""
+    return {"$and": [q, INGREDIENT_COST_NOT_HIDDEN_QUERY]} if q else INGREDIENT_COST_NOT_HIDDEN_QUERY
 
 
 def normalize_inci_name(inci: str) -> str:
@@ -341,16 +346,16 @@ async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fal
             if is_water_aqua:
                 # For water/aqua, first try to find the generic WATER record
                 doc = await ingredient_costs_col.find_one(
-                    {"branded_ingredient": "WATER"}
+                    _query_visible({"branded_ingredient": "WATER"})
                 )
                 if not doc:
                     # Fall back to exact match
                     doc = await ingredient_costs_col.find_one(
-                        {"inci_name_normalized": inci_normalized}
+                        _query_visible({"inci_name_normalized": inci_normalized})
                     )
             else:
                 doc = await ingredient_costs_col.find_one(
-                    {"inci_name_normalized": inci_normalized}
+                    _query_visible({"inci_name_normalized": inci_normalized})
                 )
         else:
             # Fuzzy match - try exact first, then regex
@@ -358,27 +363,27 @@ async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fal
                 # For water/aqua, prioritize generic WATER record (₹1/kg) or records with cost <= ₹5/kg
                 # This ensures we get the ₹1/kg WATER record instead of expensive branded aqua
                 doc = await ingredient_costs_col.find_one(
-                    {"branded_ingredient": "WATER"}
+                    _query_visible({"branded_ingredient": "WATER"})
                 )
                 if not doc:
                     # Try to find any water/aqua record with reasonable cost (<= ₹5/kg)
                     doc = await ingredient_costs_col.find_one(
-                        {
+                        _query_visible({
                             "$or": [
                                 {"inci_name_normalized": inci_normalized, "avg_cost": {"$lte": 5}},
                                 {"inci_name_normalized": {"$regex": "^(water|aqua)", "$options": "i"}, "avg_cost": {"$lte": 5}}
                             ]
-                        },
+                        }),
                         sort=[("avg_cost", 1)]  # Sort by cost ascending to get cheapest first
                     )
                 # If still not found, fall back to regular search
                 if not doc:
                     doc = await ingredient_costs_col.find_one(
-                        {"inci_name_normalized": inci_normalized}
+                        _query_visible({"inci_name_normalized": inci_normalized})
                     )
             else:
                 doc = await ingredient_costs_col.find_one(
-                    {"inci_name_normalized": inci_normalized}
+                    _query_visible({"inci_name_normalized": inci_normalized})
                 )
             
             if not doc:
@@ -386,25 +391,25 @@ async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fal
                 if is_water_aqua:
                     # For water/aqua, prioritize cheap records
                     doc = await ingredient_costs_col.find_one(
-                        {"branded_ingredient": "WATER"}
+                        _query_visible({"branded_ingredient": "WATER"})
                     )
                     if not doc:
                         doc = await ingredient_costs_col.find_one(
-                            {
+                            _query_visible({
                                 "$or": [
                                     {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}, "avg_cost": {"$lte": 5}},
                                     {"inci_name_normalized": {"$regex": "^(water|aqua)", "$options": "i"}, "avg_cost": {"$lte": 5}}
                                 ]
-                            },
+                            }),
                             sort=[("avg_cost", 1)]
                         )
                     if not doc:
                         doc = await ingredient_costs_col.find_one(
-                            {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}}
+                            _query_visible({"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}})
                         )
                 else:
                     doc = await ingredient_costs_col.find_one(
-                        {"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}}
+                        _query_visible({"inci_name_normalized": {"$regex": inci_normalized, "$options": "i"}})
                     )
         
         if doc:
@@ -416,13 +421,13 @@ async def lookup_cost_by_inci(inci_name: str, exact_match: bool = False, use_fal
                 print(f"   Looking for cheaper water alternative (₹1-5/kg)...")
                 # Try to find the generic WATER record or any cheaper water
                 cheap_water = await ingredient_costs_col.find_one(
-                    {
+                    _query_visible({
                         "$or": [
                             {"branded_ingredient": "WATER"},
                             {"branded_ingredient": {"$regex": "^WATER$", "$options": "i"}},
                             {"inci_name_normalized": {"$in": ["water", "aqua", "water / purified water / demineralized water / aqua"]}, "avg_cost": {"$lte": 5}}
                         ]
-                    },
+                    }),
                     sort=[("avg_cost", 1)]
                 )
                 if cheap_water:
@@ -488,9 +493,9 @@ async def lookup_multiple_costs(inci_names: List[str], use_fallback: bool = True
     normalized_names = {normalize_inci_name(name): name for name in inci_names}
     
     try:
-        # Batch query
+        # Batch query (exclude hidden)
         cursor = ingredient_costs_col.find(
-            {"inci_name_normalized": {"$in": list(normalized_names.keys())}}
+            _query_visible({"inci_name_normalized": {"$in": list(normalized_names.keys())}})
         )
         
         found_docs = {}
@@ -546,8 +551,8 @@ async def get_cost_reference_table_from_mongo(limit: int = 100) -> str:
         Formatted string with ingredient costs from MongoDB
     """
     try:
-        # Get ingredients sorted by cost
-        cursor = ingredient_costs_col.find({}).sort("avg_cost", 1).limit(limit)
+        # Get ingredients sorted by cost (exclude hidden)
+        cursor = ingredient_costs_col.find(_query_visible({})).sort("avg_cost", 1).limit(limit)
         
         lines = [
             "## INGREDIENT COST REFERENCE FROM DATABASE (MongoDB)",

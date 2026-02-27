@@ -11,7 +11,10 @@ from datetime import datetime
 from bson import ObjectId
 
 from app.ai_ingredient_intelligence.auth import verify_jwt_token
-from app.ai_ingredient_intelligence.db.collections import ingredient_costs_col
+from app.ai_ingredient_intelligence.db.collections import (
+    ingredient_costs_col,
+    INGREDIENT_COST_NOT_HIDDEN_QUERY as NOT_HIDDEN_QUERY,
+)
 
 router = APIRouter(prefix="/ingredient-costs", tags=["Ingredient Costs"])
 
@@ -22,6 +25,7 @@ def _serialize_doc(doc: dict) -> dict:
         return doc
     out = dict(doc)
     out["id"] = str(out.pop("_id"))
+    out["hide"] = out.get("hide", False)  # default False for legacy docs
     if "migrated_at" in out and hasattr(out["migrated_at"], "isoformat"):
         out["migrated_at"] = out["migrated_at"].isoformat()
     if "updated_at" in out and hasattr(out["updated_at"], "isoformat"):
@@ -36,6 +40,7 @@ def _build_filter_query(
     min_cost: Optional[float] = None,
     max_cost: Optional[float] = None,
     q: Optional[str] = None,
+    include_hidden: bool = False,
 ) -> dict:
     """Build MongoDB query from INCI, branded name, supplier, cost range, and optional text q."""
     conditions: List[dict] = []
@@ -95,6 +100,9 @@ def _build_filter_query(
             ]
         })
 
+    if not include_hidden:
+        conditions.append(NOT_HIDDEN_QUERY)
+
     if not conditions:
         return {}
     if len(conditions) == 1:
@@ -113,13 +121,14 @@ async def list_ingredient_costs(
     supplier: Optional[str] = Query(None, description="Filter by primary supplier (partial match)"),
     min_cost: Optional[float] = Query(None, ge=0, description="Minimum avg_cost (₹/kg)"),
     max_cost: Optional[float] = Query(None, ge=0, description="Maximum avg_cost (₹/kg)"),
+    include_hidden: bool = Query(False, description="If true, include hidden ingredients (admin)"),
     sort_by: str = Query("updated_at", description="Sort field: inci_name, branded_ingredient, avg_cost, updated_at"),
     sort_order: str = Query("desc", description="asc or desc"),
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
     List ingredient costs with pagination. Filters: INCI name, branded name, supplier, cost range (min_cost, max_cost).
-    All filters are combined with AND (partial, case-insensitive match for text).
+    Hidden ingredients are excluded by default; use include_hidden=true for admin. All filters are AND.
     """
     try:
         query = _build_filter_query(
@@ -128,6 +137,7 @@ async def list_ingredient_costs(
             supplier=supplier,
             min_cost=min_cost,
             max_cost=max_cost,
+            include_hidden=include_hidden,
         )
         total = await ingredient_costs_col.count_documents(query)
         sort_field = "updated_at"
@@ -160,6 +170,7 @@ async def search_ingredient_costs(
     supplier: Optional[str] = Query(None, description="Filter by primary supplier (partial match)"),
     min_cost: Optional[float] = Query(None, ge=0, description="Minimum avg_cost (₹/kg)"),
     max_cost: Optional[float] = Query(None, ge=0, description="Maximum avg_cost (₹/kg)"),
+    include_hidden: bool = Query(False, description="If true, include hidden ingredients (admin)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     sort_by: str = Query("updated_at", description="Sort field: inci_name, branded_ingredient, avg_cost, updated_at"),
@@ -167,7 +178,7 @@ async def search_ingredient_costs(
     current_user: dict = Depends(verify_jwt_token),
 ):
     """
-    Search ingredient costs. Use q for free-text search across INCI, brand, supplier; or use specific filters (inci_name, brand_name, supplier, min_cost, max_cost). All conditions are ANDed.
+    Search ingredient costs. Use q for free-text search; or use specific filters. Hidden ingredients excluded by default; use include_hidden=true for admin.
     """
     query = _build_filter_query(
         inci_name=inci_name,
@@ -176,6 +187,7 @@ async def search_ingredient_costs(
         min_cost=min_cost,
         max_cost=max_cost,
         q=q,
+        include_hidden=include_hidden,
     )
     total = await ingredient_costs_col.count_documents(query)
     sort_field = "updated_at"
@@ -220,7 +232,7 @@ async def create_ingredient_cost(
 ):
     """
     Create a new ingredient cost.
-    Body: inci_name (required), avg_cost (required), branded_ingredient (optional), primary_supplier (optional), source (optional).
+    Body: inci_name (required), avg_cost (required), branded_ingredient (optional), primary_supplier (optional), source (optional), hide (optional, default false).
     """
     try:
         inci_name = payload.get("inci_name")
@@ -243,6 +255,7 @@ async def create_ingredient_cost(
         source = str(payload.get("source", "api")).strip() or "api"
         now = datetime.utcnow()
 
+        hide = bool(payload.get("hide", False))
         doc = {
             "inci_name": inci_name,
             "inci_name_normalized": inci_name_normalized,
@@ -250,6 +263,7 @@ async def create_ingredient_cost(
             "branded_ingredient": branded_ingredient,
             "primary_supplier": primary_supplier,
             "source": source,
+            "hide": hide,
             "updated_at": now,
         }
         result = await ingredient_costs_col.insert_one(doc)
@@ -271,7 +285,7 @@ async def update_ingredient_cost(
 ):
     """
     Update an existing ingredient cost (edit).
-    Body: inci_name, avg_cost, branded_ingredient, primary_supplier, source (all optional; only provided fields are updated).
+    Body: inci_name, avg_cost, branded_ingredient, primary_supplier, source, hide (all optional; only provided fields are updated).
     """
     try:
         oid = ObjectId(id)
@@ -303,12 +317,44 @@ async def update_ingredient_cost(
         update_fields["primary_supplier"] = str(payload["primary_supplier"]).strip() if payload["primary_supplier"] is not None else ""
     if "source" in payload:
         update_fields["source"] = str(payload["source"]).strip() or "api"
+    if "hide" in payload:
+        update_fields["hide"] = bool(payload["hide"])
 
     if not update_fields:
         return _serialize_doc(existing)
 
     update_fields["updated_at"] = datetime.utcnow()
     await ingredient_costs_col.update_one({"_id": oid}, {"$set": update_fields})
+    updated = await ingredient_costs_col.find_one({"_id": oid})
+    return _serialize_doc(updated)
+
+
+# ----- Hide / Unhide (admin) -----
+
+@router.patch("/{id}/hide")
+async def set_ingredient_cost_hidden(
+    id: str,
+    payload: dict,
+    current_user: dict = Depends(verify_jwt_token),
+):
+    """
+    Set hide flag for an ingredient cost (admin). Body: {"hide": true} or {"hide": false}.
+    Hidden ingredients are excluded from all cost lookups (formulas, cost reference, etc.).
+    """
+    try:
+        oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ingredient cost ID")
+    if "hide" not in payload:
+        raise HTTPException(status_code=400, detail="Body must include 'hide': true or false")
+    hide = bool(payload["hide"])
+    existing = await ingredient_costs_col.find_one({"_id": oid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Ingredient cost not found")
+    await ingredient_costs_col.update_one(
+        {"_id": oid},
+        {"$set": {"hide": hide, "updated_at": datetime.utcnow()}},
+    )
     updated = await ingredient_costs_col.find_one({"_id": oid})
     return _serialize_doc(updated)
 
