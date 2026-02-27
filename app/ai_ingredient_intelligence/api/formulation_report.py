@@ -171,7 +171,7 @@ MANDATORY RULES:
 - Use clear, concise language
 - NEVER leave any table cell empty - always provide relevant information
 - For the Functions/Notes column, provide brief but meaningful descriptions combining function and notes
-- For the BIS Cautions column, if cautions are provided, list them; if not, write "no bis cautions"
+- For the BIS Cautions column, if cautions are provided, list them; if not, write "No BIS caution"
 - If you leave any cell empty, the report is incomplete and unusable
 - DO NOT include any introductory phrases like "I'll analyze", "Let me analyze", "I will analyze" - start directly with "0) Executive Summary"
 - MOST IMPORTANT: INCLUDE ALL INGREDIENTS PROVIDED - DO NOT SKIP ANY INGREDIENT FROM THE INCI LIST
