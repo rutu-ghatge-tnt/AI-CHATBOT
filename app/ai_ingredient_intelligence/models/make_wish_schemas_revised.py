@@ -216,6 +216,13 @@ class MakeWishBasicResponseRevised(BaseModel):
     history_id: str = Field(..., description="History tracking ID")
 
 
+class MarketTrendsAcceptedResponse(BaseModel):
+    """Immediate response when market trends fetch is accepted. Actual data is delivered via WebSocket and stored in wish_history."""
+    success: bool = Field(..., description="Whether the request was accepted (processing runs in background)")
+    history_id: str = Field(..., description="History ID; use it to poll detail or listen for WebSocket notification")
+    status: str = Field(default="in_progress", description="Current status: 'in_progress' (same as generate-revised; completion/failure via WebSocket or polling)")
+
+
 class MakeWishResponseRevised(BaseModel):
     """Revised response schema for Make a Wish formula generation.
     Note: Only one mode exists now. This schema is kept for backward compatibility.
