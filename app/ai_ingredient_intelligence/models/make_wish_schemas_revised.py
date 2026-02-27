@@ -68,11 +68,15 @@ class ParsedWishData(BaseModel):
     product_type: ProductTypeInfo = Field(..., description="Detected product type")
     detected_ingredients: List[DetectedIngredient] = Field(..., description="Ingredients detected in wish")
     detected_benefits: List[str] = Field(..., description="Benefits detected from wish")
+    detected_product_format: List[str] = Field(default_factory=list, description="Product format cues: lightweight, anhydrous, rich, creamy, etc.")
     detected_exclusions: List[str] = Field(..., description="Exclusions detected from wish")
-    detected_skin_types: List[str] = Field(default_factory=list, description="Skin types mentioned")
-    detected_hair_concerns: List[str] = Field(default_factory=list, description="Hair concerns mentioned")
+    detected_skin_types: List[str] = Field(default_factory=list, description="Skin types mentioned or inferred")
+    detected_hair_concerns: List[str] = Field(default_factory=list, description="Hair concerns mentioned or inferred")
     auto_texture: TextureInfo = Field(..., description="Auto-detected texture")
     needs_clarification: List[Dict[str, Any]] = Field(default_factory=list, description="Simple clarification questions from AI")
+    stability_issues: List[CompatibilityIssue] = Field(default_factory=list, description="Stability issues (e.g., ascorbic acid in shampoo)")
+    safety_issues: List[CompatibilityIssue] = Field(default_factory=list, description="Safety issues (e.g., retinol in day cream)")
+    product_scope_warning: Optional[str] = Field(None, description="Warning when wish is not personal care (colour cosmetic, nutraceutical, device, etc.)")
 
 
 class ParseWishResponse(BaseModel):
@@ -80,6 +84,9 @@ class ParseWishResponse(BaseModel):
     success: bool = Field(..., description="Whether parsing was successful")
     parsed_data: ParsedWishData = Field(..., description="Parsed wish data")
     compatibility_issues: List[CompatibilityIssue] = Field(default_factory=list, description="Any compatibility issues detected")
+    stability_issues: List[CompatibilityIssue] = Field(default_factory=list, description="Stability issues detected")
+    safety_issues: List[CompatibilityIssue] = Field(default_factory=list, description="Safety issues detected")
+    product_scope_warning: Optional[str] = Field(None, description="Warning when wish is not personal care")
 
 
 # ============================================================================
