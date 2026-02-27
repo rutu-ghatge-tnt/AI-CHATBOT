@@ -67,6 +67,20 @@ from app.ai_ingredient_intelligence.db.collections import (
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
+# Market trends for decode (same pattern as Make a Wish)
+try:
+    from app.ai_ingredient_intelligence.api.make_wish_api_revised import (
+        get_background_task_semaphore,
+        handle_background_task_safely,
+    )
+    from app.ai_ingredient_intelligence.logic.market_trends_service import MarketTrendsService
+    from app.ai_ingredient_intelligence.logic.websocket_notifications import notify_user_enhanced
+    from app.ai_ingredient_intelligence.models.notification_schemas import NotificationAction
+    from app.ai_ingredient_intelligence.models.make_wish_schemas_revised import MarketTrendsAcceptedResponse
+    _decode_market_trends_available = True
+except ImportError:
+    _decode_market_trends_available = False
+
 
 # ============================================================================
 # HELPER FUNCTIONS (moved to logic/ - kept here for backward compatibility if needed)
@@ -3605,6 +3619,281 @@ async def get_decode_history_detail(
             status_code=500,
             detail=f"Failed to fetch decode history detail: {str(e)}"
         )
+
+
+# ============================================================================
+# DECODE MARKET TRENDS (same pattern as Make a Wish)
+# ============================================================================
+
+def _extract_decode_market_trends_context(history_doc: Dict) -> Optional[Dict]:
+    """
+    Extract hero_ingredients, product_type, category, name, and build parsed_data
+    from a decode_history document for MarketTrendsService.
+    Returns None if analysis_result is missing or no hero ingredients can be derived.
+    """
+    analysis_result = history_doc.get("analysis_result") or {}
+    if not analysis_result:
+        return None
+    # Prefer decoded_data.hero_ingredients if present (e.g. from formulation report flow)
+    decoded_data = analysis_result.get("decoded_data") or {}
+    hero_ingredients = list(decoded_data.get("hero_ingredients") or [])
+    if not hero_ingredients and analysis_result.get("detected"):
+        # Derive from detected + categories: treat Active ingredients as hero
+        categories = analysis_result.get("categories") or {}
+        detected = analysis_result.get("detected") or []
+        for group in detected:
+            if not isinstance(group, dict):
+                continue
+            inci_list = group.get("inci_list") or []
+            items = group.get("items") or []
+            # If we have categories, prefer Active; else take first few groups
+            if categories:
+                is_active = any(
+                    (categories.get(inci) or "").upper() == "ACTIVE"
+                    for inci in inci_list
+                )
+                if not is_active:
+                    continue
+            name = None
+            if items and isinstance(items[0], dict):
+                name = items[0].get("name") or items[0].get("inci_name") or (inci_list[0] if inci_list else None)
+            if not name and inci_list:
+                name = inci_list[0]
+            if name and name not in hero_ingredients:
+                hero_ingredients.append(name)
+        # Cap to avoid huge payloads
+        hero_ingredients = hero_ingredients[:15]
+    if not hero_ingredients:
+        return None
+    product_type = (
+        decoded_data.get("product_type")
+        or history_doc.get("product_type")
+        or "serum"
+    )
+    if isinstance(product_type, dict):
+        product_type = product_type.get("id") or product_type.get("name") or "serum"
+    category = decoded_data.get("category") or history_doc.get("category") or "skincare"
+    name = (history_doc.get("name") or "Decoded Product")[:80]
+    # Build minimal parsed_data for trend synthesis (same shape as Make a Wish)
+    parsed_data = {
+        "category": category,
+        "product_type": {"id": product_type, "name": product_type},
+        "detected_ingredients": [{"name": ing} for ing in hero_ingredients],
+        "detected_benefits": [],
+        "hero_ingredients": hero_ingredients,
+    }
+    return {
+        "hero_ingredients": hero_ingredients,
+        "benefits": [],
+        "product_type": product_type,
+        "category": category,
+        "parsed_data": parsed_data,
+        "name": name,
+    }
+
+
+async def _process_decode_market_trends_background(
+    history_id: str,
+    user_id: str,
+    max_age_days: int,
+    use_fallback: bool,
+):
+    """Background task: fetch market trends for a decode, save to decode_history, send WebSocket notification."""
+    timestamp = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"🚀 [BACKGROUND-MT-DECODE] [{timestamp}] Starting market trends for decode history_id: {history_id}")
+    error_message = None
+    try:
+        history_doc = await decode_history_col.find_one({
+            "_id": ObjectId(history_id),
+            "user_id": user_id,
+        })
+        if not history_doc:
+            error_message = "Decode history item not found or access denied"
+            await decode_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_trends_status": "failed",
+                    "market_trends_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="formulation-decode",
+                notification_type="error",
+                title="Market Trends Failed",
+                message=error_message,
+                meta={"history_id": history_id, "status": "failed", "type": "market_trends", "error": error_message},
+                send_websocket=True,
+            )
+            return
+        ctx = _extract_decode_market_trends_context(history_doc)
+        if not ctx:
+            error_message = "No hero ingredients found. Complete decode analysis first."
+            await decode_history_col.update_one(
+                {"_id": ObjectId(history_id)},
+                {"$set": {
+                    "market_trends_status": "failed",
+                    "market_trends_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }}
+            )
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="formulation-decode",
+                notification_type="error",
+                title="Market Trends Failed",
+                message=error_message,
+                meta={"history_id": history_id, "status": "failed", "type": "market_trends", "error": error_message},
+                send_websocket=True,
+            )
+            return
+        trends_service = MarketTrendsService()
+        trends_data = await trends_service.fetch_trends_for_wish(
+            hero_ingredients=ctx["hero_ingredients"],
+            benefits=ctx["benefits"],
+            product_type=ctx["product_type"],
+            category=ctx["category"],
+            max_age_days=max_age_days,
+            use_fallback=use_fallback,
+            parsed_data=ctx["parsed_data"],
+        )
+        update_data = {
+            "market_trends": trends_data,
+            "market_trends_fetched_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            "market_trends_status": "completed",
+            "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+        }
+        await decode_history_col.update_one(
+            {"_id": ObjectId(history_id)},
+            {"$set": update_data},
+        )
+        print(f"✅ [BACKGROUND-MT-DECODE] Market trends saved for decode history_id: {history_id}")
+        await notify_user_enhanced(
+            user_id=user_id,
+            module="formulation-decode",
+            notification_type="success",
+            title="Market Trends Ready",
+            message=f"Market trends for '{ctx['name']}' are ready to view.",
+            action=NotificationAction(
+                label="View Market Trends",
+                kind="route",
+                to=f"/decode/{history_id}",
+            ),
+            meta={"history_id": history_id, "status": "completed", "type": "market_trends"},
+            send_websocket=True,
+        )
+    except Exception as e:
+        error_message = str(e)
+        print(f"❌ [BACKGROUND-MT-DECODE] [{timestamp}] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await decode_history_col.update_one(
+                {"_id": ObjectId(history_id), "user_id": user_id},
+                {"$set": {
+                    "market_trends_status": "failed",
+                    "market_trends_error": error_message,
+                    "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                }},
+            )
+        except Exception as db_err:
+            print(f"❌ [BACKGROUND-MT-DECODE] Failed to update failed status: {db_err}")
+        name = "Decoded Product"
+        try:
+            doc = await decode_history_col.find_one({"_id": ObjectId(history_id)})
+            if doc:
+                name = (doc.get("name") or name)[:80]
+        except Exception:
+            pass
+        try:
+            await notify_user_enhanced(
+                user_id=user_id,
+                module="formulation-decode",
+                notification_type="error",
+                title="Market Trends Failed",
+                message=f"Sorry, we couldn't fetch market trends for '{name}'. Please try again.",
+                meta={"history_id": history_id, "status": "failed", "type": "market_trends", "error": error_message},
+                send_websocket=True,
+            )
+        except Exception as ws_error:
+            print(f"⚠️ [BACKGROUND-MT-DECODE] Failed to send WebSocket notification: {ws_error}")
+
+
+async def _process_decode_market_trends_background_with_semaphore(
+    history_id: str,
+    user_id: str,
+    max_age_days: int,
+    use_fallback: bool,
+):
+    """Acquire semaphore then run decode market trends background task."""
+    semaphore = await get_background_task_semaphore()
+    async with semaphore:
+        await asyncio.sleep(0)
+        await _process_decode_market_trends_background(
+            history_id=history_id,
+            user_id=user_id,
+            max_age_days=max_age_days,
+            use_fallback=use_fallback,
+        )
+
+
+@router.post("/decode-history/{history_id}/market-trends", response_model=MarketTrendsAcceptedResponse)
+async def fetch_decode_market_trends(
+    history_id: str,
+    max_age_days: int = Query(35, description="Maximum age of cached data in days"),
+    use_fallback: bool = Query(True, description="Whether to use SerpAPI if MongoDB has no data"),
+    current_user: dict = Depends(verify_jwt_token),
+):
+    """
+    Request market trends for a decoded formulation (async, same pattern as Make a Wish).
+
+    Returns immediately with success and history_id. Processing runs in the background.
+    When finished, market trends are saved to decode_history and a WebSocket notification
+    is sent (success with "View Market Trends" or error). Use module "formulation-decode"
+    for WebSocket.
+
+    PATH: history_id - MongoDB ObjectId of the decode history item (must have completed analysis).
+    QUERY: max_age_days (default 35), use_fallback (default true).
+    """
+    if not _decode_market_trends_available:
+        raise HTTPException(status_code=503, detail="Market trends for decode are not available (missing dependencies).")
+    user_id_value = current_user.get("user_id") or current_user.get("_id")
+    if not user_id_value:
+        raise HTTPException(status_code=400, detail="User ID not found in JWT token")
+    if not ObjectId.is_valid(history_id):
+        raise HTTPException(status_code=400, detail="Invalid history_id format. Expected MongoDB ObjectId.")
+    history_doc = await decode_history_col.find_one({
+        "_id": ObjectId(history_id),
+        "user_id": user_id_value,
+    })
+    if not history_doc:
+        raise HTTPException(status_code=404, detail="Decode history item not found or doesn't belong to user")
+    ctx = _extract_decode_market_trends_context(history_doc)
+    if not ctx:
+        raise HTTPException(
+            status_code=400,
+            detail="No hero ingredients found. Ensure decode analysis is completed and has detected ingredients.",
+        )
+    try:
+        await decode_history_col.update_one(
+            {"_id": ObjectId(history_id)},
+            {"$set": {
+                "market_trends_status": "in_progress",
+                "updated_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            }},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set market trends status: {str(e)}")
+    background_coro = _process_decode_market_trends_background_with_semaphore(
+        history_id=history_id,
+        user_id=user_id_value,
+        max_age_days=max_age_days,
+        use_fallback=use_fallback,
+    )
+    asyncio.create_task(handle_background_task_safely(background_coro))
+    await asyncio.sleep(0)
+    return MarketTrendsAcceptedResponse(success=True, history_id=history_id, status="in_progress")
 
 
 # OPTIONS handler removed - CORS middleware handles this automatically

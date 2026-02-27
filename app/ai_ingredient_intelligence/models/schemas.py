@@ -286,6 +286,11 @@ class DecodeHistoryItem(BaseModel):
     report_data: Optional[Union[str, Dict]] = Field(None, description="Generated report HTML or JSON data (if available)")
     notes: Optional[str] = Field(None, description="User notes for this decode")
     created_at: Optional[str] = Field(None, description="Creation timestamp")
+    # Market trends (same pattern as Make a Wish - populated when user requests market trends for this decode)
+    market_trends: Optional[Dict] = Field(None, description="Market trends data when requested via /decode-history/{id}/market-trends")
+    market_trends_status: Optional[str] = Field(None, description="'in_progress' | 'completed' | 'failed'")
+    market_trends_fetched_at: Optional[str] = Field(None, description="ISO timestamp when market trends were fetched")
+    market_trends_error: Optional[str] = Field(None, description="Error message if market_trends_status is 'failed'")
 
 
 class ReportTableRow(BaseModel):
