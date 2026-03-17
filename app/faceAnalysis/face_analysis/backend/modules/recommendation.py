@@ -1,66 +1,145 @@
 """
 Product Recommendation Engine
-Handles skincare product recommendations based on analysis results and budget
+Handles skincare product recommendations based on analysis results and budget.
+Loads products from MongoDB externalProducts collection.
 """
 
 import os
-import pandas as pd
-from typing import List, Dict, Optional
-from pathlib import Path
 import logging
+from typing import List, Dict, Optional, Any
+
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-class RecommendationEngine:
-    """Handles product recommendations from CSV data"""
-    
-    def __init__(self, csv_path: Optional[str] = None):
-        """Initialize the recommendation engine with CSV data"""
-        self.csv_path = csv_path or self._get_default_csv_path()
-        self.products = self._load_products()
-        
-    def _get_default_csv_path(self) -> str:
-        """Get the default CSV path"""
-        # Get project root (where main.py is located)
-        project_root = Path(__file__).parent.parent.parent.parent
-        return str(project_root / "skincare_products.csv")
-    
-    def _load_products(self) -> List[Dict]:
-        """Load products from CSV file"""
+
+def _normalize_price(value: Any) -> float:
+    """Convert price to float (INR). Handles string with currency symbols."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.replace("₹", "").replace(",", "").replace("£", "").strip()
         try:
-            if not os.path.exists(self.csv_path):
-                logger.error(f"CSV file not found: {self.csv_path}")
-                return []
-                
-            df = pd.read_csv(self.csv_path)
-            df['price_inr'] = pd.to_numeric(
-                df['price'].str.replace('£', ''), errors='coerce'
-            ) * 100  # Convert GBP to INR (approximate)
-            
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _ingredients_to_string(ingredients: Any) -> str:
+    """Normalize ingredients to a single string for scoring."""
+    if ingredients is None:
+        return ""
+    if isinstance(ingredients, str):
+        return ingredients
+    if isinstance(ingredients, list):
+        return ", ".join(str(x) for x in ingredients if x)
+    return str(ingredients)
+
+
+def _doc_to_product(doc: Dict[str, Any]) -> Dict:
+    """Map a MongoDB externalProducts document to the internal product dict."""
+    name = doc.get("name") or doc.get("productName") or "Unknown Product"
+    price_raw = doc.get("price") or doc.get("mrp") or (doc.get("keywords") or {}).get("mrp")
+    if isinstance(price_raw, list) and price_raw:
+        price_raw = price_raw[0]
+    price_inr = _normalize_price(price_raw)
+    ingredients_raw = doc.get("ingredients", "")
+    ingredients = _ingredients_to_string(ingredients_raw)
+    brand = doc.get("brand") or "Unknown"
+    category = (
+        doc.get("subcategory")
+        or doc.get("category")
+        or doc.get("main_category")
+        or (doc.get("keywords") or {}).get("main_category")
+        or "Unknown"
+    )
+    if isinstance(category, list) and category:
+        category = category[0] if isinstance(category[0], str) else "Unknown"
+    url = doc.get("url") or doc.get("product_url") or doc.get("link") or ""
+    image = doc.get("image") or doc.get("image_url") or doc.get("s3_image") or ""
+
+    return {
+        "product_name": name,
+        "brand": brand,
+        "product_type": category,
+        "price_inr": price_inr,
+        "ingredients": ingredients,
+        "description": doc.get("description") or "",
+        "product_url": url,
+        "image_url": image,
+        "country_of_origin": doc.get("country_of_origin") or "",
+        "manufacturer": doc.get("manufacturer") or "",
+        "expiry_date": doc.get("expiry_date") or "",
+        "s3_uploaded": bool(doc.get("s3_uploaded")),
+        "s3_image": doc.get("s3_image") or "",
+    }
+
+
+class RecommendationEngine:
+    """Handles product recommendations from MongoDB externalProducts collection."""
+
+    def __init__(
+        self,
+        mongodb_url: Optional[str] = None,
+        db_name: Optional[str] = None,
+        collection_name: Optional[str] = None,
+    ):
+        """Initialize the recommendation engine with MongoDB connection."""
+        # Prefer main app config (app.config loads .env and sets MONGO_URI/DB_NAME) so we
+        # always use the same MongoDB as the rest of the app when run together.
+        try:
+            from app.config import MONGO_URI as _MONGO_URI, DB_NAME as _DB_NAME
+            _url = _MONGO_URI
+            _db = _DB_NAME
+        except ImportError:
+            _url = os.getenv("MONGO_URI") or settings.MONGODB_URL
+            _db = os.getenv("DB_NAME") or settings.MONGODB_DB_NAME
+        self.mongodb_url = (mongodb_url or _url) or "mongodb://localhost:27017/"
+        self.db_name = (db_name or _db) or "skin_bb"
+        self.collection_name = collection_name or settings.EXTERNAL_PRODUCTS_COLLECTION
+        self.products = self._load_products()
+
+    def _load_products(self) -> List[Dict]:
+        """Load products from MongoDB externalProducts collection."""
+        try:
+            client = MongoClient(
+                self.mongodb_url,
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
+            )
+            db = client[self.db_name]
+            col = db[self.collection_name]
+            # Ingredients can be string or array (collection uses array); exclude null/empty
+            cursor = col.find({"ingredients": {"$exists": True, "$ne": None}})
             products = []
-            for _, row in df.iterrows():
-                product = {
-                    'product_name': row.get('product_name', 'Unknown Product'),
-                    'brand': 'Unknown',  # CSV doesn't have brand column
-                    'product_type': row.get('product_type', 'Unknown'),
-                    'price_inr': row.get('price_inr', 0),
-                    'ingredients': row.get('ingredients', ''),
-                    'description': '',  # CSV doesn't have description
-                    'product_url': row.get('product_url', ''),
-                    'image_url': '',
-                    'country_of_origin': '',
-                    'manufacturer': '',
-                    'expiry_date': '',
-                    's3_uploaded': False,
-                    's3_image': ''
-                }
-                products.append(product)
-                
-            logger.info(f"Loaded {len(products)} products from CSV")
+            for doc in cursor:
+                try:
+                    p = _doc_to_product(doc)
+                    if not (p.get("ingredients") or "").strip():
+                        continue
+                    products.append(p)
+                except Exception as e:
+                    logger.debug("Skip product doc: %s", e)
+                    continue
+            client.close()
+            logger.info(
+                "Loaded %d products from MongoDB %s.%s",
+                len(products),
+                self.db_name,
+                self.collection_name,
+            )
             return products
-            
+        except PyMongoError as e:
+            logger.error("Error loading products from MongoDB: %s", e)
+            return []
         except Exception as e:
-            logger.error(f"Error loading products from CSV: {e}")
+            logger.error("Error loading products: %s", e)
             return []
     
     def get_product_category(self, product: Dict) -> str:

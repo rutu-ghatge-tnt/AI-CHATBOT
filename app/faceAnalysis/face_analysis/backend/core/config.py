@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     
     # MongoDB Configuration
     MONGODB_URL: str = "mongodb://localhost:27017/"
-    
+    MONGODB_DB_NAME: str = "skin_bb"
+    EXTERNAL_PRODUCTS_COLLECTION: str = "externalproducts"
+
     # Server Configuration
     HOST: str = "0.0.0.0"
     PORT: int = 8000
