@@ -1,100 +1,227 @@
-# app/rag_pipeline.py
+# app/chatbot/rag_pipeline.py
+"""RAG orchestration via LangGraph (retrieve → generate). Chroma + embeddings stay on LangChain integrations."""
 
-from app.config import CHROMA_DB_PATH
+from __future__ import annotations
+
+from typing import Any, AsyncIterator, List, NotRequired, TypedDict
+
 from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_huggingface import HuggingFaceEmbeddings
-try:
-    from langchain.chains import RetrievalQA
-except ImportError:
-    try:
-        from langchain_community.chains import RetrievalQA
-    except ImportError:
-        # For newer langchain versions
-        from langchain_classic.chains import RetrievalQA
+from langgraph.graph import END, START, StateGraph
 
-try:
-    from langchain.prompts import PromptTemplate
-except ImportError:
-    from langchain_core.prompts import PromptTemplate
 from app.chatbot.llm_claude import get_claude_llm
+from app.config import CHROMA_DB_PATH
 
-def get_rag_chain():
-    vector_db = Chroma(
-        persist_directory=CHROMA_DB_PATH,
-        embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-    )
+EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 
-    retriever = vector_db.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": 8, "fetch_k": 12}
-    )
+SYSTEM_PROMPT = """You are SkinSage, a friendly and expert virtual skincare assistant inside the SkinBB Metaverse.
 
-    prompt_template = PromptTemplate.from_template(
-    """
-You are SkinSage, a friendly and expert virtual skincare assistant inside the SkinBB Metaverse.
+Use **chat history** only for follow-ups and coreference (e.g. "it", "that product", "the first one"). Do not treat history as a source of facts.
 
-Use the chat history below carefully to understand the context of the user's questions, especially follow-up questions that may not mention product names or details explicitly. Always try to answer based on prior conversation turns whenever possible.
-- If the user asks about "price", "how to use", "benefits", or to "compare" products *without specifying product names*, assume they mean the products recommended in your **previous answer**.
-- Use only the products mentioned in the previous response to answer follow-up questions.
-- If no products were recommended previously, ask the user to specify which product they mean.
-Your task is to answer user questions using the context provided below. Follow these rules:
+Use **retrieved context** as the source of truth for product details, ingredients, and platform facts when it is relevant. If the question is about SkinBB navigation, features, or URLs, answer like a product expert using that context.
 
-- Expand skincare abbreviations (e.g., HA → Hyaluronic Acid, BHA → Beta Hydroxy Acid, etc.)
-- Format your response in **structured Markdown** with **explicit line breaks** (`\\n`) for each section and bullet point.
-- Use the following structure when possible:
+If the user asks about "price", "how to use", "benefits", or to "compare" products *without naming products*, assume they mean items from your **previous answer** in chat history; use only those products.
+
+Rules:
+- Expand skincare abbreviations (e.g., HA → Hyaluronic Acid, BHA → Beta Hydroxy Acid).
+- Format in **structured Markdown** with real line breaks between sections and bullets.
+- Prefer this structure when it fits:
 
 ### ✅ Key Insights
-- Main answer in 2-4 concise bullet points
-- Define key terms or ingredients if needed
+- 2–4 concise bullets; define terms if needed
 
 ### 🧴 Related Products (if any)
-- Include this section **only if the user explicitly asks for product recommendations or related products.** Otherwise, omit it.
-
+- Only if the user explicitly asks for recommendations or related products.
 
 ### 💡 Tips / Recommendations
-- Usage advice, compatibility tips, skin-type suggestions
-- Mention precautions if relevant
+- Usage, compatibility, skin-type notes; precautions if relevant
 
 ### 🌟 Summary
-- Final advice or a TL;DR-style wrap-up
+- Short wrap-up
 
 Special cases:
-- If the question is **too generic**, gently ask for something more specific.
-- If **no relevant context** is found, say:  
-  "Sorry, I couldn't find enough info to answer that properly. Feel free to ask me another skincare-related question!"
-- If the question is **off-topic**, say:  
-  "I'm not sure about that, but I'm here to help with anything skincare-related!"
-- If the question is **just a greeting**, respond with:  
-  "🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!"
-
-Answer only using the relevant context below.
-
----
-Chat History:
-{history}
-
----
-User Question:
-{question}
-
----
-Your structured response (in Markdown with \\n line breaks):
+- Too generic → ask for something more specific.
+- No useful retrieved context for the question → say: Sorry, I couldn't find enough info to answer that properly. Feel free to ask me another skincare-related question!
+- Off-topic → I'm not sure about that, but I'm here to help with anything skincare-related!
+- Greeting only → 🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!
 """
+
+
+class RAGState(TypedDict):
+    """Graph state: inputs from API are query + history; nodes add context and result."""
+
+    query: str
+    history: str
+    context: NotRequired[str]
+    source_documents: NotRequired[List[Document]]
+    result: NotRequired[str]
+
+
+_vectorstore: Chroma | None = None
+
+
+def _get_vectorstore() -> Chroma:
+    global _vectorstore
+    if _vectorstore is None:
+        _vectorstore = Chroma(
+            persist_directory=CHROMA_DB_PATH,
+            embedding_function=HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL),
+        )
+    return _vectorstore
+
+
+def _get_retriever():
+    return _get_vectorstore().as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": 8, "fetch_k": 12},
     )
 
 
-    llm = get_claude_llm()
+def _format_context(docs: List[Document]) -> str:
+    if not docs:
+        return "(No matching documents retrieved.)"
+    parts: List[str] = []
+    for i, d in enumerate(docs, start=1):
+        meta = d.metadata or {}
+        src = meta.get("source") or meta.get("module") or ""
+        head = f"[{i}]" + (f" ({src})" if src else "")
+        parts.append(f"{head}\n{d.page_content}")
+    return "\n\n---\n\n".join(parts)
+
+
+def _build_user_prompt_block(query: str, history: str, context: str) -> str:
+    hist = (history or "").strip() or "(none)"
+    return f"""Retrieved context (use for facts about products and the SkinBB platform when relevant):
+---
+{context}
+---
+
+Chat history (follow-ups / coreference only):
+---
+{hist}
+---
+
+User question:
+{query}
+"""
+
+
+def _aimessage_chunk_text(chunk) -> str:
+    raw = getattr(chunk, "content", None)
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        parts: List[str] = []
+        for part in raw:
+            if isinstance(part, dict):
+                parts.append(part.get("text", "") or "")
+            else:
+                parts.append(str(part))
+        return "".join(parts)
+    return str(raw)
+
+
+def _build_graph():
+    retriever = _get_retriever()
+    llm = get_claude_llm(streaming=False)
     if llm is None:
+        return None
+
+    def retrieve(state: RAGState) -> dict[str, Any]:
+        docs = retriever.invoke(state["query"])
+        return {
+            "source_documents": docs,
+            "context": _format_context(docs),
+        }
+
+    def generate(state: RAGState) -> dict[str, Any]:
+        user_block = _build_user_prompt_block(
+            state["query"],
+            state.get("history") or "",
+            state.get("context") or "(No context.)",
+        )
+        msg = llm.invoke(
+            [
+                SystemMessage(content=SYSTEM_PROMPT),
+                HumanMessage(content=user_block),
+            ]
+        )
+        text = msg.content
+        if isinstance(text, list):
+            text = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in text
+            )
+        return {"result": (text or "").strip()}
+
+    graph = StateGraph(RAGState)
+    graph.add_node("retrieve", retrieve)
+    graph.add_node("generate", generate)
+    graph.add_edge(START, "retrieve")
+    graph.add_edge("retrieve", "generate")
+    graph.add_edge("generate", END)
+    return graph.compile()
+
+
+class RAGChainAdapter:
+    """Wraps LangGraph so callers can use .invoke() and read result + source_documents like RetrievalQA."""
+
+    def __init__(self, graph):
+        self._graph = graph
+
+    def invoke(self, input_dict: dict) -> dict:
+        if self._graph is None:
+            return {"result": "", "source_documents": []}
+        out = self._graph.invoke(
+            {
+                "query": input_dict.get("query", ""),
+                "history": input_dict.get("history", "") or "",
+            }
+        )
+        return {
+            "result": out.get("result", ""),
+            "source_documents": out.get("source_documents", []),
+        }
+
+
+_cached_rag = None
+
+
+def get_rag_chain():
+    """
+    LangGraph-backed RAG with the same invoke shape as before:
+    invoke({"query": str, "history": str}) -> {"result": str, "source_documents": [...]}
+    """
+    global _cached_rag
+    if _cached_rag is not None:
+        return _cached_rag
+    graph = _build_graph()
+    if graph is None:
         print("Warning: Claude LLM not available, returning None")
         return None
-    
-    return RetrievalQA.from_chain_type(
-    llm=llm,
-    chain_type="stuff",
-    retriever=retriever,
-    chain_type_kwargs={
-        "prompt": prompt_template,
-        "document_variable_name": "history"  # 🔧 This is the fix
-    },
-    return_source_documents=True
-)
+    _cached_rag = RAGChainAdapter(graph)
+    return _cached_rag
+
+
+async def stream_rag_tokens(query: str, history: str) -> AsyncIterator[str]:
+    """Retrieve then stream LLM output token-by-token (same prompt contract as the graph)."""
+    retriever = _get_retriever()
+    docs = retriever.invoke(query)
+    context = _format_context(docs)
+    llm = get_claude_llm(streaming=True)
+    if llm is None:
+        yield "Chatbot service is currently unavailable. Please check your API configuration."
+        return
+    user_block = _build_user_prompt_block(query, history, context)
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=user_block),
+    ]
+    async for chunk in llm.astream(messages):
+        piece = _aimessage_chunk_text(chunk)
+        if piece:
+            yield piece

@@ -36,3 +36,21 @@ else:
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://skinbb_owner:SkinBB%4054321@93.127.194.42:27017/skin_bb?authSource=admin")
 DB_NAME = os.getenv("DB_NAME", "skin_bb")
+
+# Chatbot RAG: Mongo collection names (override if your DB uses different casing)
+MONGO_RAG_INGEST_ENABLED: bool = os.getenv("MONGO_RAG_INGEST_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+MONGO_RAG_PRODUCTS_COLLECTION: str = os.getenv("MONGO_RAG_PRODUCTS_COLLECTION", "products")
+MONGO_RAG_VARIANTS_COLLECTION: str = os.getenv("MONGO_RAG_VARIANTS_COLLECTION", "product_variants")
+MONGO_RAG_EXTERNAL_PRODUCTS_COLLECTION: str = os.getenv(
+    "MONGO_RAG_EXTERNAL_PRODUCTS_COLLECTION", "externalproducts"
+)
+MONGO_RAG_BRANDED_INGREDIENTS_COLLECTION: str = os.getenv(
+    "MONGO_RAG_BRANDED_INGREDIENTS_COLLECTION", "ingre_branded_ingredients"
+)
+MONGO_RAG_INCI_COLLECTION: str = os.getenv("MONGO_RAG_INCI_COLLECTION", "ingre_inci")
+# 0 = no cap (use with care on large DBs)
+MONGO_RAG_MAX_DOCS_PER_COLLECTION: int = int(os.getenv("MONGO_RAG_MAX_DOCS_PER_COLLECTION", "0"))
