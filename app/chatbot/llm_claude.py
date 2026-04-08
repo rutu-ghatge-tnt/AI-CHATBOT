@@ -9,16 +9,16 @@ except ImportError:
 
 from app.config import CLAUDE_API_KEY, CLAUDE_MODEL
 
-def get_claude_llm():
-    if CLAUDE_API_KEY is None:
-        raise ValueError("CLAUDE_API_KEY must be set in your configuration.")
+def get_claude_llm(*, streaming: bool = True):
+    if not CLAUDE_API_KEY:
+        return None
     try:
         return ChatAnthropic(
             api_key=CLAUDE_API_KEY,  # Use the string directly instead of SecretStr
             model_name=CLAUDE_MODEL,
             temperature=0.3,
             timeout=60,
-            streaming=True,
+            streaming=streaming,
         )
     except Exception as e:
         print(f"Warning: Could not initialize Claude client: {e}")

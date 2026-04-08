@@ -1,5 +1,7 @@
 # app/chatbot/ingest.py
 """Ingest and embed documents into ChromaDB vectorstore"""
+import hashlib
+import json
 import os
 from pathlib import Path
 from tqdm import tqdm
@@ -9,6 +11,7 @@ import pandas as pd
 from app.config import CHROMA_DB_PATH
 from app.chatbot.utils import extract_text
 from app.chatbot.embedd_manifest import load_manifest, save_manifest
+from app.chatbot.mongo_ingest import fetch_mongo_rag_documents, purge_mongo_logical_from_chroma
 
 # LangChain setup
 os.environ["LANGCHAIN_ENDPOINT"] = "none"
@@ -22,30 +25,81 @@ except ImportError:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 
+# Lives alongside other ingest sources under data/raw_documents/
+SYSTEM_KNOWLEDGE_JSON = "system_knowledge_chunks.json"
+LEGACY_SK_MANIFEST_PREFIX = "system_knowledge:chunks.json@"
+
+
+def _chunk_metadata_for_chroma(meta: dict) -> dict:
+    """Chroma accepts str, int, float, bool — coerce the rest."""
+    out = {}
+    for k, v in (meta or {}).items():
+        if v is None:
+            continue
+        if isinstance(v, (str, int, float, bool)):
+            out[k] = v
+        else:
+            out[k] = str(v)
+    return out
+
 
 def ingest_documents():
-    folder = Path("data/raw_documents")
-    if not folder.exists():
-        rprint("[red]❌ Folder data/raw_documents does not exist.[/]")
-        return
-
-    files = list(folder.glob("*"))
-    if not files:
-        rprint("[red]❌ No files found in data/raw_documents/[/]")
-        return
-
-    rprint(f"[bold blue]📂 Found {len(files)} files in data/raw_documents/[/]")
-
     embedded_files = load_manifest()
-    rprint(f"[yellow]📜 Previously embedded: {len(embedded_files)} files[/]")
+    rprint(f"[yellow]📜 Previously embedded manifest keys: {len(embedded_files)}[/]")
 
     docs = []
     newly_embedded_files = set()
     total_chars = 0
+    mongo_purge: list = []
 
-    rprint("\n[bold white]📄 Processing documents...[/]")
+    folder = Path("data/raw_documents")
+    files = list(folder.glob("*")) if folder.exists() else []
+    if not folder.exists():
+        rprint("[yellow]⚠️ data/raw_documents does not exist — skipping raw file ingest.[/]")
+    elif not files:
+        rprint("[yellow]⚠️ No files in data/raw_documents/ — skipping raw file ingest.[/]")
+    else:
+        rprint(f"[bold blue]📂 Found {len(files)} files in data/raw_documents/[/]")
+
+    rprint("\n[bold white]📄 Processing raw documents...[/]")
 
     for f in tqdm(files, desc="Reading and chunking files"):
+        if f.name == SYSTEM_KNOWLEDGE_JSON:
+            raw = f.read_bytes()
+            digest = hashlib.sha256(raw).hexdigest()
+            sk_key = f"{SYSTEM_KNOWLEDGE_JSON}@{digest}"
+            sk_prefix = f"{SYSTEM_KNOWLEDGE_JSON}@"
+            if sk_key in embedded_files:
+                rprint(f"[dim]⏭️ Skipping {f.name} — unchanged (hash in manifest).[/]")
+                continue
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+                sk_chunks = payload.get("chunks", [])
+                for item in sk_chunks:
+                    text = (item.get("text") or "").strip()
+                    if not text:
+                        continue
+                    base_meta = {
+                        "source": "system_knowledge",
+                        "chunk_id": item.get("id", ""),
+                    }
+                    base_meta.update(_chunk_metadata_for_chroma(item.get("metadata") or {}))
+                    docs.append(Document(page_content=text, metadata=base_meta))
+                embedded_files = {
+                    k
+                    for k in embedded_files
+                    if not (
+                        (isinstance(k, str) and k.startswith(sk_prefix))
+                        or (isinstance(k, str) and k.startswith(LEGACY_SK_MANIFEST_PREFIX))
+                    )
+                }
+                newly_embedded_files.add(sk_key)
+                rprint(f"[green]🧠 {f.name} — {len(sk_chunks)} platform knowledge chunks (new hash).[/]")
+            except Exception as e:
+                rprint(f"[red]❌ Failed to load {f.name}: {e}[/]")
+                traceback.print_exc()
+            continue
+
         if f.name in embedded_files:
             rprint(f"[dim]⏭️ Skipping {f.name} — already embedded.[/]")
             continue
@@ -110,6 +164,19 @@ def ingest_documents():
             rprint(f"[red]❌ Error processing {f.name}: {e}[/]")
             traceback.print_exc()
 
+    try:
+        mongo_docs, mongo_new_keys, mongo_purge, embedded_files = fetch_mongo_rag_documents(embedded_files)
+        if mongo_docs:
+            docs.extend(mongo_docs)
+            embedded_files.update(mongo_new_keys)
+            mc = sum(len(d.page_content) for d in mongo_docs)
+            total_chars += mc
+            rprint(f"[green]🍃 MongoDB — {len(mongo_docs)} chunks, {mc} chars[/]")
+    except Exception as e:
+        rprint(f"[yellow]⚠️ Mongo ingest error (continuing without Mongo): {e}[/]")
+        traceback.print_exc()
+        mongo_purge = []
+
     if not docs:
         rprint("[red]❌ No new documents to embed.[/]")
         return
@@ -144,6 +211,8 @@ def ingest_documents():
             persist_directory=CHROMA_DB_PATH,
             embedding_function=embedding_model
         )
+
+        purge_mongo_logical_from_chroma(vectorstore, mongo_purge)
 
         for i in tqdm(range(0, len(docs), batch_size), desc="Saving to vectorstore"):
             batch_docs = docs[i:i + batch_size]

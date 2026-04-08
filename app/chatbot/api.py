@@ -1,10 +1,9 @@
 # app/chatbot/api.py
 from fastapi import APIRouter, HTTPException
-from app.chatbot.rag_pipeline import get_rag_chain
+from app.chatbot.rag_pipeline import get_rag_chain, stream_rag_tokens
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
-import asyncio
 import json
 import os
 from openai import OpenAI
@@ -35,6 +34,44 @@ def is_offensive(text: str) -> bool:
     text_lower = text.lower()
     return any(word in text_lower for word in OFFENSIVE_WORDS)
 
+
+def _is_simple_greeting(text: str) -> bool:
+    """Avoid full RAG + LLM for hi/hello — Chroma is large and makes trivial turns slow."""
+    t = text.rstrip("?!.").lower().strip()
+    if not t:
+        return False
+    one_word = {
+        "hi",
+        "hello",
+        "hey",
+        "hiya",
+        "yo",
+        "hai",
+        "howdy",
+        "namaste",
+        "gm",
+        "helloo",
+        "helo",
+    }
+    short_phrases = {
+        "hi there",
+        "hey there",
+        "hello there",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "hi!",
+        "hello!",
+        "hey!",
+    }
+    if t in short_phrases:
+        return True
+    words = t.split()
+    if len(words) <= 3 and words[0] in one_word:
+        return True
+    return False
+
+
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     user_query = request.query.strip()
@@ -50,6 +87,18 @@ async def chat_endpoint(request: ChatRequest):
             "answer": "🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!"
         })
 
+    if _is_simple_greeting(user_query):
+        greet = (
+            "🌟 Hi! I'm **SkinSage**, your skincare assistant on SkinBB. "
+            "Ask about products, ingredients, routines, or where to find things on the site (shop, account, shelf, help)."
+        )
+
+        async def stream_greeting():
+            yield json.dumps({"response": greet + "\n", "done": False}) + "\n"
+            yield json.dumps({"response": "", "done": True}) + "\n"
+
+        return StreamingResponse(stream_greeting(), media_type="application/json")
+
     if is_offensive(user_query):
         return JSONResponse(content={
             "answer": "I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"
@@ -62,27 +111,19 @@ async def chat_endpoint(request: ChatRequest):
         if turn.query and turn.response
     ])
 
-    rag_inputs = {
-        "query": user_query,
-        "history": chat_context
-    }
-
     async def stream_response():
         try:
             if rag_chain is None:
-                answer = "Chatbot service is currently unavailable. Please check your API configuration."
+                msg = "Chatbot service is currently unavailable. Please check your API configuration."
+                yield json.dumps({"response": msg, "done": False}) + "\n"
             else:
-                rag_result = rag_chain.invoke(rag_inputs)
-                answer = rag_result.get("result", "").strip()
-                answer = answer.replace("\\n", "\n")  # Convert escaped backslash-n into real newline
+                async for piece in stream_rag_tokens(user_query, chat_context):
+                    yield json.dumps({"response": piece, "done": False}) + "\n"
         except Exception as e:
             print("RAG error:", e)
-            answer = "Sorry, something went wrong while processing your question."
-
-        for sentence in answer.split("\n"):
-            if sentence.strip():
-                yield json.dumps({"response": sentence + "\n", "done": False}) + "\n"
-                await asyncio.sleep(0.05)
+            yield json.dumps(
+                {"response": "Sorry, something went wrong while processing your question.", "done": False}
+            ) + "\n"
 
         yield json.dumps({"response": "", "done": True}) + "\n"
 
