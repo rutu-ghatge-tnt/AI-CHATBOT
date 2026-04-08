@@ -25,8 +25,10 @@ CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL") or os.getenv("MODEL_NAME") or "cla
 # Get the absolute path to the directory where this config.py file resides
 APP_DIR = Path(__file__).parent.resolve()
 
-# Define Chroma DB path relative to the app folder location
-CHROMA_DB_PATH: str = str("chroma_db")
+# Chroma persist dir: absolute path so Gunicorn/cron/ingest all use the same DB regardless of cwd.
+# On Linux, set CHROMA_DB_PATH in .env if the vector store lives outside the repo.
+_default_chroma = (BASE_DIR / "chroma_db").resolve()
+CHROMA_DB_PATH: str = str(Path(os.getenv("CHROMA_DB_PATH", str(_default_chroma))).resolve())
 
 # Optional: Validate critical env variables early
 if not CLAUDE_API_KEY:

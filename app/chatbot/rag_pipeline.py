@@ -75,10 +75,21 @@ _vectorstore: Chroma | None = None
 def _get_vectorstore() -> Chroma:
     global _vectorstore
     if _vectorstore is None:
-        _vectorstore = Chroma(
-            persist_directory=CHROMA_DB_PATH,
-            embedding_function=HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL),
-        )
+        try:
+            _vectorstore = Chroma(
+                persist_directory=CHROMA_DB_PATH,
+                embedding_function=HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL),
+            )
+        except Exception as e:
+            msg = str(e).lower()
+            if "readonly" in msg or "read-only" in msg or "readonly database" in msg:
+                raise RuntimeError(
+                    f"Chroma cannot write under {CHROMA_DB_PATH!r}. "
+                    "Ingest likely ran as a different user than Gunicorn. "
+                    "Fix: sudo chown -R <gunicorn-user>:<group> "
+                    f"{CHROMA_DB_PATH} && sudo chmod -R u+rwX {CHROMA_DB_PATH}"
+                ) from e
+            raise
     return _vectorstore
 
 

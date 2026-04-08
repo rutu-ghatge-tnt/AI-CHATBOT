@@ -9,7 +9,16 @@ import os
 from openai import OpenAI
 
 router = APIRouter()
-rag_chain = get_rag_chain()
+
+# Lazy-init RAG so import doesn't crash the whole app if Chroma perms are wrong on boot.
+_rag_chain = None
+
+
+def _get_rag_chain_cached():
+    global _rag_chain
+    if _rag_chain is None:
+        _rag_chain = get_rag_chain()
+    return _rag_chain
 
 OFFENSIVE_WORDS = {"stupid", "idiot", "dumb", "hate", "shut up"}
 
@@ -113,7 +122,7 @@ async def chat_endpoint(request: ChatRequest):
 
     async def stream_response():
         try:
-            if rag_chain is None:
+            if _get_rag_chain_cached() is None:
                 msg = "Chatbot service is currently unavailable. Please check your API configuration."
                 yield json.dumps({"response": msg, "done": False}) + "\n"
             else:
