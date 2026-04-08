@@ -12,7 +12,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langgraph.graph import END, START, StateGraph
 
 from app.chatbot.llm_claude import get_claude_llm
-from app.config import CHROMA_DB_PATH
+from app.config import (
+    CHROMA_DB_PATH,
+    RAG_FETCH_K,
+    RAG_RETRIEVAL_K,
+    RAG_STREAM_BUFFER_MAX,
+    RAG_STREAM_RAW_TOKENS,
+)
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 
@@ -73,9 +79,11 @@ def _get_vectorstore() -> Chroma:
 
 
 def _get_retriever():
+    k = max(1, RAG_RETRIEVAL_K)
+    fetch_k = max(k + 1, RAG_FETCH_K)
     return _get_vectorstore().as_retriever(
         search_type="mmr",
-        search_kwargs={"k": 8, "fetch_k": 12},
+        search_kwargs={"k": k, "fetch_k": fetch_k},
     )
 
 
@@ -221,7 +229,19 @@ async def stream_rag_tokens(query: str, history: str) -> AsyncIterator[str]:
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content=user_block),
     ]
+    buf = ""
     async for chunk in llm.astream(messages):
         piece = _aimessage_chunk_text(chunk)
-        if piece:
+        if not piece:
+            continue
+        if RAG_STREAM_RAW_TOKENS:
             yield piece
+            continue
+        buf += piece
+        ends_ws = buf[-1].isspace()
+        too_long = len(buf) >= max(64, RAG_STREAM_BUFFER_MAX)
+        if ends_ws or too_long:
+            yield buf
+            buf = ""
+    if buf and not RAG_STREAM_RAW_TOKENS:
+        yield buf

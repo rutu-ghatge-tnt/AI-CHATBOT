@@ -54,3 +54,16 @@ MONGO_RAG_BRANDED_INGREDIENTS_COLLECTION: str = os.getenv(
 MONGO_RAG_INCI_COLLECTION: str = os.getenv("MONGO_RAG_INCI_COLLECTION", "ingre_inci")
 # 0 = no cap (use with care on large DBs)
 MONGO_RAG_MAX_DOCS_PER_COLLECTION: int = int(os.getenv("MONGO_RAG_MAX_DOCS_PER_COLLECTION", "0"))
+
+# Chatbot RAG retrieval (smaller = faster on large Chroma; MMR needs fetch_k >= k)
+RAG_RETRIEVAL_K: int = int(os.getenv("RAG_RETRIEVAL_K", "5"))
+RAG_FETCH_K: int = int(os.getenv("RAG_FETCH_K", "12"))
+
+# If true, stream raw LLM token chunks (fastest TTFT). If false (default), batch until
+# whitespace or max size so clients that wrongly join chunks with spaces break words less often.
+RAG_STREAM_RAW_TOKENS: bool = os.getenv("RAG_STREAM_RAW_TOKENS", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+RAG_STREAM_BUFFER_MAX: int = int(os.getenv("RAG_STREAM_BUFFER_MAX", "512"))

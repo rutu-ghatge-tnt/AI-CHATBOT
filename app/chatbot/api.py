@@ -34,6 +34,44 @@ def is_offensive(text: str) -> bool:
     text_lower = text.lower()
     return any(word in text_lower for word in OFFENSIVE_WORDS)
 
+
+def _is_simple_greeting(text: str) -> bool:
+    """Avoid full RAG + LLM for hi/hello — Chroma is large and makes trivial turns slow."""
+    t = text.rstrip("?!.").lower().strip()
+    if not t:
+        return False
+    one_word = {
+        "hi",
+        "hello",
+        "hey",
+        "hiya",
+        "yo",
+        "hai",
+        "howdy",
+        "namaste",
+        "gm",
+        "helloo",
+        "helo",
+    }
+    short_phrases = {
+        "hi there",
+        "hey there",
+        "hello there",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "hi!",
+        "hello!",
+        "hey!",
+    }
+    if t in short_phrases:
+        return True
+    words = t.split()
+    if len(words) <= 3 and words[0] in one_word:
+        return True
+    return False
+
+
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     user_query = request.query.strip()
@@ -48,6 +86,18 @@ async def chat_endpoint(request: ChatRequest):
         return JSONResponse(content={
             "answer": "🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!"
         })
+
+    if _is_simple_greeting(user_query):
+        greet = (
+            "🌟 Hi! I'm **SkinSage**, your skincare assistant on SkinBB. "
+            "Ask about products, ingredients, routines, or where to find things on the site (shop, account, shelf, help)."
+        )
+
+        async def stream_greeting():
+            yield json.dumps({"response": greet + "\n", "done": False}) + "\n"
+            yield json.dumps({"response": "", "done": True}) + "\n"
+
+        return StreamingResponse(stream_greeting(), media_type="application/json")
 
     if is_offensive(user_query):
         return JSONResponse(content={
