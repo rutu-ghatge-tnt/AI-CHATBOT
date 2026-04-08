@@ -1,0 +1,185 @@
+{
+  "content_version": 2,
+  "chunks": [
+    {
+      "id": "routes_next_legend",
+      "text": "Next.js App Router route table legend for SkinBB: ƒ means a dynamic route (server-rendered on demand or with ISR). ○ means a static route. When shown, revalidate is the ISR interval (e.g. 1h, 5m, 1d) and expire is the stale-while-revalidate-style cache hint from the build output. User-facing navigation should use these paths as the source of truth.",
+      "metadata": {
+        "type": "reference",
+        "module": "platform",
+        "feature": "route_legend",
+        "routes": ""
+      }
+    },
+    {
+      "id": "routes_app_canonical",
+      "text": "Canonical published App Router routes: / (ƒ). /_not-found (○). /about (○, revalidate 1h, expire 1y). /account/addresses, /account/coupons, /account/orders, /account/rewards, /account/rewards/badges, /account/rewards/history, /account/shelf, /account/shelf/add, /account/wishlist, /account/profile (○). /account/orders/[orderId] (ƒ). /account/profile/edit (ƒ). /api/auth/[...nextauth] (ƒ). /api/revalidate (ƒ). /api/rewards/animation/[...parts] (ƒ). /apple-icon.png (○). /bbshop (○, revalidate 5m, expire 1y). /blog, /blog/[slug], /blog/category/[category], /blog/tag/[tag] (ƒ). /brands (○). /checkout (ƒ). /checkout/failure (ƒ). /checkout/sign-in (ƒ). /checkout/success (○). /community (○). /community/q/[slug] (ƒ). /help (○). /help/[slug] (ƒ). /icon.png (○). /knowledge-feed (○). /knowledge-feed/[category], /knowledge-feed/[category]/[slug] (ƒ). /launch (○). /legal (○, revalidate 1d, expire 1y). /payment (○). /privacy-policy (○, revalidate 1d, expire 1y). /product/[slug], /product/[slug]/reviews (ƒ). /return-policy (○, revalidate 1d, expire 1y). /robots.txt (○). /shipping-policy (○, revalidate 1d, expire 1y). /shop (ƒ). /signin (ƒ). /site-password (○). /sitemap.xml (○). /terms-and-conditions (○, revalidate 1d, expire 1y).",
+      "metadata": {
+        "type": "reference",
+        "module": "platform",
+        "feature": "all_routes",
+        "routes": "/"
+      }
+    },
+    {
+      "id": "routes_global",
+      "text": "Module: Global and marketing. Home is /. About is /about (static page with about 1h revalidate in build). Sign in is /signin (dynamic ƒ). Utility: /site-password and /launch (static). Discovery for crawlers: /robots.txt and /sitemap.xml (static). There is no /contact route in the published App Router list; prefer /help or site contact flows if the product exposes them elsewhere.",
+      "metadata": {
+        "type": "feature",
+        "module": "global",
+        "feature": "marketing_routes",
+        "routes": "/, /about, /signin, /site-password, /launch, /robots.txt, /sitemap.xml"
+      }
+    },
+    {
+      "id": "commerce_shop",
+      "text": "Module: Commerce — Shop. Main shop is /shop (ƒ dynamic). Alternate listing BB Shop is /bbshop (○ static with about 5m revalidate in build). Brand directory is /brands (○ static). Shop listing URLs can include query params for filters (search, category, brand, price, concerns, etc.).",
+      "metadata": {
+        "type": "feature",
+        "module": "commerce",
+        "feature": "shop",
+        "routes": "/shop, /bbshop, /brands"
+      }
+    },
+    {
+      "id": "commerce_product",
+      "text": "Module: Commerce — Product pages. Product detail (PDP) is /product/[slug] (ƒ). Reviews hub is /product/[slug]/reviews (ƒ). Query params may still be used for API or SEO alongside slugs.",
+      "metadata": {
+        "type": "feature",
+        "module": "commerce",
+        "feature": "product_pdp",
+        "routes": "/product/[slug], /product/[slug]/reviews"
+      }
+    },
+    {
+      "id": "knowledge_feed",
+      "text": "Feature: Knowledge Feed. Listing home /knowledge-feed (○ static). Category /knowledge-feed/[category] and post /knowledge-feed/[category]/[slug] are ƒ dynamic. Known category slugs in the UI include jargons, skinvestigators, stories (Real Life Stories). Post types can include long (video plus article), short stories, and jargon or slides style content.",
+      "metadata": {
+        "type": "feature",
+        "module": "content",
+        "feature": "knowledge_feed",
+        "routes": "/knowledge-feed, /knowledge-feed/[category], /knowledge-feed/[category]/[slug]"
+      }
+    },
+    {
+      "id": "blog",
+      "text": "Feature: Blog. Listing /blog (ƒ). Post /blog/[slug] (ƒ). Category /blog/category/[category] and tag /blog/tag/[tag] (ƒ). Query params on listing may still include q, tag, sort (newest, oldest, popular), or legacy category when not in the path. Blog and Knowledge Feed are different route trees.",
+      "metadata": {
+        "type": "feature",
+        "module": "content",
+        "feature": "blog",
+        "routes": "/blog, /blog/category/[category], /blog/tag/[tag], /blog/[slug]"
+      }
+    },
+    {
+      "id": "knowledge_vs_blog",
+      "text": "Difference: Knowledge Feed versus Blog. Knowledge Feed uses /knowledge-feed (static home) with dynamic category and post segments. Blog uses /blog with dynamic listing, category, tag, and slug. Use /knowledge-feed for short-form tabs and tips; /blog for longer articles. Legacy /knowledge links may still exist off-site; on-site canonical pattern is /knowledge-feed.",
+      "metadata": {
+        "type": "feature",
+        "module": "content",
+        "feature": "knowledge_vs_blog",
+        "routes": "/knowledge-feed, /blog"
+      }
+    },
+    {
+      "id": "community",
+      "text": "Module: Community. Hub /community (○ static). Question threads /community/q/[slug] (ƒ dynamic). Teach users thread URLs as /community/q/{slug}.",
+      "metadata": {
+        "type": "feature",
+        "module": "community",
+        "feature": "qa",
+        "routes": "/community, /community/q/[slug]"
+      }
+    },
+    {
+      "id": "account_overview",
+      "text": "Module: Account. Routes under /account require login in normal UX. Static account pages: /account/addresses, /account/coupons, /account/orders, /account/profile, /account/rewards, /account/rewards/badges, /account/rewards/history, /account/shelf, /account/shelf/add, /account/wishlist (○). Dynamic: /account/orders/[orderId] (ƒ), /account/profile/edit (ƒ). Unauthenticated users are typically redirected to sign-in with a callback back to the requested path.",
+      "metadata": {
+        "type": "feature",
+        "module": "account",
+        "feature": "overview",
+        "routes": "/account/profile, /account/profile/edit, /account/orders, /account/orders/[orderId], /account/rewards, /account/rewards/badges, /account/rewards/history, /account/coupons, /account/wishlist, /account/shelf, /account/shelf/add, /account/addresses"
+      }
+    },
+    {
+      "id": "shelf_vs_wishlist",
+      "text": "Wishlist versus Shelf. Wishlist /account/wishlist (○) saves products to buy later. Shelf /account/shelf (○) and add flow /account/shelf/add (○) track products you own or use in a routine via catalog search.",
+      "metadata": {
+        "type": "feature",
+        "module": "account",
+        "feature": "shelf_wishlist",
+        "routes": "/account/wishlist, /account/shelf, /account/shelf/add"
+      }
+    },
+    {
+      "id": "checkout",
+      "text": "Checkout and payment URLs. /checkout/sign-in (ƒ) gates checkout when auth is required. Main flow /checkout (ƒ). Outcomes: /checkout/success (○ static) and /checkout/failure (ƒ). There is also a standalone /payment page (○ static) in the app router output—use it only when the product sends users there; core checkout may still be centered on /checkout. Cart remains primarily the slide-out drawer rather than a /cart page in this route list.",
+      "metadata": {
+        "type": "feature",
+        "module": "commerce",
+        "feature": "checkout",
+        "routes": "/checkout/sign-in, /checkout, /checkout/success, /checkout/failure, /payment"
+      }
+    },
+    {
+      "id": "help_legal",
+      "text": "Help and legal. Help hub /help (○ static). Article or category slug pages /help/[slug] (ƒ). FAQ-style content may still be loaded from backend APIs in the app even though routes are under /help. Legal hub /legal (○, about 1d revalidate in build). Policy pages (○, about 1d revalidate): /privacy-policy, /return-policy, /terms-and-conditions, /shipping-policy. Older marketing redirects like /policies to /legal may still exist in next.config—confirm in production if needed.",
+      "metadata": {
+        "type": "feature",
+        "module": "support",
+        "feature": "help_legal",
+        "routes": "/help, /help/[slug], /legal, /privacy-policy, /return-policy, /terms-and-conditions, /shipping-policy"
+      }
+    },
+    {
+      "id": "api_internal",
+      "text": "Internal API routes (not normal user navigation but useful for support): NextAuth handler at /api/auth/[...nextauth] (ƒ). On-demand revalidation endpoint /api/revalidate (ƒ). Rewards animation assets /api/rewards/animation/[...parts] (ƒ).",
+      "metadata": {
+        "type": "feature",
+        "module": "platform",
+        "feature": "api_routes",
+        "routes": "/api/auth/[...nextauth], /api/revalidate, /api/rewards/animation/[...parts]"
+      }
+    },
+    {
+      "id": "flows_support",
+      "text": "User flows. Browse to buy: home or /shop or /bbshop to /product/[slug], cart drawer, then /checkout (and /checkout/sign-in if needed), then /checkout/success or /checkout/failure; /payment may appear as part of product-specific payment UX. Orders: /account/orders then /account/orders/[orderId]. Owned products: /account/shelf and /account/shelf/add. Rewards and coupons: /account/rewards, badges, history, and /account/coupons. Help: /help then /help/[slug]. Legal: /legal or direct policy URLs.",
+      "metadata": {
+        "type": "feature",
+        "module": "ux",
+        "feature": "flows",
+        "routes": ""
+      }
+    },
+    {
+      "id": "synonyms",
+      "text": "Synonyms. SkinBB consumer brand; legal name Skin Beyond Borders on policy pages. BB Shop → /bbshop; generic shop → /shop or /bbshop. Skincare tips feed → /knowledge-feed. My account → /account/profile. Orders → /account/orders. Loyalty → /account/rewards; badges → /account/rewards/badges. Shelf vs wishlist as before. Sign in → /signin (ƒ). Community thread → /community/q/{slug}. Payment page path → /payment when applicable.",
+      "metadata": {
+        "type": "feature",
+        "module": "ux",
+        "feature": "synonyms",
+        "routes": ""
+      }
+    },
+    {
+      "id": "dynamic_vs_static",
+      "text": "Dynamic versus static guidance for RAG. Do not treat as fixed text: live catalog, cart, user-specific account data, CMS FAQ bodies, and article bodies. Route paths and rendering style (ƒ vs ○) from the build table are stable reference; content behind dynamic routes changes with data.",
+      "metadata": {
+        "type": "policy",
+        "module": "rag",
+        "feature": "dynamic_vs_static",
+        "routes": ""
+      }
+    },
+    {
+      "id": "reserved_routes",
+      "text": "Routes not in the published App Router list should not be promised as real pages—examples sometimes seen in old configs or sitemaps elsewhere include /cart, /search, /signup, /contact, /category/[slug] as a catalog page. In this build, cart is drawer-first; there is no /contact page listed. If a path is absent from the canonical route chunk, say you are not sure or point users to /help.",
+      "metadata": {
+        "type": "feature",
+        "module": "platform",
+        "feature": "reserved_routes",
+        "routes": ""
+      }
+    }
+  ]
+}

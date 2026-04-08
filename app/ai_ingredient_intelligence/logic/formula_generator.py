@@ -809,22 +809,29 @@ async def validate_and_enrich_claude_ingredients(
         # Priority: ingredient_costs (avg_cost) > distributor > Claude's estimate
         db_cost_per_kg = None
         
-        # First, try to get cost from ingredient_costs collection using INCI name
-        from app.ai_ingredient_intelligence.db.collections import ingredient_costs_col, distributor_col
+        # First, try to get cost from ingredient_costs collection using INCI name (exclude hidden)
+        from app.ai_ingredient_intelligence.db.collections import (
+            ingredient_costs_col,
+            distributor_col,
+            INGREDIENT_COST_NOT_HIDDEN_QUERY,
+        )
         INGREDIENT_COST_MARKUP_PERCENT = 35  # 35% markup on database costs
         INGREDIENT_COST_MARKUP_MULTIPLIER = 1 + (INGREDIENT_COST_MARKUP_PERCENT / 100.0)  # 1.35
-        
+
+        def _cost_query(q: dict) -> dict:
+            return {"$and": [q, INGREDIENT_COST_NOT_HIDDEN_QUERY]}
+
         # Try ingredient_costs collection by INCI name
         for inci_name in inci_names:
             if inci_name:
                 # Try normalized INCI name match
                 ingredient_cost_doc = await ingredient_costs_col.find_one(
-                    {"inci_name_normalized": inci_name.strip().lower()}
+                    _cost_query({"inci_name_normalized": inci_name.strip().lower()})
                 )
                 if not ingredient_cost_doc:
                     # Try exact INCI name match
                     ingredient_cost_doc = await ingredient_costs_col.find_one(
-                        {"inci_name": inci_name.strip()}
+                        _cost_query({"inci_name": inci_name.strip()})
                     )
                 
                 if ingredient_cost_doc and ingredient_cost_doc.get("avg_cost"):

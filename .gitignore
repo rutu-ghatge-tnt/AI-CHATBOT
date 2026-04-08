@@ -182,8 +182,10 @@ cleaning_checkpoint.json
 *.backup_*
 *.pre_save_*
 
-# data outputs
-data/
+# data outputs — bulky / local inputs stay untracked; version one file so CI/server can run ingest
+/data/**
+!/data/raw_documents/
+!/data/raw_documents/system_knowledge_chunks.json
 datasets/
 checkpoints/
 

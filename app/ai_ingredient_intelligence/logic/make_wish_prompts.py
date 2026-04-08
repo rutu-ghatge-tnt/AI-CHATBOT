@@ -350,10 +350,14 @@ Extract the following information from the natural language wish:
 1. Category (skincare or haircare)
 2. Product type (serum, moisturizer, shampoo, etc.)
 3. Ingredients mentioned (if any)
-4. Benefits requested
-5. Exclusions mentioned (silicone-free, sulfate-free, etc.)
-6. Skin types or hair concerns (if mentioned)
-7. Any compatibility issues between mentioned ingredients
+4. Benefits requested (Sun Protection, Anti-acne, Oil Control, Scalp Soothing, etc.)
+5. Product Format (lightweight, Anhydrous, Rich, Creamy, etc.)
+6. Exclusions mentioned (silicone-free, sulfate-free, etc.)
+7. Skin types or hair concerns (if mentioned; else infer from Benefits Requested and Product Format)
+8. Highlight any compatibility issues between mentioned ingredients, if any
+9. Highlight stability issues, if any (e.g., ascorbic acid in shampoo)
+10. Highlight safety issues, if any (e.g., retinol in day cream)
+11. If the product is not a personal care formulation, set product_scope_warning to: "Formulynx works well with personal care products only. Your wish seems to be a \"colour cosmetic / nutraceutical / device etc\" product. Results may be inaccurate."
 
 ## OUTPUT FORMAT (JSON):
 
@@ -373,16 +377,19 @@ Extract the following information from the natural language wish:
     }}
   ],
   "detected_benefits": [
-    "List of benefits mentioned (e.g., 'brightening', 'anti-aging', 'hydration')"
+    "List of benefits mentioned (e.g., 'brightening', 'Sun Protection', 'Anti-acne', 'Oil Control', 'Scalp Soothing')"
+  ],
+  "detected_product_format": [
+    "List of format cues (e.g., 'lightweight', 'Anhydrous', 'Rich', 'Creamy') - empty if not mentioned"
   ],
   "detected_exclusions": [
     "List of exclusions mentioned (e.g., 'silicone-free', 'sulfate-free', 'paraben-free')"
   ],
   "detected_skin_types": [
-    "List of skin types mentioned (e.g., 'oily', 'dry', 'sensitive') - empty if not mentioned"
+    "List of skin types mentioned or inferred from benefits/format (e.g., 'oily', 'dry', 'sensitive')"
   ],
   "detected_hair_concerns": [
-    "List of hair concerns mentioned (e.g., 'dandruff', 'hair fall') - empty if not mentioned"
+    "List of hair concerns mentioned or inferred (e.g., 'dandruff', 'hair fall') - empty if not applicable"
   ],
   "compatibility_issues": [
     {{
@@ -393,6 +400,25 @@ Extract the following information from the natural language wish:
       "ingredients_involved": ["Ingredient1", "Ingredient2"]
     }}
   ],
+  "stability_issues": [
+    {{
+      "severity": "critical|warning",
+      "title": "Brief issue title",
+      "problem": "Description of the stability issue (e.g., ascorbic acid in shampoo)",
+      "solution": "Suggested solution",
+      "ingredients_involved": ["Ingredient1"]
+    }}
+  ],
+  "safety_issues": [
+    {{
+      "severity": "critical|warning",
+      "title": "Brief issue title",
+      "problem": "Description of the safety issue (e.g., retinol in day cream)",
+      "solution": "Suggested solution",
+      "ingredients_involved": ["Ingredient1"]
+    }}
+  ],
+  "product_scope_warning": null,
   "needs_clarification": [
     {{
       "question": "Question if wish is ambiguous",
@@ -401,6 +427,8 @@ Extract the following information from the natural language wish:
   ]
 }}
 
+For product_scope_warning: use null for personal care (skincare/haircare) formulations. For colour cosmetic, nutraceutical, device, or other non-personal-care products, set to the exact message: "Formulynx works well with personal care products only. Your wish seems to be a \"colour cosmetic / nutraceutical / device etc\" product. Results may be inaccurate."
+
 ## IMPORTANT RULES:
 
 1. **Keep it simple**: Only extract what's explicitly mentioned or clearly implied. Don't generate a full formula.
@@ -408,9 +436,14 @@ Extract the following information from the natural language wish:
 3. **Icon names**: Use Lucide icon names like: droplet, sparkles, beaker, flask, test-tube, syringe, etc.
 4. **Confidence**: Use high confidence (0.8-1.0) if clear, lower (0.5-0.7) if ambiguous
 5. **Ingredients**: Only list ingredients explicitly mentioned. Use common names (e.g., "Vitamin C" not "L-Ascorbic Acid")
-6. **Benefits**: Extract from phrases like "for brightening", "gives glow", "reduces wrinkles", etc.
-7. **Exclusions**: Look for words like "free", "without", "no" (e.g., "silicone-free" → exclude silicones)
-8. **Compatibility issues**: Only flag if multiple incompatible ingredients are mentioned together
+6. **Benefits**: Extract from phrases like "for brightening", "gives glow", "reduces wrinkles", "sun protection", "anti-acne", "oil control", "scalp soothing", etc.
+7. **Product format**: Extract texture/format cues like "lightweight", "anhydrous", "rich", "creamy", "gel-like", "oil-free", etc.
+8. **Exclusions**: Look for words like "free", "without", "no" (e.g., "silicone-free" → exclude silicones)
+9. **Skin/hair types**: If not mentioned, infer from benefits and product format (e.g., "oil control" → oily; "rich creamy" → dry).
+10. **Compatibility issues**: Flag when multiple incompatible ingredients are mentioned together.
+11. **Stability issues**: Flag formulation-context mismatches (e.g., ascorbic acid in shampoo, unstable actives in wrong pH or vehicle).
+12. **Safety issues**: Flag use-context mismatches (e.g., retinol in day cream without SPF, photosensitizing actives for daytime).
+13. **Product scope**: If the wish is for lipstick, supplement, device, etc., set product_scope_warning to the exact message above; otherwise null.
 
 Return ONLY the JSON, no additional text.
 """

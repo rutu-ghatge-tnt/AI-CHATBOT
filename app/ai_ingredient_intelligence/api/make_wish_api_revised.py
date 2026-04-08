@@ -510,6 +510,23 @@ async def parse_natural_language_wish(
                 compatibility_issues.append(normalized)
         
         parsed_result["compatibility_issues"] = compatibility_issues
+
+        # Normalize stability_issues and safety_issues (same shape as compatibility_issues)
+        raw_stability = parsed_result.get("stability_issues", [])
+        stability_issues = []
+        for item in raw_stability if isinstance(raw_stability, list) else []:
+            stability_issues.append(_normalize_compatibility_issue(item))
+        parsed_result["stability_issues"] = stability_issues
+
+        raw_safety = parsed_result.get("safety_issues", [])
+        safety_issues = []
+        for item in raw_safety if isinstance(raw_safety, list) else []:
+            safety_issues.append(_normalize_compatibility_issue(item))
+        parsed_result["safety_issues"] = safety_issues
+
+        product_scope_warning = parsed_result.get("product_scope_warning")
+        if "detected_product_format" not in parsed_result:
+            parsed_result["detected_product_format"] = []
         
         # Transform needs_clarification to ensure proper format
         needs_clarification = parsed_result.get("needs_clarification", [])
@@ -542,7 +559,10 @@ async def parse_natural_language_wish(
         return ParseWishResponse(
             success=True,
             parsed_data=parsed_result,
-            compatibility_issues=compatibility_issues
+            compatibility_issues=compatibility_issues,
+            stability_issues=stability_issues,
+            safety_issues=safety_issues,
+            product_scope_warning=product_scope_warning
         )
     
     except HTTPException:

@@ -13,6 +13,9 @@ documents_col = db["ingre_documents"]
 formulations_col = db["ingre_formulations"]
 distributor_col = db["distributor"]
 ingredient_costs_col = db["ingredient_costs"]  # Collection with avg_cost for ingredients
+
+# Exclude hidden ingredient costs when fetching for formulas/cost lookup (admin can set hide via API)
+INGREDIENT_COST_NOT_HIDDEN_QUERY = {"$or": [{"hide": {"$ne": True}}, {"hide": {"$exists": False}}]}
 decode_history_col = db["decode_history"]
 compare_history_col = db["compare_history"]
 market_research_history_col = db["market_research_history"]
