@@ -2,7 +2,9 @@
 import json
 from pathlib import Path
 
-MANIFEST_PATH = Path("chroma_db/embed_manifest.json")
+from app.config import CHROMA_DB_PATH
+
+MANIFEST_PATH = Path(CHROMA_DB_PATH) / "embed_manifest.json"
 
 def load_manifest() -> set:
     if MANIFEST_PATH.exists():
