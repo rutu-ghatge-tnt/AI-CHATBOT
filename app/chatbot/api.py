@@ -131,7 +131,7 @@ def _is_simple_greeting(text: str) -> bool:
     return False
 
 
-@router.post("/chat")
+@router.post("/chat", tags=["Chatbot"])
 async def chat_endpoint(
     request: ChatRequest,
     current_user: Optional[dict] = Depends(verify_jwt_token_optional),
@@ -234,7 +234,7 @@ async def chat_endpoint(
     return StreamingResponse(stream_response(), media_type="application/json")
 
 
-@router.get("/chat/conversations")
+@router.get("/chat/conversations", tags=["Chatbot"])
 async def chat_list_conversations(current_user: dict = Depends(verify_jwt_token)):
     uid = user_id_from_payload(current_user)
     if not uid:
@@ -243,7 +243,7 @@ async def chat_list_conversations(current_user: dict = Depends(verify_jwt_token)
     return JSONResponse(content={"conversations": items})
 
 
-@router.get("/chat/conversations/{conversation_id}")
+@router.get("/chat/conversations/{conversation_id}", tags=["Chatbot"])
 async def chat_get_conversation(
     conversation_id: str,
     current_user: dict = Depends(verify_jwt_token),
@@ -257,7 +257,7 @@ async def chat_get_conversation(
     return JSONResponse(content=doc)
 
 
-@router.delete("/chat/conversations/{conversation_id}")
+@router.delete("/chat/conversations/{conversation_id}", tags=["Chatbot"])
 async def chat_delete_conversation(
     conversation_id: str,
     current_user: dict = Depends(verify_jwt_token),
@@ -271,7 +271,7 @@ async def chat_delete_conversation(
     return JSONResponse(content={"ok": True})
 
 
-@router.post("/chat/conversations/bulk-delete")
+@router.post("/chat/conversations/bulk-delete", tags=["Chatbot"])
 async def chat_bulk_delete_conversations(
     request: DeleteConversationsRequest,
     current_user: dict = Depends(verify_jwt_token),
@@ -283,7 +283,7 @@ async def chat_bulk_delete_conversations(
     return JSONResponse(content={"ok": True, "deleted_count": deleted})
 
 
-@router.post("/chatbot/chat")
+@router.post("/chatbot/chat", tags=["Chatbot"])
 async def formulator_chatbot_endpoint(request: FormulatorChatRequest):
     """
     Formulator chatbot endpoint using OpenAI API.
