@@ -120,9 +120,7 @@ def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     
-    # Get environment variables for server configuration
-    import os
-    server_url = os.getenv("SERVER_URL", "https://capi.skintruth.in")
+    server_url = (os.getenv("SERVER_URL") or "").strip().rstrip("/")
     node_env = os.getenv("NODE_ENV", "development")
     
     openapi_schema = get_openapi(
@@ -193,25 +191,23 @@ def custom_openapi():
         ]
     )
     
-    # Add servers configuration
-    openapi_schema["servers"] = [
-        {
-            "url": server_url,
-            "description": "Production server" if node_env == "production" else "Development server",
-        },
-        {
-            "url": "https://metaverse.skinbb.com",
-            "description": "Production server",
-        },
-        {
-            "url": "https://capi.skintruth.in",
-            "description": "Development server",
-        },
-        {
-            "url": "http://localhost:8000",
-            "description": "Local development server",
-        },
-    ]
+    # OpenAPI servers: only SERVER_URL from env (no hardcoded API bases)
+    if server_url:
+        openapi_schema["servers"] = [
+            {
+                "url": server_url,
+                "description": "Production server"
+                if node_env == "production"
+                else "Development server",
+            },
+        ]
+    else:
+        openapi_schema["servers"] = [
+            {
+                "url": "/",
+                "description": "Relative to this host — set SERVER_URL for a fixed base URL in Swagger.",
+            },
+        ]
     
     # Add security schemes
     openapi_schema["components"]["securitySchemes"] = {
