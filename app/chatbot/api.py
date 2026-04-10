@@ -2,12 +2,16 @@
 import json
 import os
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from openai import OpenAI
 from pydantic import BaseModel, Field
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None  # type: ignore[misc, assignment]
 
 from app.ai_ingredient_intelligence.auth.jwt_auth import (
     verify_jwt_token,
@@ -24,25 +28,38 @@ from app.chatbot.chat_history_store import (
     messages_to_context,
     user_id_from_payload,
 )
-from app.chatbot.rag_pipeline import get_rag_chain, stream_rag_tokens
 
 router = APIRouter()
 
-# Lazy-init RAG so import doesn't crash the whole app if Chroma perms are wrong on boot.
-_rag_chain = None
+# Lazy-init RAG so a missing RAG stack (torch/chroma/langchain) does not prevent router
+# registration — otherwise main.py skips the whole chatbot and Swagger shows no /api/chat*.
+_RAG_CHAIN_PENDING = object()
+_rag_chain: Any = _RAG_CHAIN_PENDING
 
 
 def _get_rag_chain_cached():
     global _rag_chain
-    if _rag_chain is None:
-        _rag_chain = get_rag_chain()
+    if _rag_chain is not _RAG_CHAIN_PENDING:
+        return _rag_chain
+    try:
+        from app.chatbot.rag_pipeline import get_rag_chain as _get_rag_chain
+
+        _rag_chain = _get_rag_chain()
+    except ImportError as e:
+        print(f"Warning: chatbot RAG dependencies missing ({e}). POST /api/chat will not use retrieval.")
+        _rag_chain = None
+    except Exception as e:
+        print(f"Warning: chatbot RAG init failed: {e}")
+        _rag_chain = None
     return _rag_chain
 
 OFFENSIVE_WORDS = {"stupid", "idiot", "dumb", "hate", "shut up"}
 
 # Initialize OpenAI client for formulator chatbot
 openai_api_key = os.getenv("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=openai_api_key) if openai_api_key else None
+openai_client = (
+    OpenAI(api_key=openai_api_key) if OpenAI and openai_api_key else None
+)
 
 class ChatTurn(BaseModel):
     query: str
@@ -195,6 +212,8 @@ async def chat_endpoint(
                 full_reply.append(msg)
                 yield json.dumps({"response": msg, "done": False}) + "\n"
             else:
+                from app.chatbot.rag_pipeline import stream_rag_tokens
+
                 async for piece in stream_rag_tokens(user_query, chat_context):
                     full_reply.append(piece)
                     yield json.dumps({"response": piece, "done": False}) + "\n"
