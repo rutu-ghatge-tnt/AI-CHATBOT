@@ -81,3 +81,32 @@ CHAT_HISTORY_CONTEXT_TURNS: int = int(os.getenv("CHAT_HISTORY_CONTEXT_TURNS", "5
 # When set, RAG prompts ask the model to use full Markdown links [label](base/path).
 _SKINBB_PUBLIC_BASE = (os.getenv("SKINBB_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
 SKINBB_PUBLIC_BASE_URL: str = _SKINBB_PUBLIC_BASE
+
+
+def resolve_skinbb_public_base_url(origin_header: Optional[str] = None) -> str:
+    """
+    Base URL for Markdown links in SkinSage replies (e.g. [Shop](base/shop)).
+
+    1. SKINBB_PUBLIC_BASE_URL when set (explicit).
+    2. Else the browser Origin if it matches CORS_ALLOW_ORIGINS or CORS_ALLOW_ORIGIN_REGEX,
+       so the metaverse app gets correct links without duplicating the domain in env.
+    """
+    if _SKINBB_PUBLIC_BASE:
+        return _SKINBB_PUBLIC_BASE
+    o = (origin_header or "").strip().rstrip("/")
+    if not o or not o.startswith(("https://", "http://")):
+        return ""
+    cors_str = os.getenv("CORS_ALLOW_ORIGINS", "")
+    allowed = {x.strip().rstrip("/") for x in cors_str.split(",") if x.strip()}
+    if o in allowed or "*" in allowed:
+        return o
+    rx = (os.getenv("CORS_ALLOW_ORIGIN_REGEX") or "").strip()
+    if rx:
+        import re
+
+        try:
+            if re.fullmatch(rx, o):
+                return o
+        except re.error:
+            pass
+    return ""

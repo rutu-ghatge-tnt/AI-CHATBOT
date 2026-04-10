@@ -1,10 +1,11 @@
 # app/chatbot/api.py
 import json
 import os
+import traceback
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -17,6 +18,7 @@ from app.ai_ingredient_intelligence.auth.jwt_auth import (
     verify_jwt_token,
     verify_jwt_token_optional,
 )
+from app.config import resolve_skinbb_public_base_url
 from app.chatbot.chat_history_store import (
     append_turn,
     context_turns_limit,
@@ -133,6 +135,7 @@ def _is_simple_greeting(text: str) -> bool:
 
 @router.post("/chat", tags=["Chatbot"])
 async def chat_endpoint(
+    http_request: Request,
     request: ChatRequest,
     current_user: Optional[dict] = Depends(verify_jwt_token_optional),
 ):
@@ -204,6 +207,8 @@ async def chat_endpoint(
             if turn.query and turn.response
         ])
 
+    link_base = resolve_skinbb_public_base_url(http_request.headers.get("origin"))
+
     async def stream_response():
         full_reply: list[str] = []
         try:
@@ -214,11 +219,14 @@ async def chat_endpoint(
             else:
                 from app.chatbot.rag_pipeline import stream_rag_tokens
 
-                async for piece in stream_rag_tokens(user_query, chat_context):
+                async for piece in stream_rag_tokens(
+                    user_query, chat_context, public_base=link_base
+                ):
                     full_reply.append(piece)
                     yield json.dumps({"response": piece, "done": False}) + "\n"
         except Exception as e:
             print("RAG error:", e)
+            traceback.print_exc()
             err = "Sorry, something went wrong while processing your question."
             full_reply.append(err)
             yield json.dumps({"response": err, "done": False}) + "\n"

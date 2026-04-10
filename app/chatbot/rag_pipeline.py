@@ -23,6 +23,24 @@ from app.config import (
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 
+
+def _log_llm_api_error(provider: str, exc: BaseException) -> None:
+    """Print Anthropic/LangChain error details to stderr (shows up in gunicorn/journalctl/docker logs)."""
+    parts = [f"[{provider}]", type(exc).__name__ + ":", str(exc)]
+    sc = getattr(exc, "status_code", None)
+    if sc is not None:
+        parts.append(f"status_code={sc}")
+    body = getattr(exc, "body", None)
+    if body is not None:
+        parts.append(f"body={body!r}")
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        txt = getattr(resp, "text", None)
+        if txt:
+            parts.append(f"response.text={txt[:2000]!r}")
+    print(" ".join(parts), flush=True)
+
+
 SYSTEM_PROMPT = """You are SkinSage, a friendly and expert virtual skincare assistant inside the SkinBB Metaverse.
 
 Use **chat history** only for follow-ups and coreference (e.g. "it", "that product", "the first one"). Do not treat history as a source of facts.
@@ -75,6 +93,7 @@ class RAGState(TypedDict):
 
     query: str
     history: str
+    public_base: NotRequired[str]
     context: NotRequired[str]
     source_documents: NotRequired[List[Document]]
     result: NotRequired[str]
@@ -243,8 +262,10 @@ def _retrieve_documents(user_question: str) -> List[Document]:
     return _get_retriever().invoke(rq)
 
 
-def _link_formatting_instructions() -> str:
-    base = (SKINBB_PUBLIC_BASE_URL or "").strip().rstrip("/")
+def _link_formatting_instructions(public_base: str = "") -> str:
+    base = (public_base or "").strip().rstrip("/") or (SKINBB_PUBLIC_BASE_URL or "").strip().rstrip(
+        "/"
+    )
     if not base:
         return ""
     return f"""Deployment public site base URL (required for SkinBB navigation in your reply):
@@ -257,9 +278,11 @@ Preset links (copy exactly when the user asks about shopping, BB Shop, or where 
 Use Markdown links for other paths the same way: `[label]({base}<path>)` with `<path>` starting with `/`. Do not use bare `/shop`-style paths as the main navigation when this block is present."""
 
 
-def _build_user_prompt_block(query: str, history: str, context: str) -> str:
+def _build_user_prompt_block(
+    query: str, history: str, context: str, public_base: str = ""
+) -> str:
     hist = (history or "").strip() or "(none)"
-    link_block = _link_formatting_instructions()
+    link_block = _link_formatting_instructions(public_base)
     link_section = f"{link_block}\n\n" if link_block else ""
     return f"""Retrieved context (use for facts about products and the SkinBB platform when relevant):
 ---
@@ -310,13 +333,18 @@ def _build_graph():
             state["query"],
             state.get("history") or "",
             state.get("context") or "(No context.)",
+            state.get("public_base") or "",
         )
-        msg = llm.invoke(
-            [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=user_block),
-            ]
-        )
+        try:
+            msg = llm.invoke(
+                [
+                    SystemMessage(content=SYSTEM_PROMPT),
+                    HumanMessage(content=user_block),
+                ]
+            )
+        except Exception as e:
+            _log_llm_api_error("Claude/Anthropic (invoke)", e)
+            raise
         text = msg.content
         if isinstance(text, list):
             text = "".join(
@@ -347,6 +375,7 @@ class RAGChainAdapter:
             {
                 "query": input_dict.get("query", ""),
                 "history": input_dict.get("history", "") or "",
+                "public_base": input_dict.get("public_base") or "",
             }
         )
         return {
@@ -374,7 +403,9 @@ def get_rag_chain():
     return _cached_rag
 
 
-async def stream_rag_tokens(query: str, history: str) -> AsyncIterator[str]:
+async def stream_rag_tokens(
+    query: str, history: str, *, public_base: str = ""
+) -> AsyncIterator[str]:
     """Retrieve then stream LLM output token-by-token (same prompt contract as the graph)."""
     docs = _retrieve_documents(query)
     context = _format_context(docs)
@@ -382,24 +413,28 @@ async def stream_rag_tokens(query: str, history: str) -> AsyncIterator[str]:
     if llm is None:
         yield "Chatbot service is currently unavailable. Please check your API configuration."
         return
-    user_block = _build_user_prompt_block(query, history, context)
+    user_block = _build_user_prompt_block(query, history, context, public_base)
     messages = [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content=user_block),
     ]
     buf = ""
-    async for chunk in llm.astream(messages):
-        piece = _aimessage_chunk_text(chunk)
-        if not piece:
-            continue
-        if RAG_STREAM_RAW_TOKENS:
-            yield piece
-            continue
-        buf += piece
-        ends_ws = buf[-1].isspace()
-        too_long = len(buf) >= max(64, RAG_STREAM_BUFFER_MAX)
-        if ends_ws or too_long:
-            yield buf
-            buf = ""
+    try:
+        async for chunk in llm.astream(messages):
+            piece = _aimessage_chunk_text(chunk)
+            if not piece:
+                continue
+            if RAG_STREAM_RAW_TOKENS:
+                yield piece
+                continue
+            buf += piece
+            ends_ws = buf[-1].isspace()
+            too_long = len(buf) >= max(64, RAG_STREAM_BUFFER_MAX)
+            if ends_ws or too_long:
+                yield buf
+                buf = ""
+    except Exception as e:
+        _log_llm_api_error("Claude/Anthropic (astream)", e)
+        raise
     if buf and not RAG_STREAM_RAW_TOKENS:
         yield buf
