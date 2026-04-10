@@ -69,3 +69,15 @@ RAG_STREAM_RAW_TOKENS: bool = os.getenv("RAG_STREAM_RAW_TOKENS", "false").lower(
     "yes",
 )
 RAG_STREAM_BUFFER_MAX: int = int(os.getenv("RAG_STREAM_BUFFER_MAX", "512"))
+
+# Logged-in SkinSage chat: Mongo thread storage
+MONGO_CHAT_CONVERSATIONS_COLLECTION: str = os.getenv(
+    "MONGO_CHAT_CONVERSATIONS_COLLECTION", "skinsage_chat_conversations"
+)
+CHAT_HISTORY_MAX_MESSAGES: int = int(os.getenv("CHAT_HISTORY_MAX_MESSAGES", "100"))
+CHAT_HISTORY_CONTEXT_TURNS: int = int(os.getenv("CHAT_HISTORY_CONTEXT_TURNS", "5"))
+
+# Consumer web origin for chat answers, e.g. https://www.skinbb.com — no trailing slash.
+# When set, RAG prompts ask the model to use full Markdown links [label](base/path).
+_SKINBB_PUBLIC_BASE = (os.getenv("SKINBB_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
+SKINBB_PUBLIC_BASE_URL: str = _SKINBB_PUBLIC_BASE

@@ -11,7 +11,11 @@ import pandas as pd
 from app.config import CHROMA_DB_PATH
 from app.chatbot.utils import extract_text
 from app.chatbot.embedd_manifest import load_manifest, save_manifest
-from app.chatbot.mongo_ingest import fetch_mongo_rag_documents, purge_mongo_logical_from_chroma
+from app.chatbot.mongo_ingest import (
+    MANIFEST_PREFIX as MONGO_MANIFEST_PREFIX,
+    fetch_mongo_rag_documents,
+    purge_mongo_logical_from_chroma,
+)
 
 # LangChain setup
 os.environ["LANGCHAIN_ENDPOINT"] = "none"
@@ -43,8 +47,20 @@ def _chunk_metadata_for_chroma(meta: dict) -> dict:
     return out
 
 
-def ingest_documents():
+def ingest_documents(*, force_mongo: bool = False):
     embedded_files = load_manifest()
+    if force_mongo:
+        before = len(embedded_files)
+        embedded_files = {
+            k
+            for k in embedded_files
+            if not (isinstance(k, str) and k.startswith(MONGO_MANIFEST_PREFIX))
+        }
+        removed = before - len(embedded_files)
+        rprint(
+            f"[yellow]🔄 --force-mongo: removed {removed} Mongo snapshot key(s) from manifest "
+            f"(will re-fetch and re-embed all Mongo RAG chunks).[/]"
+        )
     rprint(f"[yellow]📜 Previously embedded manifest keys: {len(embedded_files)}[/]")
 
     docs = []
@@ -179,6 +195,10 @@ def ingest_documents():
 
     if not docs:
         rprint("[red]❌ No new documents to embed.[/]")
+        rprint(
+            "[dim]Mongo is skipped when its snapshot hash is unchanged. After editing mongo_ingest.py, run:[/]"
+        )
+        rprint("[dim]  python -m app.chatbot.ingest --force-mongo[/]")
         return
 
     rprint(f"\n✅ Total characters processed: {total_chars}")
@@ -238,4 +258,13 @@ def ingest_documents():
 
 
 if __name__ == "__main__":
-    ingest_documents()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Embed raw files + Mongo into Chroma for SkinSage RAG.")
+    parser.add_argument(
+        "--force-mongo",
+        action="store_true",
+        help="Re-embed all Mongo-backed chunks even if DB snapshot unchanged (e.g. after changing mongo_ingest.py).",
+    )
+    args = parser.parse_args()
+    ingest_documents(force_mongo=args.force_mongo)

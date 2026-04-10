@@ -1,12 +1,30 @@
 # app/chatbot/api.py
-from fastapi import APIRouter, HTTPException
-from app.chatbot.rag_pipeline import get_rag_chain, stream_rag_tokens
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
-from typing import Optional
 import json
 import os
+import uuid
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 from openai import OpenAI
+from pydantic import BaseModel, Field
+
+from app.ai_ingredient_intelligence.auth.jwt_auth import (
+    verify_jwt_token,
+    verify_jwt_token_optional,
+)
+from app.chatbot.chat_history_store import (
+    append_turn,
+    context_turns_limit,
+    delete_conversation,
+    delete_conversations_bulk,
+    get_conversation,
+    list_conversations,
+    load_messages,
+    messages_to_context,
+    user_id_from_payload,
+)
+from app.chatbot.rag_pipeline import get_rag_chain, stream_rag_tokens
 
 router = APIRouter()
 
@@ -32,7 +50,22 @@ class ChatTurn(BaseModel):
 
 class ChatRequest(BaseModel):
     query: str
-    history: list[ChatTurn] = []
+    history: list[ChatTurn] = Field(default_factory=list)
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="When logged in, pass to continue a thread; omit or empty for a new one.",
+    )
+
+
+class DeleteConversationsRequest(BaseModel):
+    conversation_ids: list[str] = Field(default_factory=list)
+
+
+def _streaming_done_line(conversation_id: Optional[str]) -> str:
+    payload: dict = {"response": "", "done": True}
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
+    return json.dumps(payload) + "\n"
 
 class FormulatorChatRequest(BaseModel):
     message: str
@@ -82,9 +115,18 @@ def _is_simple_greeting(text: str) -> bool:
 
 
 @router.post("/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(
+    request: ChatRequest,
+    current_user: Optional[dict] = Depends(verify_jwt_token_optional),
+):
     user_query = request.query.strip()
     clean_query = user_query.rstrip("?!.").lower()
+
+    uid = user_id_from_payload(current_user)
+    conv_id: Optional[str] = None
+    if uid:
+        cid = (request.conversation_id or "").strip()
+        conv_id = cid if cid else str(uuid.uuid4())
 
     identity_triggers = {
         "who are you", "what is your name", "tell me about yourself",
@@ -92,9 +134,19 @@ async def chat_endpoint(request: ChatRequest):
     }
 
     if clean_query in identity_triggers:
-        return JSONResponse(content={
-            "answer": "🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!"
-        })
+        ans = (
+            "🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. "
+            "Ask me anything about skincare — ingredients, routines, or products!"
+        )
+        if uid and conv_id:
+            try:
+                await append_turn(uid, conv_id, user_query, ans)
+            except Exception as e:
+                print("chat history save failed:", e)
+        body: dict = {"answer": ans}
+        if conv_id:
+            body["conversation_id"] = conv_id
+        return JSONResponse(content=body)
 
     if _is_simple_greeting(user_query):
         greet = (
@@ -104,39 +156,112 @@ async def chat_endpoint(request: ChatRequest):
 
         async def stream_greeting():
             yield json.dumps({"response": greet + "\n", "done": False}) + "\n"
-            yield json.dumps({"response": "", "done": True}) + "\n"
+            if uid and conv_id:
+                try:
+                    await append_turn(uid, conv_id, user_query, greet.strip())
+                except Exception as e:
+                    print("chat history save failed:", e)
+            yield _streaming_done_line(conv_id)
 
         return StreamingResponse(stream_greeting(), media_type="application/json")
 
     if is_offensive(user_query):
-        return JSONResponse(content={
-            "answer": "I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"
-        })
+        ans = "I'm here to help with skincare, not to battle words. Let's keep it friendly! 😊"
+        if uid and conv_id:
+            try:
+                await append_turn(uid, conv_id, user_query, ans)
+            except Exception as e:
+                print("chat history save failed:", e)
+        body = {"answer": ans}
+        if conv_id:
+            body["conversation_id"] = conv_id
+        return JSONResponse(content=body)
 
-    # Format frontend-passed history
-    chat_context = "\n".join([
-        f"User: {turn.query}\nAssistant: {turn.response}"
-        for turn in request.history[-5:]
-        if turn.query and turn.response
-    ])
+    if uid and conv_id:
+        stored = await load_messages(uid, conv_id)
+        chat_context = messages_to_context(stored, context_turns_limit())
+    else:
+        chat_context = "\n".join([
+            f"User: {turn.query}\nAssistant: {turn.response}"
+            for turn in request.history[-5:]
+            if turn.query and turn.response
+        ])
 
     async def stream_response():
+        full_reply: list[str] = []
         try:
             if _get_rag_chain_cached() is None:
                 msg = "Chatbot service is currently unavailable. Please check your API configuration."
+                full_reply.append(msg)
                 yield json.dumps({"response": msg, "done": False}) + "\n"
             else:
                 async for piece in stream_rag_tokens(user_query, chat_context):
+                    full_reply.append(piece)
                     yield json.dumps({"response": piece, "done": False}) + "\n"
         except Exception as e:
             print("RAG error:", e)
-            yield json.dumps(
-                {"response": "Sorry, something went wrong while processing your question.", "done": False}
-            ) + "\n"
+            err = "Sorry, something went wrong while processing your question."
+            full_reply.append(err)
+            yield json.dumps({"response": err, "done": False}) + "\n"
+        finally:
+            if uid and conv_id and full_reply:
+                try:
+                    await append_turn(uid, conv_id, user_query, "".join(full_reply))
+                except Exception as e:
+                    print("chat history save failed:", e)
 
-        yield json.dumps({"response": "", "done": True}) + "\n"
+        yield _streaming_done_line(conv_id)
 
     return StreamingResponse(stream_response(), media_type="application/json")
+
+
+@router.get("/chat/conversations")
+async def chat_list_conversations(current_user: dict = Depends(verify_jwt_token)):
+    uid = user_id_from_payload(current_user)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid user in token")
+    items = await list_conversations(uid)
+    return JSONResponse(content={"conversations": items})
+
+
+@router.get("/chat/conversations/{conversation_id}")
+async def chat_get_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(verify_jwt_token),
+):
+    uid = user_id_from_payload(current_user)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid user in token")
+    doc = await get_conversation(uid, conversation_id.strip())
+    if not doc:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return JSONResponse(content=doc)
+
+
+@router.delete("/chat/conversations/{conversation_id}")
+async def chat_delete_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(verify_jwt_token),
+):
+    uid = user_id_from_payload(current_user)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid user in token")
+    n = await delete_conversation(uid, conversation_id.strip())
+    if n == 0:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return JSONResponse(content={"ok": True})
+
+
+@router.post("/chat/conversations/bulk-delete")
+async def chat_bulk_delete_conversations(
+    request: DeleteConversationsRequest,
+    current_user: dict = Depends(verify_jwt_token),
+):
+    uid = user_id_from_payload(current_user)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid user in token")
+    deleted = await delete_conversations_bulk(uid, request.conversation_ids)
+    return JSONResponse(content={"ok": True, "deleted_count": deleted})
 
 
 @router.post("/chatbot/chat")
