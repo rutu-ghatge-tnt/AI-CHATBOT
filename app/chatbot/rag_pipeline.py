@@ -18,6 +18,7 @@ from app.config import (
     RAG_RETRIEVAL_K,
     RAG_STREAM_BUFFER_MAX,
     RAG_STREAM_RAW_TOKENS,
+    SKINBB_PUBLIC_BASE_URL,
 )
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
@@ -28,15 +29,25 @@ Use **chat history** only for follow-ups and coreference (e.g. "it", "that produ
 
 Use **retrieved context** as the source of truth for product details, ingredients, and platform facts when it is relevant. If the question is about SkinBB navigation, features, or URLs, answer like a product expert using that context.
 
+Context chunk tags: **inventory_product** or **inventory_products** = SkinBB's own catalog. **external_product** = third-party retailers only — never describe those as sold "on BB Shop" or "on our store".
+
+**Links:** Only **inventory_product** chunks may be shared with **Shop deep links** or SkinBB site URLs for buying. For **external_product** chunks, give facts (brand, category, ingredients, price band) only — **never** paste Markdown links or bare URLs to Nykaa, Amazon, other retailers, or scraped listing pages.
+
+If the retrieved context includes any **inventory_product** chunks, you **do** have SkinBB catalog data: summarize and recommend from those with **Shop deep links**. Do **not** say you lack BB Shop inventory or only have external retailers in that case.
+
 If the user asks about "price", "how to use", "benefits", or to "compare" products *without naming products*, assume they mean items from your **previous answer** in chat history; use only those products.
 
 Rules:
+- Do **not** open with "Welcome to SkinBB Metaverse", long self-introductions, or welcome emoji lines unless the user's message is **only** a greeting (hi/hello). For real questions, start with the answer.
 - Expand skincare abbreviations (e.g., HA -> Hyaluronic Acid, BHA -> Beta Hydroxy Acid).
 - Format in **structured Markdown** with real line breaks between sections and bullets.
 - Give user-friendly navigation help, not developer route templates.
 - Do NOT output raw placeholders like `/product/[slug]`, `/community/q/[slug]`, `/help/[slug]` unless the user explicitly asks for route patterns.
 - For dynamic pages, provide the base path and clear action wording (example: "Open `/community`, then tap a question thread").
-- Prefer concrete, clickable links users can use now (for example: `/shop`, `/bbshop`, `/account/orders`, `/account/shelf`, `/help`, `/knowledge-feed`, `/blog`).
+- If the user message includes a **deployment public base URL** block, format SkinBB navigation as **Markdown links** using that base only (example: `[Shop](https://example.com/shop)`). Do not use bare `/path` as the primary link in that case.
+- If there is **no** base URL block, same-origin UIs may use path-style hints (for example: `/shop`, `/bbshop`, `/help`).
+- When the user asks about **BB Shop**, **Shop**, or buying on SkinBB, and the base URL block lists **Preset links**, include at least `[BB Shop](...)` and `[Shop](...)` from that block even if no inventory chunks were retrieved.
+- When retrieved context includes **Shop deep links** for a catalog product, use those **exact** URLs (same query string, including `id` and `size`) in Markdown links when you recommend that product. Do not invent slugs or omit `id`/`size`.
 - Prefer this structure when it fits:
 
 ### ✅ Key Insights
@@ -53,7 +64,7 @@ Rules:
 
 Special cases:
 - Too generic → ask for something more specific.
-- No useful retrieved context for the question → say: Sorry, I couldn't find enough info to answer that properly. Feel free to ask me another skincare-related question!
+- No useful retrieved context for the question → answer briefly; if the user asked about shopping or BB Shop, still give the preset Shop / BB Shop links from the base URL block and suggest they browse or name a product. Do **not** use the long "couldn't find info" boilerplate when a shopping link would help.
 - Off-topic → I'm not sure about that, but I'm here to help with anything skincare-related!
 - Greeting only → 🌟 Welcome to SkinBB Metaverse! I'm SkinSage, your wise virtual skincare assistant. Ask me anything about skincare — ingredients, routines, or products!
 """
@@ -109,19 +120,153 @@ def _format_context(docs: List[Document]) -> str:
     for i, d in enumerate(docs, start=1):
         meta = d.metadata or {}
         src = meta.get("source") or meta.get("module") or ""
-        head = f"[{i}]" + (f" ({src})" if src else "")
+        typ = meta.get("type") or meta.get("mongo_logical") or ""
+        tag = typ or src
+        head = f"[{i}]" + (f" ({tag})" if tag else "")
         parts.append(f"{head}\n{d.page_content}")
     return "\n\n---\n\n".join(parts)
 
 
+def _prefers_skinbb_catalog(q: str) -> bool:
+    """True when the user is asking about SkinBB / BB Shop catalog (not generic skincare trivia)."""
+    ql = (q or "").lower().strip()
+    if not ql:
+        return False
+    compact = "".join(c for c in ql if c.isalnum())
+    if "bbshop" in compact or "bb shop" in ql:
+        return True
+    if "skinbb" in compact or "skin bb" in ql:
+        if any(
+            w in ql
+            for w in (
+                "shop",
+                "buy",
+                "product",
+                "catalog",
+                "store",
+                "inventory",
+                "bb shop",
+                "website",
+                "site",
+            )
+        ):
+            return True
+    if any(
+        phrase in ql
+        for phrase in (
+            "on skinbb",
+            "from skinbb",
+            "our shop",
+            "your shop",
+            "on your site",
+            "on your website",
+        )
+    ):
+        return True
+    return False
+
+
+def _retrieval_query(user_question: str) -> str:
+    """Bias embedding search toward SkinBB inventory when the user clearly means our shop."""
+    q = (user_question or "").strip()
+    if not q:
+        return q
+    ql = q.lower()
+    compact = "".join(ch for ch in ql if ch.isalnum())
+    hints: List[str] = []
+    if "bbshop" in compact or "bb shop" in ql:
+        hints.append(
+            "SkinBB MongoDB products collection catalog inventory BB Shop productName slug listing"
+        )
+    if any(
+        phrase in ql
+        for phrase in (
+            "on skinbb",
+            "skinbb shop",
+            "your shop",
+            "our shop",
+            "on your site",
+            "available on",
+        )
+    ):
+        hints.append("SkinBB shop catalog inventory product listing")
+    if hints:
+        return q + "\n\n" + " ".join(hints)
+    return q
+
+
+def _retrieve_documents(user_question: str) -> List[Document]:
+    """
+    Prefer Mongo catalog chunks when the user clearly means BB Shop / SkinBB store,
+    so external_product Nykaa-style docs do not dominate MMR.
+    """
+    rq = _retrieval_query(user_question)
+    k = max(5, RAG_RETRIEVAL_K)
+    fetch_k = max(k + 2, RAG_FETCH_K)
+    vs = _get_vectorstore()
+
+    if _prefers_skinbb_catalog(user_question):
+        inv_filter: dict[str, str] = {"type": "inventory_product"}
+        try:
+            inv = vs.max_marginal_relevance_search(
+                rq, k=k, fetch_k=fetch_k, filter=inv_filter
+            )
+        except Exception:
+            try:
+                inv = vs.similarity_search(rq, k=k, filter=inv_filter)
+            except Exception:
+                inv = []
+        if inv:
+            return inv
+        try:
+            inv = vs.max_marginal_relevance_search(
+                rq,
+                k=k,
+                fetch_k=fetch_k,
+                filter={"mongo_logical": "inventory_products"},
+            )
+        except Exception:
+            try:
+                inv = vs.similarity_search(
+                    rq, k=k, filter={"mongo_logical": "inventory_products"}
+                )
+            except Exception:
+                inv = []
+        if inv:
+            return inv
+        print(
+            "[rag] Catalog intent (e.g. BB Shop) but no chunks with "
+            "type=inventory_product or mongo_logical=inventory_products. "
+            "Re-run Mongo ingest with the same CHROMA_DB_PATH as this API, or check metadata."
+        )
+
+    return _get_retriever().invoke(rq)
+
+
+def _link_formatting_instructions() -> str:
+    base = (SKINBB_PUBLIC_BASE_URL or "").strip().rstrip("/")
+    if not base:
+        return ""
+    return f"""Deployment public site base URL (required for SkinBB navigation in your reply):
+{base}
+
+Preset links (copy exactly when the user asks about shopping, BB Shop, or where to buy on SkinBB):
+[Shop]({base}/shop)
+[BB Shop]({base}/bbshop)
+
+Use Markdown links for other paths the same way: `[label]({base}<path>)` with `<path>` starting with `/`. Do not use bare `/shop`-style paths as the main navigation when this block is present."""
+
+
 def _build_user_prompt_block(query: str, history: str, context: str) -> str:
     hist = (history or "").strip() or "(none)"
+    link_block = _link_formatting_instructions()
+    link_section = f"{link_block}\n\n" if link_block else ""
     return f"""Retrieved context (use for facts about products and the SkinBB platform when relevant):
 ---
 {context}
 ---
 
-Chat history (follow-ups / coreference only):
+{link_section}Chat history (follow-ups / coreference only):
 ---
 {hist}
 ---
@@ -149,13 +294,12 @@ def _aimessage_chunk_text(chunk) -> str:
 
 
 def _build_graph():
-    retriever = _get_retriever()
     llm = get_claude_llm(streaming=False)
     if llm is None:
         return None
 
     def retrieve(state: RAGState) -> dict[str, Any]:
-        docs = retriever.invoke(state["query"])
+        docs = _retrieve_documents(state["query"])
         return {
             "source_documents": docs,
             "context": _format_context(docs),
@@ -232,8 +376,7 @@ def get_rag_chain():
 
 async def stream_rag_tokens(query: str, history: str) -> AsyncIterator[str]:
     """Retrieve then stream LLM output token-by-token (same prompt contract as the graph)."""
-    retriever = _get_retriever()
-    docs = retriever.invoke(query)
+    docs = _retrieve_documents(query)
     context = _format_context(docs)
     llm = get_claude_llm(streaming=True)
     if llm is None:
