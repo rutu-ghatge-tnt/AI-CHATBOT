@@ -7,6 +7,7 @@ import hashlib
 import re
 from collections import defaultdict
 from typing import Any, Dict, List, Set, Tuple
+from urllib.parse import quote, urlparse
 
 from bson import ObjectId
 from langchain_core.documents import Document
@@ -23,6 +24,7 @@ from app.config import (
     MONGO_RAG_PRODUCTS_COLLECTION,
     MONGO_RAG_VARIANTS_COLLECTION,
     MONGO_URI,
+    SKINBB_PUBLIC_BASE_URL,
 )
 
 MANIFEST_PREFIX = "mongo@"
@@ -145,6 +147,54 @@ def _format_meta_data_entries(meta_data: Any) -> str:
     return "; ".join(lines)
 
 
+def _variant_size_query_value(variant: Dict[str, Any]) -> str:
+    """Value for `size` query param on PDP (e.g. 50ml); empty if unknown."""
+    for key in ("size", "optionSize", "variantSize", "volume", "capacity", "label"):
+        val = variant.get(key)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    opt = variant.get("title") or variant.get("name") or variant.get("optionTitle") or ""
+    if opt and str(opt).strip():
+        return str(opt).strip()
+    return ""
+
+
+def _shop_product_pdp_url(base: str, slug: str, product_id: str, size: str | None) -> str:
+    """Match Next.js PDP pattern: /product/{slug}?id={mongoId}&size=..."""
+    root = (base or "").strip().rstrip("/")
+    if not root or not slug or not product_id:
+        return ""
+    path_slug = quote(str(slug).strip(), safe="-_")
+    qid = quote(str(product_id).strip(), safe="")
+    url = f"{root}/product/{path_slug}?id={qid}"
+    if size and str(size).strip():
+        url += f"&size={quote(str(size).strip(), safe='')}"
+    return url
+
+
+def _shop_deep_link_lines(base: str, slug: str, product_id: str, variants: List[Dict[str, Any]]) -> List[str]:
+    if not base or not slug or not product_id:
+        return []
+    lines = [
+        "Shop deep links (copy these URLs exactly when recommending this product; include id and size query params):",
+    ]
+    seen: Set[str] = set()
+    if variants:
+        for v in variants[:80]:
+            sz = _variant_size_query_value(v)
+            url = _shop_product_pdp_url(base, slug, product_id, sz or None)
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            label = sz or "default variant"
+            lines.append(f"  - {label}: {url}")
+    if not seen:
+        url = _shop_product_pdp_url(base, slug, product_id, None)
+        if url:
+            lines.append(f"  - PDP: {url}")
+    return lines
+
+
 def _format_inventory_product(
     product: Dict[str, Any],
     variants: List[Dict[str, Any]],
@@ -204,10 +254,13 @@ def _format_inventory_product(
     if product.get("isExternalProduct"):
         flags.append("external product")
 
+    pid = _oid_str(product.get("_id"))
+
     lines = [
         "SkinBB shop catalog product (from MongoDB products collection).",
         f"Product name: {_truncate(name, 500)}",
         f"URL slug: {_truncate(slug, 320)}",
+        f"MongoDB product id (use as PDP query id=): {_truncate(pid, 40)}",
         f"SKU: {_truncate(sku, 120)}",
         f"Status: {_truncate(status, 80)}",
         f"Product type: {_truncate(product_type, 200)}",
@@ -259,10 +312,88 @@ def _format_inventory_product(
                 f"  - {_truncate(opt, 200)} | SKU {_truncate(vsku, 120)} | price {vprice} | stock {vstock}"
             )
 
+    base = (SKINBB_PUBLIC_BASE_URL or "").strip().rstrip("/")
+    if base and slug and pid:
+        lines.extend(_shop_deep_link_lines(base, slug, pid, variants))
+
     return "\n".join(lines)
 
 
 PRODUCTS_ACTIVE_QUERY = {"$or": [{"isDeleted": {"$exists": False}}, {"isDeleted": False}]}
+
+
+def _retailer_label_from_url(url: str) -> str:
+    u = (url or "").lower()
+    if "nykaa.com" in u:
+        return "Nykaa"
+    if "amazon." in u or "amzn." in u:
+        return "Amazon"
+    if "flipkart" in u:
+        return "Flipkart"
+    if "purplle" in u:
+        return "Purplle"
+    if "tirabeauty" in u or "tira" in u and "beauty" in u:
+        return "Tira Beauty"
+    if not u.strip():
+        return "unknown retailer"
+    try:
+        host = urlparse(url).netloc.lower().split(":")[0]
+        return host or "third-party site"
+    except Exception:
+        return "third-party site"
+
+
+def _clean_external_legal_blob(text: Any, max_len: int = 350) -> str:
+    """externalproducts often stores repeated manufacturer/importer walls in description."""
+    if text is None or not isinstance(text, str):
+        return ""
+    t = text.replace("\xa0", " ").replace("&nbsp;", " ")
+    t = re.sub(r"\s+", " ", t).strip()
+    if not t:
+        return ""
+    if len(t) > 450 and (t.lower().count("expiry date") > 1 or t.count("Manufacturer") > 2):
+        m = re.search(
+            r"Expiry Date:\s*.{0,60}?\d{1,2}\s+\w+\s+\d{4}",
+            t,
+            re.I,
+        )
+        if m:
+            return _truncate(m.group(0).strip(), 120)
+    return _truncate(t, max_len)
+
+
+def _format_external_keywords_block(kw: Any) -> str:
+    if not isinstance(kw, dict):
+        return ""
+    parts: List[str] = []
+    for key in (
+        "product_type_id",
+        "form",
+        "target_area",
+        "main_category",
+        "subcategory",
+        "price_tier",
+    ):
+        v = kw.get(key)
+        if v is None or v == []:
+            continue
+        if isinstance(v, list):
+            v = ", ".join(str(x) for x in v[:12])
+        s = str(v).strip()
+        if s:
+            parts.append(f"{key}: {s}")
+    for key in (
+        "concerns",
+        "benefits",
+        "functionality",
+        "application",
+        "market_positioning",
+        "functional_categories",
+    ):
+        v = kw.get(key)
+        if isinstance(v, list) and v:
+            parts.append(f"{key}: {', '.join(str(x) for x in v[:18])}")
+    return _truncate("; ".join(parts), 2000)
 
 
 def _variant_product_keys(variant: Dict[str, Any]) -> List[str]:
@@ -277,31 +408,42 @@ def _variant_product_keys(variant: Dict[str, Any]) -> List[str]:
 def _format_external_product(doc: Dict[str, Any]) -> str:
     name = doc.get("name") or doc.get("productName") or ""
     brand = doc.get("brand") or "Unknown"
-    desc = doc.get("description") or ""
+    kw = doc.get("keywords") or {}
+    desc_raw = doc.get("description") or ""
+    desc = _clean_external_legal_blob(desc_raw, max_len=400)
     ing = doc.get("ingredients", "")
     if isinstance(ing, list):
         ing = ", ".join(str(x) for x in ing)
-    price = doc.get("price") or doc.get("mrp") or (doc.get("keywords") or {}).get("mrp")
+    price = doc.get("price") or doc.get("mrp") or kw.get("mrp")
+    if isinstance(price, list) and price:
+        price = price[0]
     cat = (
         doc.get("subcategory")
         or doc.get("category")
         or doc.get("main_category")
-        or (doc.get("keywords") or {}).get("main_category")
+        or kw.get("main_category")
         or ""
     )
     if isinstance(cat, list) and cat:
         cat = cat[0] if isinstance(cat[0], str) else str(cat[0])
     url = doc.get("url") or doc.get("product_url") or doc.get("link") or ""
+    retailer = _retailer_label_from_url(url)
+    kw_line = _format_external_keywords_block(kw)
     lines = [
-        "External / market reference product (for routines and comparisons).",
+        "External retailer product — NOT SkinBB or BB Shop inventory. Use for ingredient/education/comparison "
+        "only. Do not give users links to third-party product pages; SkinSage only shares buy links for "
+        "SkinBB catalog items (Shop deep links).",
+        f"Retailer channel (reference only, no outbound product URL): {retailer}",
         f"Name: {_truncate(name, 500)}",
         f"Brand: {_truncate(brand, 300)}",
-        f"Category: {_truncate(cat, 300)}",
+        f"Category: {_truncate(str(cat), 300)}",
         f"Price / MRP: {price}",
-        f"Description: {_truncate(desc, 4000)}",
-        f"Ingredients (may be partial): {_truncate(ing, 8000)}",
-        f"URL: {_truncate(url, 500)}",
     ]
+    if kw_line:
+        lines.append(f"Product tags (structured): {kw_line}")
+    if desc:
+        lines.append(f"Notes (trimmed from listing text): {desc}")
+    lines.append(f"Ingredients (may be partial): {_truncate(ing, 8000)}")
     return "\n".join(lines)
 
 
@@ -447,6 +589,7 @@ def fetch_mongo_rag_documents(embedded_files: Set[str]) -> Tuple[List[Document],
                 for doc in ecur:
                     eid = _oid_str(doc.get("_id"))
                     text = _format_external_product(doc)
+                    ext_url = doc.get("url") or doc.get("product_url") or doc.get("link") or ""
                     meta = _chunk_metadata_for_chroma(
                         {
                             "source": "mongo",
@@ -454,6 +597,7 @@ def fetch_mongo_rag_documents(embedded_files: Set[str]) -> Tuple[List[Document],
                             "mongo_collection": MONGO_RAG_EXTERNAL_PRODUCTS_COLLECTION,
                             "type": "external_product",
                             "doc_id": eid,
+                            "retailer": _retailer_label_from_url(str(ext_url)),
                         }
                     )
                     out_docs.append(Document(page_content=text, metadata=meta))
