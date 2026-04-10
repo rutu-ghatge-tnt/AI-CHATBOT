@@ -28,9 +28,14 @@ from fastapi import FastAPI
 # Import chatbot router (with error handling for missing dependencies)
 try:
     from app.chatbot.api import router as api_router
-except ImportError as e:
-    print(f"Warning: Could not import chatbot router: {e}")
-    print("   Chatbot API will not be available. This is not critical.")
+except Exception as e:
+    print(
+        f"Warning: Could not load chatbot router ({type(e).__name__}): {e}. "
+        "Chat routes will be missing from the app and Swagger."
+    )
+    import traceback
+
+    traceback.print_exc()
     api_router = None
 
 from app.ai_ingredient_intelligence.api.analyze_inci import router as analyze_inci_router   # ✅ import here

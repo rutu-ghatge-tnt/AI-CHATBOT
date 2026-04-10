@@ -8,7 +8,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from app.ai_ingredient_intelligence.db.mongodb import db
 from app.config import (
     CHAT_HISTORY_CONTEXT_TURNS,
     CHAT_HISTORY_MAX_MESSAGES,
@@ -17,6 +16,10 @@ from app.config import (
 
 
 def _collection():
+    # Import here so `motor`/Mongo client are not required to import `app.chatbot.api`
+    # (avoids skipping the whole chatbot router in main.py if Motor fails at startup).
+    from app.ai_ingredient_intelligence.db.mongodb import db
+
     return db[MONGO_CHAT_CONVERSATIONS_COLLECTION]
 
 
