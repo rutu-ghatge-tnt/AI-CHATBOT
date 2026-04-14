@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import defaultdict
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote, urlparse
 
 from bson import ObjectId
@@ -28,6 +28,7 @@ from app.config import (
 )
 
 MANIFEST_PREFIX = "mongo@"
+_PUBLISH_STATUS_RE = re.compile(r"^publish(ed)?$", re.I)
 
 
 def _chunk_metadata_for_chroma(meta: dict) -> dict:
@@ -50,16 +51,25 @@ def _oid_str(value: Any) -> str:
     return str(value)
 
 
-def _snapshot_hash(coll) -> str:
-    """Cheap change detector: count + latest timestamp or max _id."""
+def _mongo_and(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    if not a:
+        return b
+    if not b:
+        return a
+    return {"$and": [a, b]}
+
+
+def _snapshot_hash(coll, match: Optional[Dict[str, Any]] = None) -> str:
+    """Cheap change detector: count + latest timestamp or max _id (optional `match` for filtered collections)."""
+    q = match or {}
     try:
-        count = coll.count_documents({})
+        count = coll.count_documents(q)
     except Exception:
         count = 0
     last_marker = ""
     for field in ("updatedAt", "updated_at", "modifiedAt", "createdAt", "created_at"):
         try:
-            doc = coll.find_one({field: {"$exists": True}}, sort=[(field, -1)])
+            doc = coll.find_one(_mongo_and(q, {field: {"$exists": True}}), sort=[(field, -1)])
             if doc and doc.get(field) is not None:
                 last_marker = f"{field}:{doc.get(field)!s}"
                 break
@@ -67,7 +77,7 @@ def _snapshot_hash(coll) -> str:
             continue
     if not last_marker:
         try:
-            doc = coll.find_one(sort=[("_id", -1)])
+            doc = coll.find_one(q, sort=[("_id", -1)]) if q else coll.find_one(sort=[("_id", -1)])
             if doc and doc.get("_id") is not None:
                 last_marker = f"_id:{doc['_id']!s}"
         except Exception:
@@ -147,8 +157,8 @@ def _format_meta_data_entries(meta_data: Any) -> str:
     return "; ".join(lines)
 
 
-def _variant_size_query_value(variant: Dict[str, Any]) -> str:
-    """Value for `size` query param on PDP (e.g. 50ml); empty if unknown."""
+def _variant_shadem_query_value(variant: Dict[str, Any]) -> str:
+    """Value for PDP variant query param (`shadem` on current storefront)."""
     for key in ("size", "optionSize", "variantSize", "volume", "capacity", "label"):
         val = variant.get(key)
         if val is not None and str(val).strip():
@@ -159,16 +169,16 @@ def _variant_size_query_value(variant: Dict[str, Any]) -> str:
     return ""
 
 
-def _shop_product_pdp_url(base: str, slug: str, product_id: str, size: str | None) -> str:
-    """Match Next.js PDP pattern: /product/{slug}?id={mongoId}&size=..."""
+def _shop_product_pdp_url(base: str, slug: str, product_id: str, shadem: str | None) -> str:
+    """Match storefront PDP pattern: /product/{slug}?id={mongoId}&shadem=..."""
     root = (base or "").strip().rstrip("/")
     if not root or not slug or not product_id:
         return ""
     path_slug = quote(str(slug).strip(), safe="-_")
     qid = quote(str(product_id).strip(), safe="")
     url = f"{root}/product/{path_slug}?id={qid}"
-    if size and str(size).strip():
-        url += f"&size={quote(str(size).strip(), safe='')}"
+    if shadem and str(shadem).strip():
+        url += f"&shadem={quote(str(shadem).strip(), safe='')}"
     return url
 
 
@@ -176,12 +186,12 @@ def _shop_deep_link_lines(base: str, slug: str, product_id: str, variants: List[
     if not base or not slug or not product_id:
         return []
     lines = [
-        "Shop deep links (copy these URLs exactly when recommending this product; include id and size query params):",
+        "Shop deep links (copy these URLs exactly when recommending this product; include id and variant query params):",
     ]
     seen: Set[str] = set()
     if variants:
         for v in variants[:80]:
-            sz = _variant_size_query_value(v)
+            sz = _variant_shadem_query_value(v)
             url = _shop_product_pdp_url(base, slug, product_id, sz or None)
             if not url or url in seen:
                 continue
@@ -193,6 +203,19 @@ def _shop_deep_link_lines(base: str, slug: str, product_id: str, variants: List[
         if url:
             lines.append(f"  - PDP: {url}")
     return lines
+
+
+def _inventory_brand_display(product: Dict[str, Any], brand_ref: Any) -> str:
+    """Human brand string for RAG text; avoids embedding-only ObjectIds with no searchable name."""
+    for key in ("brandName", "brand_name", "brandTitle", "brand_title", "vendorName", "vendor_name"):
+        v = product.get(key)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    if isinstance(brand_ref, dict) and brand_ref.get("name"):
+        return str(brand_ref["name"]).strip()
+    if isinstance(brand_ref, ObjectId):
+        return f"(brand reference id: {_oid_str(brand_ref)})"
+    return str(brand_ref).strip() if brand_ref else ""
 
 
 def _format_inventory_product(
@@ -207,12 +230,7 @@ def _format_inventory_product(
     product_type = product.get("productType") or ""
 
     brand_ref = product.get("brand")
-    if isinstance(brand_ref, ObjectId):
-        brand_line = f"(brand reference id: {_oid_str(brand_ref)})"
-    elif isinstance(brand_ref, dict) and brand_ref.get("name"):
-        brand_line = str(brand_ref["name"])
-    else:
-        brand_line = str(brand_ref) if brand_ref else ""
+    brand_line = _inventory_brand_display(product, brand_ref)
 
     marketed_by = product.get("marketedBy") or ""
     about_brand = _strip_html(product.get("aboutTheBrand") or "")
@@ -255,11 +273,14 @@ def _format_inventory_product(
         flags.append("external product")
 
     pid = _oid_str(product.get("_id"))
+    # PDP route is /product/[slug]; many Next builds resolve the document from ?id=.
+    # If catalog slug is empty, use product id as path segment so deep links still ingest.
+    pdp_path_slug = (slug or "").strip() or pid
 
     lines = [
-        "SkinBB shop catalog product (from MongoDB products collection).",
+        "SkinBB shop catalog product (MongoDB `products` collection, published/live status only in this index).",
         f"Product name: {_truncate(name, 500)}",
-        f"URL slug: {_truncate(slug, 320)}",
+        f"URL slug: {_truncate(slug, 320)}" + (" (empty in DB; PDP path uses Mongo id)" if not (slug or "").strip() and pid else ""),
         f"MongoDB product id (use as PDP query id=): {_truncate(pid, 40)}",
         f"SKU: {_truncate(sku, 120)}",
         f"Status: {_truncate(status, 80)}",
@@ -313,13 +334,32 @@ def _format_inventory_product(
             )
 
     base = (SKINBB_PUBLIC_BASE_URL or "").strip().rstrip("/")
-    if base and slug and pid:
-        lines.extend(_shop_deep_link_lines(base, slug, pid, variants))
+    if base and pdp_path_slug and pid and _product_eligible_for_shop_links(product):
+        lines.extend(_shop_deep_link_lines(base, pdp_path_slug, pid, variants))
 
     return "\n".join(lines)
 
 
 PRODUCTS_ACTIVE_QUERY = {"$or": [{"isDeleted": {"$exists": False}}, {"isDeleted": False}]}
+
+# RAG inventory: only `products` rows that are live in shop (not drafts) and not external-only rows.
+PRODUCTS_PUBLISHED_QUERY: Dict[str, Any] = {
+    "$and": [
+        PRODUCTS_ACTIVE_QUERY,
+        {"status": {"$regex": r"^publish(ed)?$", "$options": "i"}},
+        {"$nor": [{"isExternalProduct": True}]},
+    ]
+}
+
+
+def _product_eligible_for_shop_links(product: Dict[str, Any]) -> bool:
+    """Shop deep links only for published, in-house catalog rows."""
+    if product.get("isExternalProduct") is True:
+        return False
+    st = product.get("status")
+    if st is None or not str(st).strip():
+        return False
+    return bool(_PUBLISH_STATUS_RE.match(str(st).strip()))
 
 
 def _retailer_label_from_url(url: str) -> str:
@@ -504,11 +544,18 @@ def fetch_mongo_rag_documents(embedded_files: Set[str]) -> Tuple[List[Document],
 
     db = client[DB_NAME]
 
-    def snapshot_unchanged(logical: str, coll_a, coll_b=None) -> bool:
+    def snapshot_unchanged(
+        logical: str,
+        coll_a,
+        coll_b=None,
+        *,
+        match_a: Optional[Dict[str, Any]] = None,
+        match_b: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """True if manifest already has the current snapshot for this logical group."""
-        h1 = _snapshot_hash(coll_a)
+        h1 = _snapshot_hash(coll_a, match_a)
         if coll_b is not None:
-            h2 = _snapshot_hash(coll_b)
+            h2 = _snapshot_hash(coll_b, match_b)
             combined = hashlib.sha256(f"{h1}|{h2}".encode()).hexdigest()[:28]
         else:
             combined = h1
@@ -524,10 +571,10 @@ def fetch_mongo_rag_documents(embedded_files: Set[str]) -> Tuple[List[Document],
             col_p = col_v = None
 
         if col_p is not None:
-            if snapshot_unchanged("inventory", col_p, col_v):
+            if snapshot_unchanged("inventory", col_p, col_v, match_a=PRODUCTS_PUBLISHED_QUERY):
                 pass  # unchanged
             else:
-                h1 = _snapshot_hash(col_p)
+                h1 = _snapshot_hash(col_p, PRODUCTS_PUBLISHED_QUERY)
                 h2 = _snapshot_hash(col_v) if col_v is not None else ""
                 snap = hashlib.sha256(f"{h1}|{h2}".encode()).hexdigest()[:28]
                 new_k = _manifest_key("inventory", snap)
@@ -546,7 +593,7 @@ def fetch_mongo_rag_documents(embedded_files: Set[str]) -> Tuple[List[Document],
                             variant_map[pk].append(vd)
 
                 plim = MONGO_RAG_MAX_DOCS_PER_COLLECTION or 0
-                pcur = col_p.find(PRODUCTS_ACTIVE_QUERY)
+                pcur = col_p.find(PRODUCTS_PUBLISHED_QUERY)
                 if plim:
                     pcur = pcur.limit(plim)
                 for p in pcur:
@@ -562,6 +609,10 @@ def fetch_mongo_rag_documents(embedded_files: Set[str]) -> Tuple[List[Document],
                             "slug": p.get("slug") or "",
                             "sku": p.get("sku") or p.get("easyEcomSku") or "",
                             "product_name": p.get("productName") or "",
+                            "brand_label": (
+                                (p.get("brandName") or p.get("brand_name") or "")
+                                or _inventory_brand_display(p, p.get("brand"))
+                            )[:200],
                         }
                     )
                     out_docs.append(Document(page_content=text, metadata=meta))
