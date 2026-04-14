@@ -49,7 +49,7 @@ Use **retrieved context** as the source of truth for product details, ingredient
 
 Context chunk tags: **inventory_product** or **inventory_products** = SkinBB's own catalog. **external_product** = third-party retailers only — never describe those as sold "on BB Shop" or "on our store".
 
-**Links:** Only **inventory_product** chunks may be shared with **Shop deep links** or SkinBB site URLs for buying. For **external_product** chunks, give facts (brand, category, ingredients, price band) only — **never** paste Markdown links or bare URLs to Nykaa, Amazon, other retailers, or scraped listing pages.
+**Links:** Only **inventory_product** chunks (from the **`products`** Mongo collection, already **published** in this index) may be shared with **Shop deep links** or SkinBB site URLs for buying. For **external_product** chunks (separate **`externalproducts`** collection / third-party catalog), give facts (brand, category, ingredients, price band) only — **never** SkinBB `/product` links, **Shop deep links**, or any SkinBB shop URL that implies buying that item on SkinBB.
 
 If the retrieved context includes any **inventory_product** chunks, you **do** have SkinBB catalog data: summarize and recommend from those with **Shop deep links**. Do **not** say you lack BB Shop inventory or only have external retailers in that case.
 
@@ -65,7 +65,8 @@ Rules:
 - If the user message includes a **deployment public base URL** block, format SkinBB navigation as **Markdown links** using that base only (example: `[Shop](https://example.com/shop)`). Do not use bare `/path` as the primary link in that case.
 - If there is **no** base URL block, same-origin UIs may use path-style hints (for example: `/shop`, `/bbshop`, `/help`).
 - When the user asks about **BB Shop**, **Shop**, or buying on SkinBB, and the base URL block lists **Preset links**, include at least `[BB Shop](...)` and `[Shop](...)` from that block even if no inventory chunks were retrieved.
-- When retrieved context includes **Shop deep links** for a catalog product, use those **exact** URLs (same query string, including `id` and `size`) in Markdown links when you recommend that product. Do not invent slugs or omit `id`/`size`.
+- When retrieved context includes **Shop deep links** for a catalog product, use those **exact** URLs (same path `/product/...`, same query string, including `id` and variant params such as `shadem`) in Markdown links when you recommend that product. Do not invent slugs or omit/rename query params.
+- **Never** invent product PDPs as `/bbshop?id=...` or `/shop?id=...` with a **text slug** in `id` — those are **listing** pages, not product detail pages, and `id=` on those routes is **not** the same as the catalog PDP `id` (a **24-character hex** MongoDB ObjectId from **Shop deep links**). If you have no **Shop deep link** line for an item, do not fabricate a buy URL; use preset `[BB Shop]` / `[Shop]` browsing links only.
 - Prefer this structure when it fits:
 
 ### ✅ Key Insights
@@ -146,6 +147,62 @@ def _format_context(docs: List[Document]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
+def _shop_product_discovery_intent(ql: str) -> bool:
+    """
+    True when the user is clearly asking for product picks (not ingredient science trivia).
+    Used so retrieval searches **inventory_product** chunks; otherwise MMR can drown
+    catalog rows with external_product or unrelated docs (e.g. brand + 'suggest products').
+    """
+    verbs = (
+        "suggest",
+        "recommend",
+        "show me",
+        "give me",
+        "looking for",
+        "what should i get",
+        "what can i get",
+        "what should i buy",
+        "what can i buy",
+        "need a",
+        "need an",
+        "need some",
+        "want a",
+        "want an",
+        "want some",
+        "which ",
+        "best ",
+        "top ",
+    )
+    productish = (
+        "product",
+        "products",
+        "skincare",
+        "moisturizer",
+        "moisturiser",
+        "cleanser",
+        "serum",
+        "sunscreen",
+        "toner",
+        "cream",
+        "lotion",
+        "routine",
+        "kit",
+        "combo",
+        "patch",
+        "patches",
+        "acne patch",
+        "spot patch",
+        "pimple patch",
+    )
+    if any(v in ql for v in verbs) and any(p in ql for p in productish):
+        return True
+    if ("daily use" in ql or "everyday" in ql or "daily routine" in ql) and any(
+        p in ql for p in productish
+    ):
+        return True
+    return False
+
+
 def _prefers_skinbb_catalog(q: str) -> bool:
     """True when the user is asking about SkinBB / BB Shop catalog (not generic skincare trivia)."""
     ql = (q or "").lower().strip()
@@ -182,6 +239,8 @@ def _prefers_skinbb_catalog(q: str) -> bool:
         )
     ):
         return True
+    if _shop_product_discovery_intent(ql):
+        return True
     return False
 
 
@@ -209,6 +268,10 @@ def _retrieval_query(user_question: str) -> str:
         )
     ):
         hints.append("SkinBB shop catalog inventory product listing")
+    if _shop_product_discovery_intent(ql):
+        hints.append(
+            "SkinBB MongoDB products collection BB Shop catalog inventory brand productName slug"
+        )
     if hints:
         return q + "\n\n" + " ".join(hints)
     return q
