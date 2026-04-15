@@ -1,7 +1,7 @@
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query
 
-from app.ai_ingredient_intelligence.db.mongodb import db
+from app.hl_engine.db import hl_db
 from app.hl_engine.models.personalized_alert import PersonalizedAlertResponse
 from app.hl_engine.models.profile import (
     AgeBracket,
@@ -18,7 +18,7 @@ from app.hl_engine.services.scoring_engine import calculate_skin_score
 from app.hl_engine.services.weather_fetcher import fetch_environmental_data
 
 router = APIRouter(prefix="/hl/v2", tags=["HLHP Personalized Alerts"])
-user_details_col = db["user_details"]
+user_details_col = hl_db["user_details"]
 
 
 _SKIN_CONCERN_MAP = {
