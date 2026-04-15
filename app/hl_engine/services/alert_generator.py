@@ -78,12 +78,12 @@ def _build_compact_headline(
         risk_part += f" with pressure from {secondary}"
 
     headline = (
-        f"{score.band.value} ({score.total}/100): {risk_part} in {env.location_name}. "
-        f"Priority now: {first_step_action}."
+        f"{risk_part.capitalize()} in {env.location_name}. "
+        f"Do now: {first_step_action}."
     )
 
     if health_advisory:
-        headline += " Follow health advisory."
+        headline += " Health advisory active."
 
     return headline
 
