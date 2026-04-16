@@ -77,10 +77,7 @@ def _build_compact_headline(
     if secondary:
         risk_part += f" with pressure from {secondary}"
 
-    headline = (
-        f"{risk_part.capitalize()} in {env.location_name}. "
-        f"Do now: {first_step_action}."
-    )
+    headline = f"{risk_part.capitalize()}. {first_step_action}."
 
     if health_advisory:
         headline += " Health advisory active."
@@ -121,6 +118,7 @@ def generate_alert(env: EnvironmentalData, score: SkinScore) -> AlertResponse:
             health_advisory=health_advisory,
             first_step_action=steps[0].action,
         )
+        compact_headline = f"{icon} {compact_headline}"
 
     if score.band in (SeverityBand.CODE_RED, SeverityBand.HOSTILE):
         expand_cta = "See full protection plan ->"
