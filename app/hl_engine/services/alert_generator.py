@@ -77,10 +77,7 @@ def _build_compact_headline(
     if secondary:
         risk_part += f" with pressure from {secondary}"
 
-    headline = f"{risk_part.capitalize()}. {first_step_action}."
-
-    if health_advisory:
-        headline += " Health advisory active."
+    headline = f"{risk_part[0].upper() + risk_part[1:]}. {first_step_action}."
 
     return headline
 
