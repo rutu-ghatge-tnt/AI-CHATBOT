@@ -17,6 +17,28 @@ from app.label_looker.text_extract import extract_first_json_object
 GENERIC_ANALYSIS_FAIL = "There's no data available right now. Please try again later."
 
 
+def _normalize_analysis_payload(parsed: dict[str, Any], fallback_ingredients: Any) -> tuple[dict[str, Any], list[Any]]:
+    """
+    Accept both payload styles:
+    1) { analyticDetail, ingredients } (older contract)
+    2) prompt-driven object with keys like opinion/keyIngredients/.../ingredientCategorization
+    """
+    analytic = parsed.get("analyticDetail")
+    ing_out = parsed.get("ingredients")
+    if analytic is not None and ing_out is not None:
+        return analytic, ing_out if isinstance(ing_out, list) else [ing_out]
+
+    # New prompt shape: store full JSON as analyticDetail and keep ingredients list from request/scan.
+    analytic = parsed
+    if isinstance(fallback_ingredients, list):
+        ing_list = fallback_ingredients
+    elif fallback_ingredients is None:
+        ing_list = []
+    else:
+        ing_list = [fallback_ingredients]
+    return analytic, ing_list
+
+
 async def ingredient_analysis(*, body: dict[str, Any]) -> dict[str, Any]:
     scan_id = body.get("scanId")
     if not scan_id:
@@ -61,10 +83,7 @@ async def ingredient_analysis(*, body: dict[str, Any]) -> dict[str, Any]:
         )
         raw = "".join(getattr(b, "text", "") for b in msg.content)
         parsed = extract_first_json_object(raw)
-        analytic = parsed.get("analyticDetail")
-        ing_out = parsed.get("ingredients")
-        if analytic is None or ing_out is None:
-            raise ValueError("Model JSON missing analyticDetail or ingredients")
+        analytic, ing_out = _normalize_analysis_payload(parsed, ingredients)
         await scan_coll.update_one(
             {"_id": oid},
             {
