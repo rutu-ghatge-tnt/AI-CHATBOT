@@ -22,11 +22,12 @@ def ingredient_analysis_user_message(
     specific_type: str | None,
     main_benefit: str | None,
     langauge: str,
+    personalization_context: str | None = None,
 ) -> str:
     st = specific_type or ""
     mb = main_benefit or ""
     lg = langauge or "English"
-    return f"""You must respond with ONLY valid JSON. Do not include any explanatory text before or after the JSON.
+    base = f"""You must respond with ONLY valid JSON. Do not include any explanatory text before or after the JSON.
 Analyze the following {st} formula for {mb}. Generate a response in {lg}. Retain ingredient names in {lg} and structure as follows:
  
         1.  Opinion on product efficacy in minimum 30 words. => with key "opinion" for json object       
@@ -56,6 +57,9 @@ Analyze the following {st} formula for {mb}. Generate a response in {lg}. Retain
         Ingredient list:  {ingredients_text}
         
         IMPORTANT: Return ONLY valid JSON. Start your response with {{ and end with }}. Do not include any text before or after the JSON object."""
+    if personalization_context:
+        base += f"\n\nPersonalization Context (apply for matching recommendations):\n{personalization_context}"
+    return base
 
 def prompt_ai_to_get_ingredient_details(
     *,

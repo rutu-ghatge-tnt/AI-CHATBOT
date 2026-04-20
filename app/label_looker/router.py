@@ -6,10 +6,8 @@ from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
 
 from app.label_looker import admin_service, analysis_service, ingredient_service, scan_service
 from app.label_looker.deps_auth import (
-    authenticate_app_user,
     authorize_scan_overview_view,
     panel_auth_only,
-    scanner_auth_sso,
 )
 from app.label_looker.responses import api_success
 from app.label_looker.upload_utils import save_scan_image, validate_upload
@@ -39,8 +37,7 @@ def _scanner_routes(auth_user: Callable[..., Coroutine[Any, Any, dict[str, Any]]
         body: dict[str, Any] = Body(...),
         user: dict[str, Any] = Depends(auth_user),
     ):
-        _ = user
-        data = await analysis_service.ingredient_analysis(body=body)
+        data = await analysis_service.ingredient_analysis(body=body, user=user)
         return api_success(data, message="Success")
 
     @r.post("/ingredient")
@@ -107,3 +104,28 @@ def admin_router() -> APIRouter:
         return api_success(data, message="Success")
 
     return a
+
+
+def public_text_routes(
+    auth_optional: Callable[..., Coroutine[Any, Any, dict[str, Any] | None]],
+    auth_required: Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+) -> APIRouter:
+    r = APIRouter()
+
+    @r.post("/text-ingredients-analysis")
+    async def text_ingredients_analysis(
+        body: dict[str, Any] = Body(...),
+        user: dict[str, Any] | None = Depends(auth_optional),
+    ):
+        data = await analysis_service.ingredient_analysis_from_text(body=body, user=user)
+        return api_success(data, message="Success")
+
+    @r.post("/profile-validation/submit")
+    async def profile_validation_submit(
+        body: dict[str, Any] = Body(...),
+        user: dict[str, Any] = Depends(auth_required),
+    ):
+        data = await analysis_service.submit_profile_validation(body=body, user=user)
+        return api_success(data, message="Success")
+
+    return r

@@ -22,6 +22,8 @@ class LabelLookerSettings:
     coll_skin_benefit: str
     coll_naturality: str
     coll_user: str
+    coll_user_details: str
+    coll_products: str
     aws_bucket_name: str
     aws_region: str
     aws_scan_images_prefix: str
@@ -71,6 +73,8 @@ def get_label_looker_settings() -> LabelLookerSettings:
         coll_skin_benefit=os.getenv("LABEL_LOOKER_SKIN_BENEFIT_COLLECTION", "skin_benefits"),
         coll_naturality=os.getenv("LABEL_LOOKER_NATURALITY_COLLECTION", "naturalities"),
         coll_user=os.getenv("LABEL_LOOKER_USER_COLLECTION", "users"),
+        coll_user_details=os.getenv("LABEL_LOOKER_USER_DETAILS_COLLECTION", "user_details"),
+        coll_products=os.getenv("LABEL_LOOKER_PRODUCTS_COLLECTION", "products"),
         aws_bucket_name=os.getenv("AWS_BUCKET_NAME", "sbb-dev-media").strip(),
         aws_region=os.getenv("AWS_REGION", "ap-south-1").strip(),
         aws_scan_images_prefix=os.getenv("AWS_SCAN_IMAGES_PREFIX", "product-scan-images/").strip(),

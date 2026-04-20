@@ -55,6 +55,14 @@ async def scanner_auth_sso(authorization: Optional[str] = Header(None)) -> dict[
     return user
 
 
+async def scanner_auth_sso_optional(
+    authorization: Optional[str] = Header(None),
+) -> Optional[dict[str, Any]]:
+    if not authorization:
+        return None
+    return await scanner_auth_sso(authorization=authorization)
+
+
 async def authenticate_app_user(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     """V1 app user: verify-app-token → { data: { user, role } }."""
     token = _bearer(authorization)
@@ -74,6 +82,15 @@ async def authenticate_app_user(authorization: Optional[str] = Header(None)) -> 
         raise ScannerApiError(401, "Invalid app token payload")
     user["_label_looker_role"] = data.get("role")
     return user
+
+
+async def authenticate_app_user_optional(
+    authorization: Optional[str] = Header(None),
+) -> Optional[dict[str, Any]]:
+    """Optional app auth for public endpoints with enhanced mode."""
+    if not authorization:
+        return None
+    return await authenticate_app_user(authorization=authorization)
 
 
 async def verify_jwt_panel(authorization: Optional[str] = Header(None)) -> PanelUserContext:
