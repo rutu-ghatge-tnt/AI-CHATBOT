@@ -118,6 +118,14 @@ app = FastAPI(
     openapi_url="/openapi.json"  # OpenAPI JSON schema - explicitly enabled
 )
 
+# Label Looker (productIngredientScan) — see migration-packet/README-migration.md
+try:
+    from app.label_looker.bootstrap import install_label_looker
+
+    install_label_looker(app)
+except Exception as _ll_exc:
+    print(f"Warning: Label Looker not installed ({type(_ll_exc).__name__}): {_ll_exc}")
+
 # Custom OpenAPI schema configuration
 def custom_openapi():
     """

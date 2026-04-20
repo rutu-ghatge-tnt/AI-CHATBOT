@@ -77,6 +77,9 @@ rapidfuzz>=3.0.0
 # JWT Authentication
 PyJWT>=2.8.0
 
+# Label Looker (HTML sanitize for AI-authored articles)
+bleach>=6.1.0
+
 # Excel file handling
 openpyxl>=3.1.0
 
