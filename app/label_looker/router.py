@@ -128,4 +128,12 @@ def public_text_routes(
         data = await analysis_service.submit_profile_validation(body=body, user=user)
         return api_success(data, message="Success")
 
+    @r.post("/profile-validation/status")
+    async def profile_validation_status(
+        body: dict[str, Any] = Body(...),
+        user: dict[str, Any] = Depends(auth_required),
+    ):
+        data = await analysis_service.profile_validation_status(body=body, user=user)
+        return api_success(data, message="Success")
+
     return r

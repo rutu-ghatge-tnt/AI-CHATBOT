@@ -601,6 +601,65 @@ async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any
     }
 
 
+async def profile_validation_status(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
+    """
+    Check whether required profile fields are available for this user/mode,
+    and whether prompt should appear now based on scan cadence.
+    """
+    user_id = _extract_user_id(user)
+    if user_id is None:
+        raise ScannerApiError(401, "Please login to check profile validation status")
+
+    requested_user_id = body.get("userId")
+    if requested_user_id is not None and str(requested_user_id).strip() and str(requested_user_id) != str(user_id):
+        raise ScannerApiError(403, "Forbidden: userId mismatch")
+
+    s = get_label_looker_settings()
+    from app.label_looker.db import get_scanner_db
+
+    db = get_scanner_db()
+    user_details_coll: AsyncIOMotorCollection = db[s.coll_user_details]
+    products_coll: AsyncIOMotorCollection = db[s.coll_products]
+    details = await user_details_coll.find_one({"userId": user_id}) or {"userId": user_id}
+    product = await _fetch_product_by_id(products_coll=products_coll, product_id=body.get("productId"))
+
+    resolved_mode = _resolve_analysis_mode(
+        body=body,
+        product=product,
+        specific_type=body.get("specificType"),
+        main_benefit=body.get("mainBenefit"),
+    )
+    mode_state = await _upsert_validation_state(
+        user_details_coll=user_details_coll,
+        user_id=user_id,
+        mode=resolved_mode,
+        bump_scan_count=False,
+        details_doc=details,
+    )
+    prompt = _build_prompt_payload(mode=resolved_mode, mode_state=mode_state, details=details)
+
+    final_values = dict(mode_state.get("finalValues") or {})
+    missing_fields: list[str] = []
+    for f in _required_fields_for_mode(resolved_mode):
+        if f in final_values:
+            continue
+        val = _current_field_value(details, resolved_mode, f)
+        if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, list) and len(val) == 0):
+            missing_fields.append(f)
+
+    return {
+        "userId": str(user_id),
+        "mode": resolved_mode,
+        "requiredFields": _required_fields_for_mode(resolved_mode),
+        "missingFields": missing_fields,
+        "hasRequiredData": len(missing_fields) == 0,
+        "scanCount": int(mode_state.get("scanCount") or 0),
+        "finalized": bool(mode_state.get("finalized")),
+        "shouldPromptNow": bool(prompt.get("shouldPrompt")),
+        "prompt": prompt,
+    }
+
+
 async def put_feedback(*, body: dict[str, Any]) -> None:
     scan_id = body.get("scanId")
     if not scan_id:
