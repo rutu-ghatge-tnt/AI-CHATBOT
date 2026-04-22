@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Any
 
 from anthropic import AsyncAnthropic
@@ -38,23 +39,49 @@ def _infer_mode_from_product(product: dict[str, Any] | None) -> str | None:
     pname = str(product.get("productName") or "").lower()
     if "lip" in ptype or "lip" in pname:
         return "lipcare"
-    if isinstance(product.get("lipTypes"), list) and len(product.get("lipTypes") or []) > 0:
+    if _product_list_values(product, "lipTypes", "lipType"):
         return "lipcare"
-    if isinstance(product.get("lipConcerns"), list) and len(product.get("lipConcerns") or []) > 0:
+    if _product_list_values(product, "lipConcerns"):
         return "lipcare"
-    if isinstance(product.get("hairTypes"), list) and len(product.get("hairTypes") or []) > 0:
+    if _product_list_values(product, "hairTypes", "hairType"):
         return "haircare"
-    if isinstance(product.get("hairConcerns"), list) and len(product.get("hairConcerns") or []) > 0:
+    if _product_list_values(product, "hairConcerns"):
         return "haircare"
-    if isinstance(product.get("skinTypes"), list) and len(product.get("skinTypes") or []) > 0:
+    if _product_list_values(product, "skinTypes", "skinType"):
         return "skincare"
-    if isinstance(product.get("skinConcerns"), list) and len(product.get("skinConcerns") or []) > 0:
+    if _product_list_values(product, "skinConcerns"):
         return "skincare"
     if "hair" in ptype or "scalp" in ptype:
         return "haircare"
     if "skin" in ptype or "face" in ptype:
         return "skincare"
     return None
+
+
+def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str]:
+    if not product:
+        return []
+    out: list[str] = []
+    for key in keys:
+        raw = product.get(key)
+        if not isinstance(raw, list):
+            continue
+        for item in raw:
+            if isinstance(item, str) and item.strip():
+                out.append(item.strip())
+                continue
+            if not isinstance(item, dict):
+                continue
+            val = item.get("value")
+            label = item.get("label")
+            name = item.get("name")
+            if isinstance(val, str) and val.strip():
+                out.append(val.strip())
+            elif isinstance(label, str) and label.strip():
+                out.append(label.strip())
+            elif isinstance(name, str) and name.strip():
+                out.append(name.strip())
+    return list(dict.fromkeys(out))
 
 
 async def _fetch_product_by_id(
@@ -266,8 +293,10 @@ def _normalize_analysis_payload(parsed: dict[str, Any], fallback_ingredients: An
 
 
 def _ingredient_list_from_text(raw: str) -> list[str]:
+    cleaned = re.sub(r"<[^>]+>", " ", str(raw))
+    cleaned = cleaned.replace("&amp;", "&")
     parts = []
-    for token in raw.replace("\n", ",").replace(";", ",").split(","):
+    for token in cleaned.replace("\n", ",").replace(";", ",").split(","):
         t = token.strip()
         if t:
             parts.append(t)
@@ -308,6 +337,27 @@ def _build_personalization_context(details: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _ensure_profile_match_insights(analytic: dict[str, Any], *, personalized: bool) -> dict[str, Any]:
+    if not personalized:
+        return analytic
+    out = dict(analytic or {})
+    pmi = out.get("profileMatchInsights")
+    if not isinstance(pmi, dict):
+        pmi = {}
+    pmi.setdefault("worksForUser", "partial")
+    pmi.setdefault("matchScore", 50)
+    pmi.setdefault(
+        "summary",
+        "Profile-based match generated. Please review benefits, cautions, and usage guidance for this user.",
+    )
+    pmi.setdefault("whyItWorks", [])
+    pmi.setdefault("possibleRisks", [])
+    pmi.setdefault("forThisUserBestUse", [])
+    pmi.setdefault("betterAlternativeDirection", [])
+    out["profileMatchInsights"] = pmi
+    return out
+
+
 async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
     scan_id = body.get("scanId")
     if not scan_id:
@@ -346,12 +396,20 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
         main_benefit = ", ".join(str(x) for x in b if str(x).strip()) if b else main_benefit
     language = body.get("langauge") or DEFAULT_LANGUAGE
 
+    personalized = bool(body.get("personalizedMatching"))
+    if personalized and user is None:
+        raise ScannerApiError(401, "Please login to use personalized matching")
+    user_id = _extract_user_id(user or {})
+    details_doc = await user_details_coll.find_one({"userId": user_id}) if user_id is not None else None
+    personalization_context = _build_personalization_context(details_doc or {}) if personalized else None
+
     text_block = "\n".join(str(x) for x in ingredients) if isinstance(ingredients, list) else str(ingredients)
     user_msg = ingredient_analysis_user_message(
         ingredients_text=text_block,
         specific_type=specific_type,
         main_benefit=main_benefit,
         langauge=str(language),
+        personalization_context=personalization_context,
     )
 
     client = AsyncAnthropic(api_key=s.anthropic_api_key)
@@ -364,19 +422,20 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
         raw = "".join(getattr(b, "text", "") for b in msg.content)
         parsed = extract_first_json_object(raw)
         analytic, ing_out = _normalize_analysis_payload(parsed, ingredients)
+        analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
         await scan_coll.update_one(
             {"_id": oid},
             {
                 "$set": {
                     "analyticDetail": analytic,
                     "ingredients": ing_out,
+                    "personalizedMatching": personalized,
                     "ingredientAnalysisError": None,
                     "updatedAt": datetime.now(),
                 }
             },
         )
         profile_validation = None
-        user_id = _extract_user_id(user or {})
         if user_id is not None:
             mode = _resolve_analysis_mode(
                 body=body,
@@ -384,7 +443,7 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
                 specific_type=specific_type,
                 main_benefit=main_benefit,
             )
-            details_doc = await user_details_coll.find_one({"userId": user_id}) or {}
+            details_doc = details_doc or {}
             mode_state = await _upsert_validation_state(
                 user_details_coll=user_details_coll,
                 user_id=user_id,
@@ -424,12 +483,13 @@ async def ingredient_analysis_from_text(
     ingredients = body.get("ingredients")
     ingredients_text = body.get("ingredientsText")
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=body.get("productId"))
+    product_ing_list = _ingredients_from_product(product)
     if isinstance(ingredients, list) and ingredients:
         ing_list = [str(x).strip() for x in ingredients if str(x).strip()]
+    elif product_ing_list:
+        ing_list = product_ing_list
     elif isinstance(ingredients_text, str) and ingredients_text.strip():
         ing_list = _ingredient_list_from_text(ingredients_text)
-    elif product:
-        ing_list = _ingredients_from_product(product)
     else:
         raise ScannerApiError(400, "ingredients or ingredientsText is required")
 
@@ -498,6 +558,7 @@ async def ingredient_analysis_from_text(
         raw = "".join(getattr(b, "text", "") for b in msg.content)
         parsed = extract_first_json_object(raw)
         analytic, ing_out = _normalize_analysis_payload(parsed, ing_list)
+        analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
         await scan_coll.update_one(
             {"_id": scan_id},
             {

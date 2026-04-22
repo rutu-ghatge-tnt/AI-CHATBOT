@@ -58,7 +58,22 @@ Analyze the following {st} formula for {mb}. Generate a response in {lg}. Retain
         
         IMPORTANT: Return ONLY valid JSON. Start your response with {{ and end with }}. Do not include any text before or after the JSON object."""
     if personalization_context:
-        base += f"\n\nPersonalization Context (apply for matching recommendations):\n{personalization_context}"
+        base += f"""
+
+Personalization Context (apply for matching recommendations):
+{personalization_context}
+
+When personalization context is present, include this key in the same JSON:
+"profileMatchInsights": {{
+  "worksForUser": "yes|no|partial",
+  "matchScore": 0-100,
+  "summary": "2-4 sentence decision on whether product suits this user profile",
+  "whyItWorks": ["..."],
+  "possibleRisks": ["..."],
+  "forThisUserBestUse": ["..."],
+  "betterAlternativeDirection": ["..."]
+}}
+"""
     return base
 
 def prompt_ai_to_get_ingredient_details(
