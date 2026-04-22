@@ -84,6 +84,53 @@ def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str
     return list(dict.fromkeys(out))
 
 
+def _normalize_object_id(value: Any) -> ObjectId | None:
+    if isinstance(value, ObjectId):
+        return value
+    if isinstance(value, str) and ObjectId.is_valid(value):
+        return ObjectId(value)
+    if isinstance(value, dict):
+        oid = value.get("$oid")
+        if isinstance(oid, str) and ObjectId.is_valid(oid):
+            return ObjectId(oid)
+    return None
+
+
+def _metadata_value(product: dict[str, Any] | None, key: str) -> Any:
+    if not product:
+        return None
+    rows = product.get("metaData")
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("key") or "").strip().lower() == key.strip().lower():
+            return row.get("value")
+    return None
+
+
+def _best_product_type(product: dict[str, Any] | None) -> str | None:
+    if not product:
+        return None
+    ptype = product.get("productType")
+    if isinstance(ptype, str) and ptype.strip():
+        return ptype.strip()
+    md = _metadata_value(product, "product-type")
+    if isinstance(md, str) and md.strip():
+        return md.strip()
+    return None
+
+
+def _best_main_benefit(product: dict[str, Any] | None) -> str | None:
+    if not product:
+        return None
+    values = _product_list_values(product, "benefit", "claims")
+    if values:
+        return ", ".join(values)
+    return None
+
+
 async def _fetch_product_by_id(
     *,
     products_coll: AsyncIOMotorCollection,
@@ -100,21 +147,106 @@ async def _fetch_product_by_id(
     return await products_coll.find_one(query)
 
 
-def _ingredients_from_product(product: dict[str, Any] | None) -> list[str]:
-    if not product:
-        return []
-    rows = product.get("ingredients")
+async def _ingredients_from_product(
+    *,
+    product: dict[str, Any] | None,
+    branded_ingredients_coll: AsyncIOMotorCollection | None = None,
+    ingredient_coll: AsyncIOMotorCollection | None = None,
+) -> list[str]:
+    return await _resolve_ingredient_names_from_rows(
+        rows=(product or {}).get("ingredients"),
+        branded_ingredients_coll=branded_ingredients_coll,
+        ingredient_coll=ingredient_coll,
+    )
+
+
+async def _key_ingredients_from_product(
+    *,
+    product: dict[str, Any] | None,
+    branded_ingredients_coll: AsyncIOMotorCollection | None = None,
+    ingredient_coll: AsyncIOMotorCollection | None = None,
+) -> list[str]:
+    return await _resolve_ingredient_names_from_rows(
+        rows=(product or {}).get("keyIngredients"),
+        branded_ingredients_coll=branded_ingredients_coll,
+        ingredient_coll=ingredient_coll,
+    )
+
+
+async def _resolve_ingredient_names_from_rows(
+    *,
+    rows: Any,
+    branded_ingredients_coll: AsyncIOMotorCollection | None = None,
+    ingredient_coll: AsyncIOMotorCollection | None = None,
+) -> list[str]:
     if not isinstance(rows, list):
         return []
     out: list[str] = []
+    ref_ids: list[ObjectId] = []
     for r in rows:
         if isinstance(r, dict):
             n = str(r.get("name") or "").strip()
             if n:
                 out.append(n)
+                continue
+            oid = _normalize_object_id(r)
+            if oid is not None:
+                ref_ids.append(oid)
         elif isinstance(r, str) and r.strip():
-            out.append(r.strip())
+            oid = _normalize_object_id(r.strip())
+            if oid is not None:
+                ref_ids.append(oid)
+            else:
+                out.append(r.strip())
+        else:
+            oid = _normalize_object_id(r)
+            if oid is not None:
+                ref_ids.append(oid)
+
+    resolved: dict[ObjectId, str] = {}
+    dedup_ref_ids = list(dict.fromkeys(ref_ids))
+    if dedup_ref_ids and branded_ingredients_coll is not None:
+        cursor = branded_ingredients_coll.find(
+            {"_id": {"$in": dedup_ref_ids}},
+            {"ingredient_name": 1, "name": 1, "inci_name": 1},
+        )
+        async for doc in cursor:
+            name = (
+                str(doc.get("ingredient_name") or "").strip()
+                or str(doc.get("name") or "").strip()
+                or str(doc.get("inci_name") or "").strip()
+            )
+            if name:
+                resolved[doc.get("_id")] = name
+
+    unresolved = [oid for oid in dedup_ref_ids if oid not in resolved]
+    if unresolved and ingredient_coll is not None:
+        cursor = ingredient_coll.find(
+            {"_id": {"$in": unresolved}},
+            {"name": 1, "ingredient_name": 1, "inci_name": 1},
+        )
+        async for doc in cursor:
+            name = (
+                str(doc.get("name") or "").strip()
+                or str(doc.get("ingredient_name") or "").strip()
+                or str(doc.get("inci_name") or "").strip()
+            )
+            if name:
+                resolved[doc.get("_id")] = name
+
+    for oid in dedup_ref_ids:
+        name = resolved.get(oid)
+        if name:
+            out.append(name)
     return list(dict.fromkeys(out))
+
+
+def _apply_db_key_ingredients(analytic: dict[str, Any], db_key_ingredients: list[str]) -> dict[str, Any]:
+    if not db_key_ingredients:
+        return analytic
+    out = dict(analytic or {})
+    out["keyIngredients"] = [{"name": name, "ingredient_name": name} for name in db_key_ingredients]
+    return out
 
 
 def _resolve_analysis_mode(
@@ -370,6 +502,8 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
     scan_coll: AsyncIOMotorCollection = db[s.coll_scan_analysis]
     user_details_coll: AsyncIOMotorCollection = db[s.coll_user_details]
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
+    branded_ingredient_coll: AsyncIOMotorCollection = db[s.coll_branded_ingredient]
+    ingredient_coll: AsyncIOMotorCollection = db[s.coll_ingredient]
 
     oid = ObjectId(str(scan_id)) if ObjectId.is_valid(str(scan_id)) else None
     if oid is None:
@@ -385,15 +519,23 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
 
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=body.get("productId"))
     if (ingredients is None or (isinstance(ingredients, list) and len(ingredients) == 0)) and product:
-        ingredients = _ingredients_from_product(product)
+        ingredients = await _ingredients_from_product(
+            product=product,
+            branded_ingredients_coll=branded_ingredient_coll,
+            ingredient_coll=ingredient_coll,
+        )
+    db_key_ingredients = await _key_ingredients_from_product(
+        product=product,
+        branded_ingredients_coll=branded_ingredient_coll,
+        ingredient_coll=ingredient_coll,
+    )
 
     specific_type = body.get("specificType")
     main_benefit = body.get("mainBenefit")
     if not specific_type and product:
-        specific_type = product.get("productType")
-    if not main_benefit and product and isinstance(product.get("benefit"), list):
-        b = product.get("benefit") or []
-        main_benefit = ", ".join(str(x) for x in b if str(x).strip()) if b else main_benefit
+        specific_type = _best_product_type(product)
+    if not main_benefit and product:
+        main_benefit = _best_main_benefit(product)
     language = body.get("langauge") or DEFAULT_LANGUAGE
 
     personalized = bool(body.get("personalizedMatching"))
@@ -422,6 +564,7 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
         raw = "".join(getattr(b, "text", "") for b in msg.content)
         parsed = extract_first_json_object(raw)
         analytic, ing_out = _normalize_analysis_payload(parsed, ingredients)
+        analytic = _apply_db_key_ingredients(analytic, db_key_ingredients)
         analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
         await scan_coll.update_one(
             {"_id": oid},
@@ -479,11 +622,22 @@ async def ingredient_analysis_from_text(
     scan_detail_coll: AsyncIOMotorCollection = db[s.coll_scan_detail]
     user_details_coll: AsyncIOMotorCollection = db[s.coll_user_details]
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
+    branded_ingredient_coll: AsyncIOMotorCollection = db[s.coll_branded_ingredient]
+    ingredient_coll: AsyncIOMotorCollection = db[s.coll_ingredient]
 
     ingredients = body.get("ingredients")
     ingredients_text = body.get("ingredientsText")
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=body.get("productId"))
-    product_ing_list = _ingredients_from_product(product)
+    product_ing_list = await _ingredients_from_product(
+        product=product,
+        branded_ingredients_coll=branded_ingredient_coll,
+        ingredient_coll=ingredient_coll,
+    )
+    db_key_ingredients = await _key_ingredients_from_product(
+        product=product,
+        branded_ingredients_coll=branded_ingredient_coll,
+        ingredient_coll=ingredient_coll,
+    )
     if isinstance(ingredients, list) and ingredients:
         ing_list = [str(x).strip() for x in ingredients if str(x).strip()]
     elif product_ing_list:
@@ -534,10 +688,9 @@ async def ingredient_analysis_from_text(
     specific_type = body.get("specificType")
     main_benefit = body.get("mainBenefit")
     if not specific_type and product:
-        specific_type = product.get("productType")
-    if not main_benefit and product and isinstance(product.get("benefit"), list):
-        b = product.get("benefit") or []
-        main_benefit = ", ".join(str(x) for x in b if str(x).strip()) if b else main_benefit
+        specific_type = _best_product_type(product)
+    if not main_benefit and product:
+        main_benefit = _best_main_benefit(product)
     language = body.get("langauge") or DEFAULT_LANGUAGE
     text_block = "\n".join(ing_list)
     user_msg = ingredient_analysis_user_message(
@@ -558,6 +711,7 @@ async def ingredient_analysis_from_text(
         raw = "".join(getattr(b, "text", "") for b in msg.content)
         parsed = extract_first_json_object(raw)
         analytic, ing_out = _normalize_analysis_payload(parsed, ing_list)
+        analytic = _apply_db_key_ingredients(analytic, db_key_ingredients)
         analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
         await scan_coll.update_one(
             {"_id": scan_id},
