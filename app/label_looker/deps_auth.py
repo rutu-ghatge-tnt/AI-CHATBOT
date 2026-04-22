@@ -90,7 +90,13 @@ async def authenticate_app_user_optional(
     """Optional app auth for public endpoints with enhanced mode."""
     if not authorization:
         return None
-    return await authenticate_app_user(authorization=authorization)
+    try:
+        return await authenticate_app_user(authorization=authorization)
+    except ScannerApiError as e:
+        # Public routes should still work for anonymous users if a stale token is sent.
+        if e.status_code in (401, 403):
+            return None
+        raise
 
 
 async def verify_jwt_panel(authorization: Optional[str] = Header(None)) -> PanelUserContext:
