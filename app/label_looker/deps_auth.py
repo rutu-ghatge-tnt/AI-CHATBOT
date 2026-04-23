@@ -52,6 +52,7 @@ async def scanner_auth_sso(authorization: Optional[str] = Header(None)) -> dict[
         user = {k: v for k, v in dict(payload).items() if k not in ("exp", "iat", "nbf", "iss", "aud")}
     if not user:
         raise ScannerApiError(401, "Invalid token payload")
+    user["_label_looker_access_token"] = token
     return user
 
 
@@ -81,6 +82,7 @@ async def authenticate_app_user(authorization: Optional[str] = Header(None)) -> 
     if not isinstance(user, dict):
         raise ScannerApiError(401, "Invalid app token payload")
     user["_label_looker_role"] = data.get("role")
+    user["_label_looker_access_token"] = token
     return user
 
 
