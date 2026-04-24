@@ -136,4 +136,21 @@ def public_text_routes(
         data = await analysis_service.profile_validation_status(body=body, user=user)
         return api_success(data, message="Success")
 
+    @r.get("/user/analysis/{scan_id}")
+    async def user_analysis_by_id(
+        scan_id: str,
+        user: dict[str, Any] = Depends(auth_required),
+    ):
+        data = await analysis_service.user_scan_by_id(scan_id=scan_id, user=user)
+        return api_success(data, message="Success")
+
+    @r.get("/user/analysis")
+    async def user_analysis_list(
+        skip: int = Query(0, ge=0),
+        limit: int = Query(20, ge=1, le=100),
+        user: dict[str, Any] = Depends(auth_required),
+    ):
+        data = await analysis_service.user_scan_list(user=user, skip=skip, limit=limit)
+        return api_success(data, message="Success")
+
     return r
