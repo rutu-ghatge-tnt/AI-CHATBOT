@@ -1,0 +1,72 @@
+{
+  "mode": "apply",
+  "timestamp_utc": "2026-04-24T13:06:47.937045+00:00",
+  "taxonomy_counts": {
+    "skin-types": {
+      "images_total": 5,
+      "matched_total": 5,
+      "matched_deterministic": 5,
+      "matched_claude": 0,
+      "skipped_unmatched_or_low_confidence": 0,
+      "skipped_alias_skip": 0,
+      "skipped_existing_icons": 5,
+      "put_success": 0,
+      "put_failed": 0,
+      "put_exception": 0
+    },
+    "hair-types": {
+      "images_total": 21,
+      "matched_total": 18,
+      "matched_deterministic": 18,
+      "matched_claude": 0,
+      "skipped_unmatched_or_low_confidence": 0,
+      "skipped_alias_skip": 3,
+      "skipped_existing_icons": 3,
+      "put_success": 14,
+      "put_failed": 1,
+      "put_exception": 0
+    },
+    "skin-concerns": {
+      "images_total": 29,
+      "matched_total": 26,
+      "matched_deterministic": 26,
+      "matched_claude": 0,
+      "skipped_unmatched_or_low_confidence": 2,
+      "skipped_alias_skip": 1,
+      "skipped_existing_icons": 0,
+      "put_success": 22,
+      "put_failed": 4,
+      "put_exception": 0
+    },
+    "hair-concerns": {
+      "images_total": 33,
+      "matched_total": 33,
+      "matched_deterministic": 32,
+      "matched_claude": 1,
+      "skipped_unmatched_or_low_confidence": 0,
+      "skipped_alias_skip": 0,
+      "skipped_existing_icons": 0,
+      "put_success": 30,
+      "put_failed": 3,
+      "put_exception": 0
+    }
+  },
+  "overall_counts": {
+    "images_total": 88,
+    "matched_total": 82,
+    "matched_deterministic": 81,
+    "matched_claude": 1,
+    "put_success": 66,
+    "put_failed": 8,
+    "put_exception": 0,
+    "skipped_total": 14
+  },
+  "skipped_reason_counts": {
+    "skipped_existing_icons": 8,
+    "skipped_alias_skip": 4,
+    "unmatched_or_low_confidence": 2
+  },
+  "matched_count": 66,
+  "skipped_count": 14,
+  "failure_count": 8
+}
