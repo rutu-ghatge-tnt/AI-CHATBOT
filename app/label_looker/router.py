@@ -40,6 +40,15 @@ def _scanner_routes(auth_user: Callable[..., Coroutine[Any, Any, dict[str, Any]]
         data = await analysis_service.ingredient_analysis(body=body, user=user)
         return api_success(data, message="Success")
 
+    @r.post("/analyze-product")
+    async def analyze_product(
+        body: dict[str, Any] = Body(...),
+        user: dict[str, Any] = Depends(auth_user),
+    ):
+        # Explicit legacy Label Looker entrypoint (same underlying old analysis flow).
+        data = await analysis_service.ingredient_analysis(body=body, user=user)
+        return api_success(data, message="Success")
+
     @r.post("/ingredient")
     async def ingredient_detail(
         name: str | None = Query(None),
@@ -117,6 +126,15 @@ def public_text_routes(
         body: dict[str, Any] = Body(...),
         user: dict[str, Any] | None = Depends(auth_optional),
     ):
+        data = await analysis_service.ingredient_analysis_from_text(body=body, user=user)
+        return api_success(data, message="Success")
+
+    @r.post("/analyze-product/text")
+    async def analyze_product_text(
+        body: dict[str, Any] = Body(...),
+        user: dict[str, Any] | None = Depends(auth_optional),
+    ):
+        # Text-input variant of explicit legacy analyze-product endpoint.
         data = await analysis_service.ingredient_analysis_from_text(body=body, user=user)
         return api_success(data, message="Success")
 

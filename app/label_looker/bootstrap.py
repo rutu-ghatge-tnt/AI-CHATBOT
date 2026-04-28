@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.label_looker.errors import ScannerApiError
+from app.label_looker.profile_match_router import profile_match_routes
 from app.label_looker.responses import api_error_response
 from app.label_looker.router import _scanner_routes, admin_router, public_text_routes
 from app.label_looker.settings import get_label_looker_settings
@@ -46,8 +47,8 @@ def install_label_looker(app: FastAPI) -> None:
     )
 
     from app.label_looker.deps_auth import (
-        authenticate_app_user,
-        authenticate_app_user_optional,
+        authenticate_any_user,
+        authenticate_any_user_optional,
         scanner_auth_sso,
         scanner_auth_sso_optional,
     )
@@ -64,12 +65,22 @@ def install_label_looker(app: FastAPI) -> None:
     )
     app.include_router(admin_router(), prefix="/scanner", tags=["Label Looker — panel /scanner"])
     app.include_router(
-        _scanner_routes(authenticate_app_user),
+        _scanner_routes(authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
     )
     app.include_router(
-        public_text_routes(authenticate_app_user_optional, authenticate_app_user),
+        public_text_routes(authenticate_any_user_optional, authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
+    )
+    app.include_router(
+        profile_match_routes(authenticate_any_user),
+        prefix="/match-my-profile",
+        tags=["Match My Profile /match-my-profile"],
+    )
+    app.include_router(
+        profile_match_routes(authenticate_any_user),
+        prefix="/api/v1/match-my-profile",
+        tags=["Match My Profile /api/v1/match-my-profile"],
     )

@@ -66,10 +66,10 @@ Think carefully about the specific ingredients and positions before writing. The
 USER_PROMPT_TEMPLATE = """<user_profile>
 Age: {age}
 Gender: {gender}
-Skin type: {skin_type}
-Concerns (priority order): {concerns}
+Profile mode: {profile_mode}
+{type_label}: {profile_type}
+{concerns_label} (priority order): {concerns}
 Desired benefits: {benefits}
-Life stages: {life_stages}
 </user_profile>
 
 <product>
@@ -80,8 +80,11 @@ Declared for skin types: {declared_for}
 Label claims:
 {claims_list}
 
-Key ingredients (INCI order):
-{ingredients_list}
+All ingredients (INCI order):
+{all_ingredients_list}
+
+Key ingredients (highlighted):
+{key_ingredients_list}
 </product>
 
 <scoring_results>
@@ -115,14 +118,29 @@ def build_prompt(
 ) -> str:
     observations = observations or []
 
-    life_stages = ", ".join(user.get("life_stages", [])) or "none"
+    profile_mode = str(user.get("mode") or "skincare").strip().lower()
+    if profile_mode not in {"skincare", "haircare", "lipcare"}:
+        profile_mode = "skincare"
     concerns = ", ".join(user.get("concerns", [])) or "none declared"
     benefits = ", ".join(user.get("benefits", [])) or "none specified"
+    if profile_mode == "haircare":
+        type_label = "Hair type"
+        concerns_label = "Hair concerns"
+        profile_type = user.get("hair_type") or user.get("skin_type", "-")
+    elif profile_mode == "lipcare":
+        type_label = "Lip type"
+        concerns_label = "Lip concerns"
+        profile_type = user.get("lip_type") or user.get("skin_type", "-")
+    else:
+        type_label = "Skin type"
+        concerns_label = "Skin concerns"
+        profile_type = user.get("skin_type", "-")
 
     declared_for = ", ".join(product.get("declared_for_skin_types", [])) or "not specified"
     claims = product.get("claims", [])
     claims_list = "\n".join(f"- {claim}" for claim in claims) if claims else "- (no specific claims)"
-    ingredients_list = _format_ingredients(product.get("key_ingredients", []))
+    all_ingredients_list = _format_ingredients(product.get("ingredients", []))
+    key_ingredients_list = _format_ingredients(product.get("key_ingredients", []))
 
     state = scoring.get("state", "unknown")
     score = scoring.get("score", "-")
@@ -147,16 +165,19 @@ def build_prompt(
     return USER_PROMPT_TEMPLATE.format(
         age=user.get("age", "-"),
         gender=user.get("gender", "-"),
-        skin_type=user.get("skin_type", "-"),
+        profile_mode=profile_mode,
+        type_label=type_label,
+        profile_type=profile_type,
+        concerns_label=concerns_label,
         concerns=concerns,
         benefits=benefits,
-        life_stages=life_stages,
         brand=product.get("brand", "-"),
         product_name=product.get("name", "-"),
         category=product.get("category", "-"),
         declared_for=declared_for,
         claims_list=claims_list,
-        ingredients_list=ingredients_list,
+        all_ingredients_list=all_ingredients_list,
+        key_ingredients_list=key_ingredients_list,
         state=state,
         score=score,
         band=band,
