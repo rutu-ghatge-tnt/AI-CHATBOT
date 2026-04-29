@@ -56,6 +56,8 @@ from app.ai_ingredient_intelligence.api.ingredient_costs import router as ingred
 from app.ai_ingredient_intelligence.api.ingredient_history import router as ingredient_history_router
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.health_checks import router as health_checks_router
+from app.hl_engine.api.alerts import router as hl_alerts_router
+from app.hl_engine.api.personalized_alerts import router as hl_personalized_alerts_router
 
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
@@ -115,6 +117,14 @@ app = FastAPI(
     redoc_url="/redoc",  # ReDoc alternative - explicitly enabled
     openapi_url="/openapi.json"  # OpenAPI JSON schema - explicitly enabled
 )
+
+# Label Looker (productIngredientScan) — see migration-packet/README-migration.md
+try:
+    from app.label_looker.bootstrap import install_label_looker
+
+    install_label_looker(app)
+except Exception as _ll_exc:
+    print(f"Warning: Label Looker not installed ({type(_ll_exc).__name__}): {_ll_exc}")
 
 # Custom OpenAPI schema configuration
 def custom_openapi():
@@ -176,6 +186,10 @@ def custom_openapi():
             {
                 "name": "Face Analysis",
                 "description": "Facial analysis and skin condition assessment endpoints"
+            },
+            {
+                "name": "HL Alerts",
+                "description": "Hyperlocal skin alert engine endpoints"
             },
             {
                 "name": "Authentication",
@@ -319,6 +333,10 @@ app.include_router(product_comparison_router, prefix="/api")
 
 # ✅ Add health checks API
 app.include_router(health_checks_router, prefix="/api")
+
+# ✅ Add HL engine API
+app.include_router(hl_alerts_router, prefix="/api")
+app.include_router(hl_personalized_alerts_router, prefix="/api")
 
 # ✅ Add trend insights API
 if trend_insights_router is not None:
