@@ -19,22 +19,6 @@ def profile_match_routes(auth_user: Callable[..., Coroutine[Any, Any, dict[str, 
         data = await profile_match_service.score_product(user=user, body=body)
         return api_success(data, message="Success")
 
-    # Backward-compatible alias for clients posting directly to the router prefix.
-    @r.post("")
-    @r.post("/")
-    @r.post("/match-my-profile")
-    async def profile_match_alias(
-        body: dict[str, Any] = Body(...),
-        user: dict[str, Any] = Depends(auth_user),
-    ):
-        data = await profile_match_service.score_product(user=user, body=body)
-        return api_success(data, message="Success")
-
-    @r.get("/scan/{scan_id}")
-    async def profile_match_scan(scan_id: str, user: dict[str, Any] = Depends(auth_user)):
-        data = await profile_match_service.get_scan_result(user=user, scan_id=scan_id)
-        return api_success(data, message="Success")
-
     @r.post("/scan/{scan_id}/feedback")
     async def profile_match_feedback(
         scan_id: str,

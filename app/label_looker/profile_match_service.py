@@ -99,6 +99,22 @@ def _extract_desired_benefits(*, body: dict[str, Any], details: dict[str, Any], 
     return _safe_list(db_fallback)
 
 
+def _extract_desired_benefits_from_body(*, body: dict[str, Any], mode: str) -> list[str]:
+    body_benefits = _first_present(
+        body.get("desiredBenefits"),
+        body.get("desiredBenefit"),
+        body.get("benefits"),
+        body.get("skinGoals") if mode == "skincare" else body.get("hairGoals"),
+        body.get("mainBenefit"),
+    )
+    if isinstance(body_benefits, list):
+        return _safe_list(body_benefits)
+    if isinstance(body_benefits, str):
+        text = body_benefits.strip()
+        return [text] if text else []
+    return []
+
+
 def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str]:
     if not product:
         return []
@@ -106,6 +122,34 @@ def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str
     for key in keys:
         out.extend(_safe_list(product.get(key)))
     return list(dict.fromkeys(out))
+
+
+def _infer_product_benefit_signals(*, product: dict[str, Any], tile_product: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+
+    # Keep explicit DB claim/benefit signals first.
+    out.extend(_product_list_values(product, "benefit", "benefits", "claims", "claim"))
+
+    # Add primary concern as a matchable signal.
+    primary = _safe_scalar(product.get("primaryConcern"))
+    if primary:
+        out.append(primary)
+
+    # Enrich with ingredient function/address metadata when available.
+    for row in (tile_product.get("ingredients") or []) + (tile_product.get("key_ingredients") or []):
+        if not isinstance(row, dict):
+            continue
+        out.extend(_safe_list(row.get("functions")))
+        out.extend(_safe_list(row.get("addresses")))
+
+        # Lightweight ingredient-name heuristics to avoid false "unmet hydration".
+        inci_name = _safe_scalar(row.get("inci_name")).lower()
+        if any(k in inci_name for k in ("hyaluron", "glycerin", "panthenol", "betaine", "sodium pca", "urea")):
+            out.append("hydration")
+        if any(k in inci_name for k in ("niacinamide", "ascorb", "vitamin c", "arbutin", "tranexamic")):
+            out.append("brightening")
+
+    return list(dict.fromkeys(x for x in out if isinstance(x, str) and x.strip()))
 
 
 def _normalize_product_ref(product_id: Any) -> Any | None:
@@ -436,6 +480,9 @@ async def patch_profile(*, user: dict[str, Any], body: dict[str, Any]) -> dict[s
 
 
 async def score_product(*, user: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    requested_scan_id = body.get("scan_id") or body.get("scanId")
+    if isinstance(requested_scan_id, str) and requested_scan_id.strip():
+        return await get_scan_result(user=user, scan_id=requested_scan_id.strip())
     return await match_profile_flow.score_product(user=user, body=body)
 
 
@@ -479,23 +526,44 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
 
     age = _first_present(details.get("age"), body.get("age"))
     gender = _safe_scalar(_first_present(details.get("gender"), body.get("gender")))
-    benefits = _extract_desired_benefits(body=body, details=details, mode=mode)
+    benefits_from_body = _extract_desired_benefits_from_body(body=body, mode=mode)
+    benefits = benefits_from_body or _extract_desired_benefits(body=body, details=details, mode=mode)
     life_stages = _safe_list(details.get("lifeStages") or details.get("life_stages"))
     conditions = _safe_list(details.get("conditions"))
 
-    missing_fields: list[str] = []
+    missing_profile_fields: list[str] = []
     if age is None:
-        missing_fields.append("age")
+        missing_profile_fields.append("age")
     if not gender:
-        missing_fields.append("gender")
+        missing_profile_fields.append("gender")
     if not type_value:
-        missing_fields.append("hairType" if mode == "haircare" else "skinType")
+        missing_profile_fields.append("hairType" if mode == "haircare" else "skinType")
     if not concerns:
-        missing_fields.append("hairConcerns" if mode == "haircare" else "skinConcerns")
-    if missing_fields:
+        missing_profile_fields.append("hairConcerns" if mode == "haircare" else "skinConcerns")
+
+    missing_inputs: list[dict[str, Any]] = []
+    if missing_profile_fields:
+        missing_inputs.append(
+            {
+                "source": "profile",
+                "fields": missing_profile_fields,
+                "rule": "Needs validation confirmation: accept if 2 same, else 3rd value final.",
+            }
+        )
+    if not benefits_from_body:
+        missing_inputs.append(
+            {
+                "source": "request",
+                "fields": ["desiredBenefits"],
+                "rule": "Required on every match request; do not persist to profile defaults.",
+            }
+        )
+
+    if missing_inputs:
         raise ScannerApiError(
             400,
-            f"Missing required profile field(s) for {mode}: {', '.join(missing_fields)}",
+            f"Missing required match input(s) for {mode}",
+            errors=missing_inputs,
         )
 
     logger.info(
@@ -564,7 +632,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             benefits=benefits,
             declared_types=declared_types,
             product_primary=str(product.get("primaryConcern") or ""),
-            product_benefits=_product_list_values(product, "benefit", "claims"),
+            product_benefits=_infer_product_benefit_signals(product=product, tile_product=tile_product),
         )
         state = suitability["band"]
         scoring = {
@@ -574,6 +642,11 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             "ceiling_applied": suitability["type_ceiling"],
             "breakdown": suitability["breakdown"],
             "unmet_needs": suitability["unmet_needs"],
+            "unmet_profile_concerns": suitability.get("unmet_profile_concerns", []),
+            "unmatched_desired_benefits": suitability.get("unmatched_desired_benefits", []),
+            "matched_desired_benefits": suitability.get("matched_desired_benefits", []),
+            "scored_for": concerns,
+            "desired_benefits": benefits,
         }
 
     tile_user = {
@@ -666,7 +739,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
     )
 
     band_label_map = {"great": "Great Match", "good": "Good Match", "low": "Low Match", "gate": "Gate"}
-    response: dict[str, Any] = {
+    match_result: dict[str, Any] = {
         "scan_id": str(ins.inserted_id),
         "state": state,
         "band": scoring.get("band"),
@@ -676,8 +749,12 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "tiles": tiles,
         "breakdown": scoring.get("breakdown", []),
         "unmet_needs": scoring.get("unmet_needs", []),
+        "unmet_profile_concerns": scoring.get("unmet_profile_concerns", []),
+        "unmatched_desired_benefits": scoring.get("unmatched_desired_benefits", []),
+        "matched_desired_benefits": scoring.get("matched_desired_benefits", []),
         "safety": safety,
         "scored_for": concerns,
+        "desired_benefits": benefits,
         "triggered_observations": observations,
         "cta": cta,
         "full_analysis": {
@@ -690,13 +767,21 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             "free": max(0, totalScanIngedientPerDay - scans_used),
             "paid": 0,
         },
+        "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
     }
+    response: dict[str, Any] = {"result": match_result}
+    response.update(match_result)
     # Spec-friendly aliases (camelCase and alternate labels) while keeping snake_case stable.
     response["scanId"] = response["scan_id"]
     response["bandLabel"] = response["band_label"]
     response["ceilingApplied"] = response["ceiling_applied"]
     response["scoredFor"] = response["scored_for"]
+    response["desiredBenefits"] = response["desired_benefits"]
     response["unmetNeeds"] = response["unmet_needs"]
+    response["unmetProfileConcerns"] = response["unmet_profile_concerns"]
+    response["unmatchedDesiredBenefits"] = response["unmatched_desired_benefits"]
+    response["matchedDesiredBenefits"] = response["matched_desired_benefits"]
+    response["positionReference"] = response["position_reference"]
     response["triggeredObservations"] = response["triggered_observations"]
     response["fullAnalysis"] = response["full_analysis"]
     response["creditsRemaining"] = response["credits_remaining"]
@@ -780,7 +865,7 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
     scans_used = await _count_scans_today(scan_coll, user.get("profileUrl") or doc.get("userProfileUrl"))
     band_label_map = {"great": "Great Match", "good": "Good Match", "low": "Low Match", "gate": "Gate"}
 
-    response: dict[str, Any] = {
+    match_result: dict[str, Any] = {
         "scan_id": scan_id,
         "state": doc.get("state"),
         "band": doc.get("band"),
@@ -790,8 +875,12 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
         "tiles": doc.get("tile_content") if isinstance(doc.get("tile_content"), dict) else {},
         "breakdown": suitability.get("breakdown", []),
         "unmet_needs": suitability.get("unmet_needs", []),
+        "unmet_profile_concerns": suitability.get("unmet_profile_concerns", []),
+        "unmatched_desired_benefits": suitability.get("unmatched_desired_benefits", []),
+        "matched_desired_benefits": suitability.get("matched_desired_benefits", []),
         "safety": safety if isinstance(safety, dict) else {},
         "scored_for": suitability.get("scored_for", []),
+        "desired_benefits": suitability.get("desired_benefits", []),
         "triggered_observations": doc.get("triggered_obs", []),
         "feedback": doc.get("feedback") if isinstance(doc.get("feedback"), dict) else None,
         "post_scan_action": doc.get("post_scan_action"),
@@ -799,12 +888,20 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
             "free": max(0, totalScanIngedientPerDay - scans_used),
             "paid": 0,
         },
+        "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
     }
+    response: dict[str, Any] = {"result": match_result}
+    response.update(match_result)
     response["scanId"] = response["scan_id"]
     response["bandLabel"] = response["band_label"]
     response["ceilingApplied"] = response["ceiling_applied"]
     response["unmetNeeds"] = response["unmet_needs"]
     response["scoredFor"] = response["scored_for"]
+    response["desiredBenefits"] = response["desired_benefits"]
+    response["unmetProfileConcerns"] = response["unmet_profile_concerns"]
+    response["unmatchedDesiredBenefits"] = response["unmatched_desired_benefits"]
+    response["matchedDesiredBenefits"] = response["matched_desired_benefits"]
+    response["positionReference"] = response["position_reference"]
     response["triggeredObservations"] = response["triggered_observations"]
     response["postScanAction"] = response["post_scan_action"]
     response["creditsRemaining"] = response["credits_remaining"]

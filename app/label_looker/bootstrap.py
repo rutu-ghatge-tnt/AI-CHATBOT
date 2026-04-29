@@ -76,11 +76,6 @@ def install_label_looker(app: FastAPI) -> None:
     )
     app.include_router(
         profile_match_routes(authenticate_any_user),
-        prefix="/match-my-profile",
-        tags=["Match My Profile /match-my-profile"],
-    )
-    app.include_router(
-        profile_match_routes(authenticate_any_user),
         prefix="/api/v1/match-my-profile",
         tags=["Match My Profile /api/v1/match-my-profile"],
     )

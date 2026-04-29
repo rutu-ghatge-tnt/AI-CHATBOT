@@ -1,6 +1,51 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+
+
+_TERM_ALIASES: dict[str, set[str]] = {
+    "hydration": {"hydrate", "hydrating", "moisture", "moisturizing", "plumping"},
+    "brightening": {"glow", "radiance", "radiant", "tone", "uneven tone"},
+    "dark spots": {"dark-spot", "dark spots", "pigmentation", "hyperpigmentation", "spots"},
+    "acne": {"pimples", "breakouts", "blemish"},
+    "pores": {"pore", "large pores", "open pores"},
+    "barrier repair": {"barrier", "repair", "skin barrier", "barrier support"},
+    "soothing": {"calming", "calm", "anti-redness", "redness"},
+    "oil control": {"sebum", "shine control", "mattifying"},
+}
+
+
+def _canonicalize_term(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    cleaned = re.sub(r"[^a-z0-9\s-]+", " ", raw)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return ""
+    for canonical, aliases in _TERM_ALIASES.items():
+        if cleaned == canonical:
+            return canonical
+        if cleaned in aliases:
+            return canonical
+    return cleaned
+
+
+def _expand_text_to_terms(value: str) -> set[str]:
+    text = str(value or "").strip().lower()
+    if not text:
+        return set()
+    tokens = re.split(r"[|,/;()]+", text)
+    terms: set[str] = set()
+    for token in tokens:
+        normalized = _canonicalize_term(token)
+        if normalized:
+            terms.add(normalized)
+    normalized_full = _canonicalize_term(text)
+    if normalized_full:
+        terms.add(normalized_full)
+    return terms
 
 
 def skin_type_match(user_skin: str, declared_types: list[str]) -> str:
@@ -107,8 +152,10 @@ def evaluate_suitability(
     type_points = {"exact": 35, "adjacent": 17, "opposite": 0}[type_match]
     ceiling = {"exact": 100, "adjacent": 80, "opposite": 55}[type_match]
 
-    primary = product_primary.strip().lower()
-    product_benefits_set = {x.lower().strip() for x in product_benefits if str(x).strip()}
+    primary = _canonicalize_term(product_primary)
+    product_benefits_set: set[str] = set()
+    for value in product_benefits:
+        product_benefits_set.update(_expand_text_to_terms(str(value)))
     concern_weights = [(25, 15), (15, 9), (10, 6)]
     breakdown: list[dict[str, Any]] = [
         {
@@ -122,7 +169,7 @@ def evaluate_suitability(
     unmet_needs: list[str] = []
     concern_points = 0
     for idx, concern in enumerate(concerns[:3]):
-        c = concern.lower().strip()
+        c = _canonicalize_term(concern)
         primary_pts, benefit_pts = concern_weights[idx]
         if c and c == primary:
             pts, ans, note = primary_pts, "yes", "Matches primary concern"
@@ -144,7 +191,9 @@ def evaluate_suitability(
             }
         )
 
-    benefit_match = sum(1 for b in benefits if b.lower().strip() in product_benefits_set)
+    normalized_benefits = [_canonicalize_term(b) for b in benefits if _canonicalize_term(b)]
+    benefit_match = sum(1 for b in normalized_benefits if b in product_benefits_set)
+    unmatched_benefits = [b for b in normalized_benefits if b not in product_benefits_set]
     benefit_points = min(benefit_match * 2, 10)
     breakdown.append(
         {
@@ -152,7 +201,7 @@ def evaluate_suitability(
             "weight": 0.10,
             "answer": "yes" if benefit_points >= 6 else "partial" if benefit_points > 0 else "no",
             "points_awarded": benefit_points,
-            "note": f"{benefit_match} desired benefits matched",
+            "note": f"{benefit_match}/{len(normalized_benefits)} desired benefits matched",
         }
     )
     breakdown.append(
@@ -167,6 +216,7 @@ def evaluate_suitability(
     raw_score = type_points + concern_points + benefit_points + 5
     final_score = min(raw_score, ceiling)
     band = score_to_band(final_score)
+    unmet_for_response = unmatched_benefits[:1] or unmet_needs
     return {
         "raw_score": raw_score,
         "final_score": final_score,
@@ -174,7 +224,10 @@ def evaluate_suitability(
         "type_ceiling": ceiling,
         "band": band,
         "breakdown": breakdown,
-        "unmet_needs": unmet_needs,
+        "unmet_needs": unmet_for_response,
+        "unmet_profile_concerns": unmet_needs,
+        "unmatched_desired_benefits": unmatched_benefits,
+        "matched_desired_benefits": [b for b in normalized_benefits if b in product_benefits_set],
     }
 
 
