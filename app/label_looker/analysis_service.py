@@ -928,7 +928,7 @@ async def _maybe_attach_ll2_tile_content(
         inputs=inputs,
         client=client,
         model=tile_model,
-        context="LL2",
+        context="analyze_product_tiles",
     )
     out["ll2TileContent"] = tiles
     out["ll2TileContentMeta"] = meta
