@@ -752,3 +752,60 @@ async def submit_feedback(*, user: dict[str, Any], scan_id: str, body: dict[str,
         "post_scan_action": post_scan_action,
         "postScanAction": post_scan_action,
     }
+
+
+async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, Any]:
+    if not ObjectId.is_valid(scan_id):
+        raise ScannerApiError(400, "Invalid scan_id")
+
+    user_id = _extract_user_id(user)
+    if user_id is None:
+        raise ScannerApiError(401, "Unauthorized")
+
+    s = get_label_looker_settings()
+    from app.label_looker.db import get_scanner_db
+
+    db = get_scanner_db()
+    scan_coll = db[s.coll_scan_analysis]
+    oid = ObjectId(scan_id)
+    doc = await scan_coll.find_one({"_id": oid})
+    if not doc:
+        raise ScannerApiError(404, "Scan not found")
+
+    if str(doc.get("userId")) != str(user_id):
+        raise ScannerApiError(403, "Forbidden")
+
+    suitability = doc.get("engine_breakdown", {}).get("suitability", {})
+    safety = doc.get("engine_breakdown", {}).get("safety", {}) if isinstance(doc.get("engine_breakdown"), dict) else {}
+    scans_used = await _count_scans_today(scan_coll, user.get("profileUrl") or doc.get("userProfileUrl"))
+    band_label_map = {"great": "Great Match", "good": "Good Match", "low": "Low Match", "gate": "Gate"}
+
+    response: dict[str, Any] = {
+        "scan_id": scan_id,
+        "state": doc.get("state"),
+        "band": doc.get("band"),
+        "band_label": band_label_map.get(str(doc.get("band")), "Match"),
+        "score": doc.get("score"),
+        "ceiling_applied": suitability.get("ceiling_applied"),
+        "tiles": doc.get("tile_content") if isinstance(doc.get("tile_content"), dict) else {},
+        "breakdown": suitability.get("breakdown", []),
+        "unmet_needs": suitability.get("unmet_needs", []),
+        "safety": safety if isinstance(safety, dict) else {},
+        "scored_for": suitability.get("scored_for", []),
+        "triggered_observations": doc.get("triggered_obs", []),
+        "feedback": doc.get("feedback") if isinstance(doc.get("feedback"), dict) else None,
+        "post_scan_action": doc.get("post_scan_action"),
+        "credits_remaining": {
+            "free": max(0, totalScanIngedientPerDay - scans_used),
+            "paid": 0,
+        },
+    }
+    response["scanId"] = response["scan_id"]
+    response["bandLabel"] = response["band_label"]
+    response["ceilingApplied"] = response["ceiling_applied"]
+    response["unmetNeeds"] = response["unmet_needs"]
+    response["scoredFor"] = response["scored_for"]
+    response["triggeredObservations"] = response["triggered_observations"]
+    response["postScanAction"] = response["post_scan_action"]
+    response["creditsRemaining"] = response["credits_remaining"]
+    return response
