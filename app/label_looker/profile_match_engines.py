@@ -157,13 +157,29 @@ def evaluate_suitability(
     for value in product_benefits:
         product_benefits_set.update(_expand_text_to_terms(str(value)))
     concern_weights = [(25, 15), (15, 9), (10, 6)]
+    user_type_label = str(skin_type or "").strip().lower() or "not specified"
+    product_type_label = ", ".join(x.strip().lower() for x in declared_types if str(x).strip()) or "not specified"
+    type_note_map = {
+        "exact": (
+            f"Your skin type is {user_type_label} and this product is designed for {product_type_label}, "
+            "so this is a direct match."
+        ),
+        "adjacent": (
+            f"Your skin type is {user_type_label} and this product is designed for {product_type_label}, "
+            "so this is a close (partial) match."
+        ),
+        "opposite": (
+            f"Your skin type is {user_type_label}, while this product is designed for {product_type_label}, "
+            "so this is an opposite match and may not suit your current profile."
+        ),
+    }
     breakdown: list[dict[str, Any]] = [
         {
             "category": "skin_type",
             "weight": 0.35,
             "answer": "yes" if type_match == "exact" else "partial" if type_match == "adjacent" else "no",
             "points_awarded": type_points,
-            "note": f"Type match is {type_match}",
+            "note": type_note_map.get(type_match, "Type-fit data is limited for this product."),
         }
     ]
     unmet_needs: list[str] = []
@@ -172,11 +188,23 @@ def evaluate_suitability(
         c = _canonicalize_term(concern)
         primary_pts, benefit_pts = concern_weights[idx]
         if c and c == primary:
-            pts, ans, note = primary_pts, "yes", "Matches primary concern"
+            pts, ans, note = (
+                primary_pts,
+                "yes",
+                f"This product directly targets your concern: {concern}.",
+            )
         elif c and c in product_benefits_set:
-            pts, ans, note = benefit_pts, "partial", "Covered in product benefits"
+            pts, ans, note = (
+                benefit_pts,
+                "partial",
+                f"This product partly supports your concern: {concern}.",
+            )
         else:
-            pts, ans, note = 0, "no", "Not clearly addressed"
+            pts, ans, note = (
+                0,
+                "no",
+                f"This product does not clearly address your concern: {concern}.",
+            )
             if idx == 0 and c:
                 unmet_needs.append(concern)
         concern_points += pts
@@ -201,7 +229,13 @@ def evaluate_suitability(
             "weight": 0.10,
             "answer": "yes" if benefit_points >= 6 else "partial" if benefit_points > 0 else "no",
             "points_awarded": benefit_points,
-            "note": f"{benefit_match}/{len(normalized_benefits)} desired benefits matched",
+            "note": (
+                f"Your expected benefits are strongly aligned with this product ({benefit_match} out of {len(normalized_benefits)} matched)."
+                if benefit_points >= 6
+                else f"Some of your expected benefits are present, but not all ({benefit_match} out of {len(normalized_benefits)} matched)."
+                if benefit_points > 0
+                else f"Your expected benefits are not clearly supported by this formula ({benefit_match} out of {len(normalized_benefits)} matched)."
+            ),
         }
     )
     breakdown.append(
@@ -210,7 +244,7 @@ def evaluate_suitability(
             "weight": 0.05,
             "answer": "yes",
             "points_awarded": 5,
-            "note": "Listed product baseline",
+            "note": "Baseline score applied because this is a listed product.",
         }
     )
     raw_score = type_points + concern_points + benefit_points + 5
