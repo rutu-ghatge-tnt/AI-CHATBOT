@@ -53,20 +53,48 @@ def _infer_mode_from_product(product: dict[str, Any] | None) -> str | None:
     # lipcare first, because lip products can also carry generic skin fields.
     ptype = str(product.get("productType") or "").lower()
     pname = str(product.get("productName") or "").lower()
+    pslug = str(product.get("slug") or "").lower()
+    category_text = " ".join(
+        [
+            ptype,
+            pname,
+            pslug,
+            str(_metadata_value(product, "category") or "").lower(),
+            str(_metadata_value(product, "product-type") or "").lower(),
+        ]
+    )
+    skincare_keywords = [
+        "skin",
+        "face",
+        "serum",
+        "sunscreen",
+        "spf",
+        "moistur",
+        "cleanser",
+        "toner",
+        "cream",
+    ]
     if "lip" in ptype or "lip" in pname:
         return "lipcare"
     if _has_non_empty_list_field(product, "lipTypes", "lipType"):
         return "lipcare"
     if _has_non_empty_list_field(product, "lipConcerns"):
         return "lipcare"
-    if _has_non_empty_list_field(product, "hairTypes", "hairType"):
-        return "haircare"
-    if _has_non_empty_list_field(product, "hairConcerns"):
-        return "haircare"
-    if _has_non_empty_list_field(product, "skinTypes", "skinType"):
+
+    # If product text clearly says skincare, prefer skincare even if legacy hair fields exist.
+    if any(k in category_text for k in skincare_keywords):
         return "skincare"
-    if _has_non_empty_list_field(product, "skinConcerns"):
+
+    has_hair = _has_non_empty_list_field(product, "hairTypes", "hairType", "hairConcerns")
+    has_skin = _has_non_empty_list_field(product, "skinTypes", "skinType", "skinConcerns")
+    if has_hair and not has_skin:
+        return "haircare"
+    if has_skin and not has_hair:
         return "skincare"
+    if has_hair and has_skin:
+        # Mixed/dirty product docs: favor skincare as default for generic cosmetic PDP scans.
+        return "skincare"
+
     if "hair" in ptype or "scalp" in ptype:
         return "haircare"
     if "skin" in ptype or "face" in ptype:
@@ -304,7 +332,24 @@ def _required_fields_for_mode(mode: str) -> list[str]:
 
 def _current_field_value(details: dict[str, Any], mode: str, field: str) -> Any:
     if field in ("age", "gender"):
-        return details.get(field)
+        if field == "gender":
+            return details.get("gender")
+        age_val = details.get("age")
+        if _is_present_value(age_val):
+            return age_val
+        # Support older schemas where age is stored as ageRange / age_years.
+        for alt_key in ("ageRange", "age_range", "ageYears", "age_years", "ageValue"):
+            alt = details.get(alt_key)
+            if isinstance(alt, (int, float)):
+                return int(alt)
+            if isinstance(alt, str) and alt.strip():
+                m = re.search(r"\d+", alt)
+                if m:
+                    try:
+                        return int(m.group(0))
+                    except ValueError:
+                        pass
+        return None
     if field == "expectedBenefit":
         # expectedBenefit is analysis-scoped; don't bind it to persisted profile goals.
         return None
