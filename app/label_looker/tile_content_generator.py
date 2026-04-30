@@ -51,6 +51,8 @@ Core principles:
 8. When a triggered observation is provided, prefer its content for `worth_knowing`.
 9. Prioritize ingredient names and functions; avoid citing numeric ingredient positions in user-facing copy.
 10. Do not include concentration guesses or ordering math in prose.
+11. Include profile-fit evidence explicitly: mention type-fit outcome and at least one concern/benefit alignment outcome using the provided scoring facts.
+12. When age/gender context is provided, briefly acknowledge demographic fit (or uncertainty) in either `works` or `worth_knowing`.
 </strict_rules>
 
 <output_schema>
@@ -99,6 +101,8 @@ Band: {band}
 
 Scoring breakdown:
 {scoring_breakdown}
+Profile-fit evidence:
+{profile_fit_evidence}
 
 Unmet needs: {unmet_needs}
 </scoring_results>
@@ -153,6 +157,7 @@ def build_prompt(
     unmet = scoring.get("unmet_needs", [])
     unmet_str = ", ".join(unmet) if unmet else "[none]"
     breakdown_str = _format_breakdown(scoring.get("breakdown", []))
+    profile_fit_evidence = _profile_fit_evidence(scoring.get("breakdown", []))
 
     if observations:
         parts = []
@@ -187,6 +192,7 @@ def build_prompt(
         score=score,
         band=band,
         scoring_breakdown=breakdown_str,
+        profile_fit_evidence=profile_fit_evidence,
         unmet_needs=unmet_str,
         observations_block=observations_block,
         editorial_notes=editorial_notes,
@@ -270,8 +276,36 @@ def _build_editorial_notes(*, scoring: dict[str, Any], observations: list[dict[s
         notes.append("- A triggered observation is provided. Use its editorial_text as the basis for worth_knowing.")
     else:
         notes.append("- No triggered observations. Build worth_knowing from the most useful scoring nuance.")
+    notes.append(
+        "- Ensure the prose reflects profile matching dimensions (type, concern, benefit, demographic when present), not only ingredient storytelling."
+    )
 
     return "\n".join(notes)
+
+
+def _profile_fit_evidence(breakdown: list[dict[str, Any]]) -> str:
+    if not breakdown:
+        return "- No structured profile-fit evidence available."
+    evidence: list[str] = []
+    for entry in breakdown:
+        category = str(entry.get("category", "")).strip().lower()
+        answer = str(entry.get("answer", "")).strip().lower()
+        note = str(entry.get("note", "")).strip()
+        concern = str(entry.get("concern", "")).strip()
+
+        if category == "skin_type":
+            evidence.append(f"- Type fit: {answer or 'unknown'} ({note or 'no note'})")
+        elif category.startswith("concern"):
+            label = f"Concern '{concern}'" if concern else "Concern"
+            evidence.append(f"- {label}: {answer or 'unknown'} ({note or 'no note'})")
+        elif category == "benefit_alignment":
+            evidence.append(f"- Benefit alignment: {answer or 'unknown'} ({note or 'no note'})")
+        elif category == "demographic":
+            evidence.append(f"- Demographic fit: {answer or 'unknown'} ({note or 'no note'})")
+
+    if not evidence:
+        return "- No profile-fit categories found in breakdown."
+    return "\n".join(evidence[:5])
 
 
 async def generate_tile_content(

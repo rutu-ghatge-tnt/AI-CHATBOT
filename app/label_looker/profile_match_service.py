@@ -659,6 +659,14 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "benefits": benefits,
         "life_stages": life_stages,
     }
+    profile_context = {
+        "mode": mode,
+        "age": age,
+        "gender": gender,
+        "type": type_value,
+        "concerns": concerns,
+        "expected_benefits": benefits,
+    }
 
     observations = profile_match_engines.evaluate_observations(
         state=state or "low",
@@ -721,6 +729,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             "suitability": scoring,
         },
         "generation_meta": tiles_meta,
+        "profile_context": profile_context,
         "tile_content": tiles,
         "post_scan_action": None,
         "feedback": {"sentiment": None, "category": None, "note": None, "submittedAt": None},
@@ -755,6 +764,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "safety": safety,
         "scored_for": concerns,
         "desired_benefits": benefits,
+        "profile_context": profile_context,
         "triggered_observations": observations,
         "cta": cta,
         "full_analysis": {
@@ -881,6 +891,7 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
         "safety": safety if isinstance(safety, dict) else {},
         "scored_for": suitability.get("scored_for", []),
         "desired_benefits": suitability.get("desired_benefits", []),
+        "profile_context": doc.get("profile_context", {}),
         "triggered_observations": doc.get("triggered_obs", []),
         "feedback": doc.get("feedback") if isinstance(doc.get("feedback"), dict) else None,
         "post_scan_action": doc.get("post_scan_action"),
@@ -898,6 +909,7 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
     response["unmetNeeds"] = response["unmet_needs"]
     response["scoredFor"] = response["scored_for"]
     response["desiredBenefits"] = response["desired_benefits"]
+    response["profileContext"] = response["profile_context"]
     response["unmetProfileConcerns"] = response["unmet_profile_concerns"]
     response["unmatchedDesiredBenefits"] = response["unmatched_desired_benefits"]
     response["matchedDesiredBenefits"] = response["matched_desired_benefits"]
