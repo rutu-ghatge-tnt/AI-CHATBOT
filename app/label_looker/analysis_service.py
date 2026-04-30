@@ -296,11 +296,11 @@ def _resolve_analysis_mode(
 
 def _required_fields_for_mode(mode: str) -> list[str]:
     if mode == "haircare":
-        return ["age", "gender", "hairType", "hairConcerns"]
+        return ["hairType", "hairConcerns"]
     if mode == "lipcare":
         # lipcare keeps away from hair fields; prioritize lip fields, fallback to skin fields.
-        return ["age", "gender", "lipType", "lipConcerns"]
-    return ["age", "gender", "skinType", "skinConcerns"]
+        return ["lipType", "lipConcerns"]
+    return ["skinType", "skinConcerns"]
 
 
 def _current_field_value(details: dict[str, Any], mode: str, field: str) -> Any:
@@ -403,7 +403,7 @@ def _build_prompt_payload(
         "mode": mode,
         "finalized": False,
         "fields": fields,
-        "promptReason": "After every 2 scans, verify profile data for integrity.",
+        "promptReason": "Ask only core profile fields needed for personalized match.",
     }
 
 
@@ -445,6 +445,12 @@ def _normalize_answer_key(mode: str, key: str) -> str:
         return "age"
     if canonical == "gender":
         return "gender"
+    if canonical in {"concern", "concerns"}:
+        if mode == "haircare":
+            return "hairConcerns"
+        if mode == "lipcare":
+            return "lipConcerns"
+        return "skinConcerns"
     if canonical in {"skintype"}:
         return "skinType"
     if canonical in {"skinconcerns"}:
