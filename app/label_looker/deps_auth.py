@@ -19,8 +19,10 @@ class PanelUserContext:
 
 
 def _bearer(authorization: Optional[str]) -> str:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise ScannerApiError(401, "Unauthorized")
+    if not authorization:
+        raise ScannerApiError(401, "Unauthorized: missing Authorization header")
+    if not authorization.lower().startswith("bearer "):
+        raise ScannerApiError(401, "Unauthorized: expected Bearer token")
     return authorization.split(" ", 1)[1].strip()
 
 
@@ -84,6 +86,43 @@ async def authenticate_app_user(authorization: Optional[str] = Header(None)) -> 
     user["_label_looker_role"] = data.get("role")
     user["_label_looker_access_token"] = token
     return user
+
+
+async def authenticate_any_user(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    """
+    LL2 compatibility auth:
+    1) Try app-token flow (/verify-app-token)
+    2) Fallback to legacy scanner-token flow (/verify-token + jwt decode)
+    """
+    if not authorization:
+        raise ScannerApiError(401, "Unauthorized: missing Authorization Bearer token")
+
+    try:
+        return await authenticate_app_user(authorization=authorization)
+    except ScannerApiError as app_err:
+        # If app-token verification fails, attempt legacy scanner auth.
+        if app_err.status_code not in (401, 403):
+            raise
+        try:
+            return await scanner_auth_sso(authorization=authorization)
+        except ScannerApiError:
+            raise ScannerApiError(
+                401,
+                "Unauthorized: invalid/expired token for both app and scanner auth flows",
+            ) from None
+
+
+async def authenticate_any_user_optional(
+    authorization: Optional[str] = Header(None),
+) -> Optional[dict[str, Any]]:
+    if not authorization:
+        return None
+    try:
+        return await authenticate_any_user(authorization=authorization)
+    except ScannerApiError as e:
+        if e.status_code in (401, 403):
+            return None
+        raise
 
 
 async def authenticate_app_user_optional(

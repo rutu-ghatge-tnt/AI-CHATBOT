@@ -14,13 +14,11 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from app.label_looker.constants import DEFAULT_LANGUAGE, totalScanIngedientPerDay
 from app.label_looker.errors import ScannerApiError
 from app.label_looker.prompts_controller import ingredient_analysis_user_message
+from app.label_looker.services import analysis_flow, profile_validation_flow
+from app.label_looker.services.common_flow import count_scans_today, extract_user_id, local_midnight
+from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
 from app.label_looker.settings import get_label_looker_settings
 from app.label_looker.text_extract import extract_first_json_object
-from app.label_looker.tile_content_generator import (
-    TileGenerationError,
-    build_fallback_tiles,
-    generate_tile_content,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +28,11 @@ _VALID_MODES = {"skincare", "haircare", "lipcare"}
 
 
 def _local_midnight() -> datetime:
-    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_midnight()
 
 
 async def _count_scans_today(coll: AsyncIOMotorCollection, profile_url: str | None) -> int:
-    if not profile_url:
-        return 0
-    start = _local_midnight()
-    return await coll.count_documents(
-        {
-            "createdAt": {"$gte": start},
-            "userProfileUrl": profile_url,
-            "scanImageError": None,
-        }
-    )
+    return await count_scans_today(coll, profile_url)
 
 
 def _normalize_mode(*, product_for: Any, specific_type: Any, main_benefit: Any, mode_hint: Any = None) -> str:
@@ -598,13 +587,7 @@ def _ingredient_list_from_text(raw: str) -> list[str]:
 
 
 def _extract_user_id(user: dict[str, Any]) -> Any:
-    uid = user.get("_id") or user.get("id")
-    if uid is None:
-        return None
-    s = str(uid)
-    if ObjectId.is_valid(s):
-        return ObjectId(s)
-    return s
+    return extract_user_id(user)
 
 
 def _normalize_product_ref(product_id: Any) -> Any | None:
@@ -664,6 +647,35 @@ async def _find_cached_non_personalized_analysis(
         {
             "productId": product_ref,
             "personalizedMatching": {"$ne": True},
+            "analyticDetail": {"$exists": True, "$ne": None},
+            "ingredientAnalysisError": None,
+        },
+        sort=[("updatedAt", -1)],
+    )
+    if not doc:
+        return None
+    if not isinstance(doc.get("analyticDetail"), dict):
+        return None
+    return doc
+
+
+async def _find_user_product_existing_analysis(
+    *,
+    scan_coll: AsyncIOMotorCollection,
+    user_id: Any | None,
+    product_ref: Any | None,
+) -> dict[str, Any] | None:
+    """
+    Return most recent successful analysis for the same user+product.
+    Used to reuse analysis on public PDP when user is logged in, without
+    forcing authenticated-only endpoints.
+    """
+    if user_id is None or product_ref is None:
+        return None
+    doc = await scan_coll.find_one(
+        {
+            "userId": user_id,
+            "productId": product_ref,
             "analyticDetail": {"$exists": True, "$ne": None},
             "ingredientAnalysisError": None,
         },
@@ -912,23 +924,22 @@ async def _maybe_attach_ll2_tile_content(
         return analytic
     out = dict(analytic)
     tile_model = (os.getenv("LL2_TILE_ANTHROPIC_MODEL") or "").strip() or anthropic_model
-    meta: dict[str, Any] = {"source": "claude", "model": tile_model}
-    try:
-        tiles = await generate_tile_content(inputs=inputs, client=client, model=tile_model)
-    except TileGenerationError as exc:
-        logger.warning("LL2 tile generation failed, using template fallback: %s", exc)
-        tiles = build_fallback_tiles(inputs=inputs)
-        meta = {"source": "fallback", "model": tile_model, "reason": "tile_generation_error"}
-    except Exception:
-        logger.exception("LL2 tile generation unexpected error; using template fallback")
-        tiles = build_fallback_tiles(inputs=inputs)
-        meta = {"source": "fallback", "model": tile_model, "reason": "unexpected_error"}
+    tiles, meta = await generate_tiles_with_fallback(
+        inputs=inputs,
+        client=client,
+        model=tile_model,
+        context="analyze_product_tiles",
+    )
     out["ll2TileContent"] = tiles
     out["ll2TileContentMeta"] = meta
     return out
 
 
 async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
+    return await analysis_flow.ingredient_analysis(body=body, user=user)
+
+
+async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
     scan_id = body.get("scanId")
     if not scan_id:
         raise ScannerApiError(400, "scanId is required")
@@ -1123,6 +1134,14 @@ async def ingredient_analysis_from_text(
     body: dict[str, Any],
     user: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    return await analysis_flow.ingredient_analysis_from_text(body=body, user=user)
+
+
+async def _ingredient_analysis_from_text_impl(
+    *,
+    body: dict[str, Any],
+    user: dict[str, Any] | None,
+) -> dict[str, Any]:
     s = get_label_looker_settings()
     from app.label_looker.db import get_scanner_db
 
@@ -1168,6 +1187,48 @@ async def ingredient_analysis_from_text(
         if user_id is None:
             raise ScannerApiError(401, "Please login to use personalized matching")
         personalization_context = _build_personalization_context(details or {})
+
+    # Prefer latest successful analysis for same user+product when available.
+    # This enables PDP reuse behavior without requiring auth-only history APIs.
+    existing_user_product = await _find_user_product_existing_analysis(
+        scan_coll=scan_coll,
+        user_id=user_id,
+        product_ref=product_id_ref,
+    )
+    if existing_user_product:
+        existing_analytic = dict(existing_user_product.get("analyticDetail") or {})
+        existing_ingredients = existing_user_product.get("ingredients")
+        if not isinstance(existing_ingredients, list):
+            existing_ingredients = ing_list
+        profile_validation = None
+        if user_id is not None:
+            mode = _resolve_analysis_mode(
+                body=body,
+                product=product,
+                specific_type=body.get("specificType"),
+                main_benefit=body.get("mainBenefit"),
+            )
+            mode_state = await _upsert_validation_state(
+                user_details_coll=user_details_coll,
+                user_id=user_id,
+                mode=mode,
+                bump_scan_count=False,
+                details_doc=details,
+            )
+            profile_validation = _build_prompt_payload(
+                mode=mode,
+                mode_state=mode_state,
+                details=details or {},
+                force_prompt_if_missing=False,
+            )
+        return {
+            "scanId": str(existing_user_product.get("_id")),
+            "analyticDetail": existing_analytic,
+            "ingredients": existing_ingredients,
+            "profileValidation": profile_validation,
+            "cacheHit": True,
+            "cacheType": "user_product",
+        }
 
     now = datetime.now()
     scan_doc = {
@@ -1334,6 +1395,10 @@ async def ingredient_analysis_from_text(
 
 
 async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
+    return await profile_validation_flow.submit_profile_validation(body=body, user=user)
+
+
+async def _submit_profile_validation_impl(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
     user_id = _extract_user_id(user)
     if user_id is None:
         raise ScannerApiError(401, "Please login to submit profile validation")
@@ -1409,6 +1474,10 @@ async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any
 
 
 async def profile_validation_status(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
+    return await profile_validation_flow.profile_validation_status(body=body, user=user)
+
+
+async def _profile_validation_status_impl(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
     """
     Check whether required profile fields are available for this user/mode,
     and whether prompt should appear now based on scan cadence.
