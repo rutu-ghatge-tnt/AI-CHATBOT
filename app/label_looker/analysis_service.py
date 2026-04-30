@@ -55,17 +55,17 @@ def _infer_mode_from_product(product: dict[str, Any] | None) -> str | None:
     pname = str(product.get("productName") or "").lower()
     if "lip" in ptype or "lip" in pname:
         return "lipcare"
-    if _product_list_values(product, "lipTypes", "lipType"):
+    if _has_non_empty_list_field(product, "lipTypes", "lipType"):
         return "lipcare"
-    if _product_list_values(product, "lipConcerns"):
+    if _has_non_empty_list_field(product, "lipConcerns"):
         return "lipcare"
-    if _product_list_values(product, "hairTypes", "hairType"):
+    if _has_non_empty_list_field(product, "hairTypes", "hairType"):
         return "haircare"
-    if _product_list_values(product, "hairConcerns"):
+    if _has_non_empty_list_field(product, "hairConcerns"):
         return "haircare"
-    if _product_list_values(product, "skinTypes", "skinType"):
+    if _has_non_empty_list_field(product, "skinTypes", "skinType"):
         return "skincare"
-    if _product_list_values(product, "skinConcerns"):
+    if _has_non_empty_list_field(product, "skinConcerns"):
         return "skincare"
     if "hair" in ptype or "scalp" in ptype:
         return "haircare"
@@ -98,6 +98,16 @@ def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str
             elif isinstance(name, str) and name.strip():
                 out.append(name.strip())
     return list(dict.fromkeys(out))
+
+
+def _has_non_empty_list_field(product: dict[str, Any] | None, *keys: str) -> bool:
+    if not product:
+        return False
+    for key in keys:
+        raw = product.get(key)
+        if isinstance(raw, list) and len(raw) > 0:
+            return True
+    return False
 
 
 def _normalize_object_id(value: Any) -> ObjectId | None:
@@ -285,16 +295,19 @@ def _resolve_analysis_mode(
 
 def _required_fields_for_mode(mode: str) -> list[str]:
     if mode == "haircare":
-        return ["hairType", "hairConcerns"]
+        return ["age", "gender", "hairType", "hairConcerns", "expectedBenefit"]
     if mode == "lipcare":
         # lipcare keeps away from hair fields; prioritize lip fields, fallback to skin fields.
-        return ["lipType", "lipConcerns"]
-    return ["skinType", "skinConcerns"]
+        return ["age", "gender", "lipType", "lipConcerns", "expectedBenefit"]
+    return ["age", "gender", "skinType", "skinConcerns", "expectedBenefit"]
 
 
 def _current_field_value(details: dict[str, Any], mode: str, field: str) -> Any:
     if field in ("age", "gender"):
         return details.get(field)
+    if field == "expectedBenefit":
+        # expectedBenefit is analysis-scoped; don't bind it to persisted profile goals.
+        return None
     if mode == "lipcare":
         if field in ("lipType", "lipConcerns"):
             # Backward compatibility: if lip-specific data isn't stored yet, use skin profile.
@@ -330,7 +343,9 @@ def _is_present_value(value: Any) -> bool:
 
 def _has_missing_required(details: dict[str, Any], mode: str, final_values: dict[str, Any]) -> bool:
     for f in _required_fields_for_mode(mode):
-        val = _current_field_value(details, mode, f)
+        val = final_values.get(f)
+        if not _is_present_value(val):
+            val = _current_field_value(details, mode, f)
         if not _is_present_value(val):
             return True
     return False
@@ -359,6 +374,7 @@ async def _upsert_validation_state(
     mode_state.setdefault("promptRounds", 0)
     mode_state.setdefault("attempts", {})
     mode_state.setdefault("finalValues", {})
+    mode_state.setdefault("lastAnsweredScanCount", -1)
     llv[mode] = mode_state
     await user_details_coll.update_one(
         {"userId": user_id},
@@ -382,7 +398,12 @@ def _build_prompt_payload(
         return {"shouldPrompt": False, "mode": mode, "finalized": True, "fields": []}
     if not _has_missing_required(details, mode, final_values):
         return {"shouldPrompt": False, "mode": mode, "finalized": True, "fields": []}
-    if not force_prompt_if_missing and int(mode_state.get("scanCount") or 0) % 2 != 0:
+    # Do not ask back-to-back right after a submit; ask again on a later analysis.
+    scan_count = int(mode_state.get("scanCount") or 0)
+    last_answered_scan_count = int(mode_state.get("lastAnsweredScanCount") or -1)
+    if last_answered_scan_count >= scan_count:
+        return {"shouldPrompt": False, "mode": mode, "finalized": False, "fields": []}
+    if not force_prompt_if_missing and scan_count % 2 != 0:
         return {"shouldPrompt": False, "mode": mode, "finalized": False, "fields": []}
     fields = _pick_two_fields(required_fields, final_values, attempts)
     if not fields:
@@ -440,6 +461,10 @@ def _normalize_answer_key(mode: str, key: str) -> str:
         if mode == "lipcare":
             return "lipConcerns"
         return "skinConcerns"
+    if canonical in {"expectedbenefit", "expectedbenefits", "mainbenefit", "benefit", "benefits"}:
+        return "expectedBenefit"
+    if canonical in {"skingoal", "skingoals", "hairgoal", "hairgoals", "lipgoal", "lipgoals"}:
+        return "expectedBenefit"
     if canonical in {"skintype"}:
         return "skinType"
     if canonical in {"skinconcerns"}:
@@ -492,19 +517,24 @@ def _apply_answers_to_state(
         arr = list(attempts.get(key) or [])
         arr.append(value)
         attempts[key] = arr
+        # expectedBenefit is per-analysis and should not be copied to user details.
+        is_analysis_scoped_field = field == "expectedBenefit"
         # If user already has the same value saved, accept immediately.
         existing = _current_field_value(details, mode, field)
         if _is_present_value(existing) and _same_answer_value(existing, value):
             final_values[key] = value
-            updates_for_details[field] = value
+            if not is_analysis_scoped_field:
+                updates_for_details[field] = value
             continue
         if len(arr) >= 3:
             final_values[key] = arr[-1]
-            updates_for_details[field] = arr[-1]
+            if not is_analysis_scoped_field:
+                updates_for_details[field] = arr[-1]
             continue
         if len(arr) == 2 and _same_answer_value(arr[0], arr[1]):
             final_values[key] = arr[1]
-            updates_for_details[field] = arr[1]
+            if not is_analysis_scoped_field:
+                updates_for_details[field] = arr[1]
 
     mode_state["attempts"] = attempts
     mode_state["finalValues"] = final_values
@@ -1435,7 +1465,15 @@ async def _submit_profile_validation_impl(*, body: dict[str, Any], user: dict[st
     )
     llv = dict(details.get("labelLookerValidation") or {})
     mode_state = dict(
-        llv.get(resolved_mode) or {"scanCount": 0, "promptRounds": 0, "attempts": {}, "finalValues": {}, "finalized": False}
+        llv.get(resolved_mode)
+        or {
+            "scanCount": 0,
+            "promptRounds": 0,
+            "attempts": {},
+            "finalValues": {},
+            "finalized": False,
+            "lastAnsweredScanCount": -1,
+        }
     )
     mode_state, updates_for_details = _apply_answers_to_state(
         resolved_mode,
@@ -1443,6 +1481,7 @@ async def _submit_profile_validation_impl(*, body: dict[str, Any], user: dict[st
         answers,
         details=details,
     )
+    mode_state["lastAnsweredScanCount"] = int(mode_state.get("scanCount") or 0)
     llv[resolved_mode] = mode_state
 
     set_doc = {"labelLookerValidation": llv, "updatedAt": datetime.now()}
@@ -1522,7 +1561,9 @@ async def _profile_validation_status_impl(*, body: dict[str, Any], user: dict[st
 
     missing_fields: list[str] = []
     for f in _required_fields_for_mode(resolved_mode):
-        val = _current_field_value(details, resolved_mode, f)
+        val = dict(mode_state.get("finalValues") or {}).get(f)
+        if not _is_present_value(val):
+            val = _current_field_value(details, resolved_mode, f)
         if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, list) and len(val) == 0):
             missing_fields.append(f)
 
