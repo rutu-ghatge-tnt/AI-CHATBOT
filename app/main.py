@@ -99,7 +99,7 @@ sys.path.insert(0, str(face_analysis_path))
 
 # Import Face Analysis router (with error handling for missing module)
 try:
-    from face_analysis.backend.api.main import router as face_analysis_router  # type: ignore
+    from backend.api.main import router as face_analysis_router  # type: ignore
 except ImportError as e:
     print(f"Warning: Could not import face_analysis router: {e}")
     print("   Face Analysis API will not be available. This is not critical.")
