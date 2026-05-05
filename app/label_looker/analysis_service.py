@@ -14,13 +14,11 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from app.label_looker.constants import DEFAULT_LANGUAGE, totalScanIngedientPerDay
 from app.label_looker.errors import ScannerApiError
 from app.label_looker.prompts_controller import ingredient_analysis_user_message
+from app.label_looker.services import analysis_flow, profile_validation_flow
+from app.label_looker.services.common_flow import count_scans_today, extract_user_id, local_midnight
+from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
 from app.label_looker.settings import get_label_looker_settings
 from app.label_looker.text_extract import extract_first_json_object
-from app.label_looker.tile_content_generator import (
-    TileGenerationError,
-    build_fallback_tiles,
-    generate_tile_content,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +28,11 @@ _VALID_MODES = {"skincare", "haircare", "lipcare"}
 
 
 def _local_midnight() -> datetime:
-    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_midnight()
 
 
 async def _count_scans_today(coll: AsyncIOMotorCollection, profile_url: str | None) -> int:
-    if not profile_url:
-        return 0
-    start = _local_midnight()
-    return await coll.count_documents(
-        {
-            "createdAt": {"$gte": start},
-            "userProfileUrl": profile_url,
-            "scanImageError": None,
-        }
-    )
+    return await count_scans_today(coll, profile_url)
 
 
 def _normalize_mode(*, product_for: Any, specific_type: Any, main_benefit: Any, mode_hint: Any = None) -> str:
@@ -64,20 +53,48 @@ def _infer_mode_from_product(product: dict[str, Any] | None) -> str | None:
     # lipcare first, because lip products can also carry generic skin fields.
     ptype = str(product.get("productType") or "").lower()
     pname = str(product.get("productName") or "").lower()
+    pslug = str(product.get("slug") or "").lower()
+    category_text = " ".join(
+        [
+            ptype,
+            pname,
+            pslug,
+            str(_metadata_value(product, "category") or "").lower(),
+            str(_metadata_value(product, "product-type") or "").lower(),
+        ]
+    )
+    skincare_keywords = [
+        "skin",
+        "face",
+        "serum",
+        "sunscreen",
+        "spf",
+        "moistur",
+        "cleanser",
+        "toner",
+        "cream",
+    ]
     if "lip" in ptype or "lip" in pname:
         return "lipcare"
-    if _product_list_values(product, "lipTypes", "lipType"):
+    if _has_non_empty_list_field(product, "lipTypes", "lipType"):
         return "lipcare"
-    if _product_list_values(product, "lipConcerns"):
+    if _has_non_empty_list_field(product, "lipConcerns"):
         return "lipcare"
-    if _product_list_values(product, "hairTypes", "hairType"):
-        return "haircare"
-    if _product_list_values(product, "hairConcerns"):
-        return "haircare"
-    if _product_list_values(product, "skinTypes", "skinType"):
+
+    # If product text clearly says skincare, prefer skincare even if legacy hair fields exist.
+    if any(k in category_text for k in skincare_keywords):
         return "skincare"
-    if _product_list_values(product, "skinConcerns"):
+
+    has_hair = _has_non_empty_list_field(product, "hairTypes", "hairType", "hairConcerns")
+    has_skin = _has_non_empty_list_field(product, "skinTypes", "skinType", "skinConcerns")
+    if has_hair and not has_skin:
+        return "haircare"
+    if has_skin and not has_hair:
         return "skincare"
+    if has_hair and has_skin:
+        # Mixed/dirty product docs: favor skincare as default for generic cosmetic PDP scans.
+        return "skincare"
+
     if "hair" in ptype or "scalp" in ptype:
         return "haircare"
     if "skin" in ptype or "face" in ptype:
@@ -109,6 +126,16 @@ def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str
             elif isinstance(name, str) and name.strip():
                 out.append(name.strip())
     return list(dict.fromkeys(out))
+
+
+def _has_non_empty_list_field(product: dict[str, Any] | None, *keys: str) -> bool:
+    if not product:
+        return False
+    for key in keys:
+        raw = product.get(key)
+        if isinstance(raw, list) and len(raw) > 0:
+            return True
+    return False
 
 
 def _normalize_object_id(value: Any) -> ObjectId | None:
@@ -296,16 +323,36 @@ def _resolve_analysis_mode(
 
 def _required_fields_for_mode(mode: str) -> list[str]:
     if mode == "haircare":
-        return ["age", "gender", "hairType", "hairConcerns"]
+        return ["age", "gender", "hairType", "hairConcerns", "expectedBenefit"]
     if mode == "lipcare":
         # lipcare keeps away from hair fields; prioritize lip fields, fallback to skin fields.
-        return ["age", "gender", "lipType", "lipConcerns"]
-    return ["age", "gender", "skinType", "skinConcerns"]
+        return ["age", "gender", "lipType", "lipConcerns", "expectedBenefit"]
+    return ["age", "gender", "skinType", "skinConcerns", "expectedBenefit"]
 
 
 def _current_field_value(details: dict[str, Any], mode: str, field: str) -> Any:
     if field in ("age", "gender"):
-        return details.get(field)
+        if field == "gender":
+            return details.get("gender")
+        age_val = details.get("age")
+        if _is_present_value(age_val):
+            return age_val
+        # Support older schemas where age is stored as ageRange / age_years.
+        for alt_key in ("ageRange", "age_range", "ageYears", "age_years", "ageValue"):
+            alt = details.get(alt_key)
+            if isinstance(alt, (int, float)):
+                return int(alt)
+            if isinstance(alt, str) and alt.strip():
+                m = re.search(r"\d+", alt)
+                if m:
+                    try:
+                        return int(m.group(0))
+                    except ValueError:
+                        pass
+        return None
+    if field == "expectedBenefit":
+        # expectedBenefit is analysis-scoped; don't bind it to persisted profile goals.
+        return None
     if mode == "lipcare":
         if field in ("lipType", "lipConcerns"):
             # Backward compatibility: if lip-specific data isn't stored yet, use skin profile.
@@ -341,7 +388,9 @@ def _is_present_value(value: Any) -> bool:
 
 def _has_missing_required(details: dict[str, Any], mode: str, final_values: dict[str, Any]) -> bool:
     for f in _required_fields_for_mode(mode):
-        val = _current_field_value(details, mode, f)
+        val = final_values.get(f)
+        if not _is_present_value(val):
+            val = _current_field_value(details, mode, f)
         if not _is_present_value(val):
             return True
     return False
@@ -370,6 +419,7 @@ async def _upsert_validation_state(
     mode_state.setdefault("promptRounds", 0)
     mode_state.setdefault("attempts", {})
     mode_state.setdefault("finalValues", {})
+    mode_state.setdefault("lastAnsweredScanCount", -1)
     llv[mode] = mode_state
     await user_details_coll.update_one(
         {"userId": user_id},
@@ -393,7 +443,12 @@ def _build_prompt_payload(
         return {"shouldPrompt": False, "mode": mode, "finalized": True, "fields": []}
     if not _has_missing_required(details, mode, final_values):
         return {"shouldPrompt": False, "mode": mode, "finalized": True, "fields": []}
-    if not force_prompt_if_missing and int(mode_state.get("scanCount") or 0) % 2 != 0:
+    # Do not ask back-to-back right after a submit; ask again on a later analysis.
+    scan_count = int(mode_state.get("scanCount") or 0)
+    last_answered_scan_count = int(mode_state.get("lastAnsweredScanCount") or -1)
+    if last_answered_scan_count >= scan_count:
+        return {"shouldPrompt": False, "mode": mode, "finalized": False, "fields": []}
+    if not force_prompt_if_missing and scan_count % 2 != 0:
         return {"shouldPrompt": False, "mode": mode, "finalized": False, "fields": []}
     fields = _pick_two_fields(required_fields, final_values, attempts)
     if not fields:
@@ -403,7 +458,7 @@ def _build_prompt_payload(
         "mode": mode,
         "finalized": False,
         "fields": fields,
-        "promptReason": "After every 2 scans, verify profile data for integrity.",
+        "promptReason": "Ask only core profile fields needed for personalized match.",
     }
 
 
@@ -445,6 +500,16 @@ def _normalize_answer_key(mode: str, key: str) -> str:
         return "age"
     if canonical == "gender":
         return "gender"
+    if canonical in {"concern", "concerns"}:
+        if mode == "haircare":
+            return "hairConcerns"
+        if mode == "lipcare":
+            return "lipConcerns"
+        return "skinConcerns"
+    if canonical in {"expectedbenefit", "expectedbenefits", "mainbenefit", "benefit", "benefits"}:
+        return "expectedBenefit"
+    if canonical in {"skingoal", "skingoals", "hairgoal", "hairgoals", "lipgoal", "lipgoals"}:
+        return "expectedBenefit"
     if canonical in {"skintype"}:
         return "skinType"
     if canonical in {"skinconcerns"}:
@@ -497,19 +562,24 @@ def _apply_answers_to_state(
         arr = list(attempts.get(key) or [])
         arr.append(value)
         attempts[key] = arr
+        # expectedBenefit is per-analysis and should not be copied to user details.
+        is_analysis_scoped_field = field == "expectedBenefit"
         # If user already has the same value saved, accept immediately.
         existing = _current_field_value(details, mode, field)
         if _is_present_value(existing) and _same_answer_value(existing, value):
             final_values[key] = value
-            updates_for_details[field] = value
+            if not is_analysis_scoped_field:
+                updates_for_details[field] = value
             continue
         if len(arr) >= 3:
             final_values[key] = arr[-1]
-            updates_for_details[field] = arr[-1]
+            if not is_analysis_scoped_field:
+                updates_for_details[field] = arr[-1]
             continue
         if len(arr) == 2 and _same_answer_value(arr[0], arr[1]):
             final_values[key] = arr[1]
-            updates_for_details[field] = arr[1]
+            if not is_analysis_scoped_field:
+                updates_for_details[field] = arr[1]
 
     mode_state["attempts"] = attempts
     mode_state["finalValues"] = final_values
@@ -598,13 +668,7 @@ def _ingredient_list_from_text(raw: str) -> list[str]:
 
 
 def _extract_user_id(user: dict[str, Any]) -> Any:
-    uid = user.get("_id") or user.get("id")
-    if uid is None:
-        return None
-    s = str(uid)
-    if ObjectId.is_valid(s):
-        return ObjectId(s)
-    return s
+    return extract_user_id(user)
 
 
 def _normalize_product_ref(product_id: Any) -> Any | None:
@@ -664,6 +728,35 @@ async def _find_cached_non_personalized_analysis(
         {
             "productId": product_ref,
             "personalizedMatching": {"$ne": True},
+            "analyticDetail": {"$exists": True, "$ne": None},
+            "ingredientAnalysisError": None,
+        },
+        sort=[("updatedAt", -1)],
+    )
+    if not doc:
+        return None
+    if not isinstance(doc.get("analyticDetail"), dict):
+        return None
+    return doc
+
+
+async def _find_user_product_existing_analysis(
+    *,
+    scan_coll: AsyncIOMotorCollection,
+    user_id: Any | None,
+    product_ref: Any | None,
+) -> dict[str, Any] | None:
+    """
+    Return most recent successful analysis for the same user+product.
+    Used to reuse analysis on public PDP when user is logged in, without
+    forcing authenticated-only endpoints.
+    """
+    if user_id is None or product_ref is None:
+        return None
+    doc = await scan_coll.find_one(
+        {
+            "userId": user_id,
+            "productId": product_ref,
             "analyticDetail": {"$exists": True, "$ne": None},
             "ingredientAnalysisError": None,
         },
@@ -912,23 +1005,22 @@ async def _maybe_attach_ll2_tile_content(
         return analytic
     out = dict(analytic)
     tile_model = (os.getenv("LL2_TILE_ANTHROPIC_MODEL") or "").strip() or anthropic_model
-    meta: dict[str, Any] = {"source": "claude", "model": tile_model}
-    try:
-        tiles = await generate_tile_content(inputs=inputs, client=client, model=tile_model)
-    except TileGenerationError as exc:
-        logger.warning("LL2 tile generation failed, using template fallback: %s", exc)
-        tiles = build_fallback_tiles(inputs=inputs)
-        meta = {"source": "fallback", "model": tile_model, "reason": "tile_generation_error"}
-    except Exception:
-        logger.exception("LL2 tile generation unexpected error; using template fallback")
-        tiles = build_fallback_tiles(inputs=inputs)
-        meta = {"source": "fallback", "model": tile_model, "reason": "unexpected_error"}
+    tiles, meta = await generate_tiles_with_fallback(
+        inputs=inputs,
+        client=client,
+        model=tile_model,
+        context="analyze_product_tiles",
+    )
     out["ll2TileContent"] = tiles
     out["ll2TileContentMeta"] = meta
     return out
 
 
 async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
+    return await analysis_flow.ingredient_analysis(body=body, user=user)
+
+
+async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
     scan_id = body.get("scanId")
     if not scan_id:
         raise ScannerApiError(400, "scanId is required")
@@ -1123,6 +1215,14 @@ async def ingredient_analysis_from_text(
     body: dict[str, Any],
     user: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    return await analysis_flow.ingredient_analysis_from_text(body=body, user=user)
+
+
+async def _ingredient_analysis_from_text_impl(
+    *,
+    body: dict[str, Any],
+    user: dict[str, Any] | None,
+) -> dict[str, Any]:
     s = get_label_looker_settings()
     from app.label_looker.db import get_scanner_db
 
@@ -1168,6 +1268,48 @@ async def ingredient_analysis_from_text(
         if user_id is None:
             raise ScannerApiError(401, "Please login to use personalized matching")
         personalization_context = _build_personalization_context(details or {})
+
+    # Prefer latest successful analysis for same user+product when available.
+    # This enables PDP reuse behavior without requiring auth-only history APIs.
+    existing_user_product = await _find_user_product_existing_analysis(
+        scan_coll=scan_coll,
+        user_id=user_id,
+        product_ref=product_id_ref,
+    )
+    if existing_user_product:
+        existing_analytic = dict(existing_user_product.get("analyticDetail") or {})
+        existing_ingredients = existing_user_product.get("ingredients")
+        if not isinstance(existing_ingredients, list):
+            existing_ingredients = ing_list
+        profile_validation = None
+        if user_id is not None:
+            mode = _resolve_analysis_mode(
+                body=body,
+                product=product,
+                specific_type=body.get("specificType"),
+                main_benefit=body.get("mainBenefit"),
+            )
+            mode_state = await _upsert_validation_state(
+                user_details_coll=user_details_coll,
+                user_id=user_id,
+                mode=mode,
+                bump_scan_count=False,
+                details_doc=details,
+            )
+            profile_validation = _build_prompt_payload(
+                mode=mode,
+                mode_state=mode_state,
+                details=details or {},
+                force_prompt_if_missing=False,
+            )
+        return {
+            "scanId": str(existing_user_product.get("_id")),
+            "analyticDetail": existing_analytic,
+            "ingredients": existing_ingredients,
+            "profileValidation": profile_validation,
+            "cacheHit": True,
+            "cacheType": "user_product",
+        }
 
     now = datetime.now()
     scan_doc = {
@@ -1334,6 +1476,10 @@ async def ingredient_analysis_from_text(
 
 
 async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
+    return await profile_validation_flow.submit_profile_validation(body=body, user=user)
+
+
+async def _submit_profile_validation_impl(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
     user_id = _extract_user_id(user)
     if user_id is None:
         raise ScannerApiError(401, "Please login to submit profile validation")
@@ -1364,7 +1510,15 @@ async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any
     )
     llv = dict(details.get("labelLookerValidation") or {})
     mode_state = dict(
-        llv.get(resolved_mode) or {"scanCount": 0, "promptRounds": 0, "attempts": {}, "finalValues": {}, "finalized": False}
+        llv.get(resolved_mode)
+        or {
+            "scanCount": 0,
+            "promptRounds": 0,
+            "attempts": {},
+            "finalValues": {},
+            "finalized": False,
+            "lastAnsweredScanCount": -1,
+        }
     )
     mode_state, updates_for_details = _apply_answers_to_state(
         resolved_mode,
@@ -1372,6 +1526,7 @@ async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any
         answers,
         details=details,
     )
+    mode_state["lastAnsweredScanCount"] = int(mode_state.get("scanCount") or 0)
     llv[resolved_mode] = mode_state
 
     set_doc = {"labelLookerValidation": llv, "updatedAt": datetime.now()}
@@ -1409,6 +1564,10 @@ async def submit_profile_validation(*, body: dict[str, Any], user: dict[str, Any
 
 
 async def profile_validation_status(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
+    return await profile_validation_flow.profile_validation_status(body=body, user=user)
+
+
+async def _profile_validation_status_impl(*, body: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
     """
     Check whether required profile fields are available for this user/mode,
     and whether prompt should appear now based on scan cadence.
@@ -1447,7 +1606,9 @@ async def profile_validation_status(*, body: dict[str, Any], user: dict[str, Any
 
     missing_fields: list[str] = []
     for f in _required_fields_for_mode(resolved_mode):
-        val = _current_field_value(details, resolved_mode, f)
+        val = dict(mode_state.get("finalValues") or {}).get(f)
+        if not _is_present_value(val):
+            val = _current_field_value(details, resolved_mode, f)
         if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, list) and len(val) == 0):
             missing_fields.append(f)
 

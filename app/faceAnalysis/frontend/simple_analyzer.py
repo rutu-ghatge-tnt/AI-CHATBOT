@@ -17,13 +17,12 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 
-# Add the project root to Python path for imports
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+# Face Analysis package root (contains backend/, frontend/)
+face_pkg_root = Path(__file__).parent.parent
+sys.path.insert(0, str(face_pkg_root))
 
-# Import modules
-from face_analysis.backend.modules.filter import FaceFilter
-from face_analysis.backend.modules.recommendation import RecommendationEngine
+from backend.modules.filter import FaceFilter
+from backend.modules.recommendation import RecommendationEngine
 
 # Page configuration
 st.set_page_config(

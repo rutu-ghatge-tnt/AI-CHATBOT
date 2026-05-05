@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 
@@ -25,6 +26,7 @@ Core principles:
 7. No jargon without a parenthetical on first use. "Comedogenic (pore-clogging)" - not just "comedogenic."
 8. No emoji. No exclamation marks except in the rare celebration moment. No sarcasm.
 9. Indian market cultural awareness: descriptive, not patronizing. The user is a skincare enthusiast who wants to learn, not a novice being lectured.
+10. Every sentence must be complete and self-contained; avoid fragments and shorthand.
 </voice>
 
 <tile_specifications>
@@ -40,12 +42,17 @@ Core principles:
 <strict_rules>
 1. Only name ingredients explicitly listed in the product data. Do not invent, infer, or substitute ingredient names.
 2. Only reference positions that are given in the product data. Do not guess positions.
+2b. Do not invent position ranges like "3-24". Cite exact positions for named ingredients only.
 3. Do not recommend or dissuade. Describe. Let the user decide.
 4. Do not use alarmist language.
 5. Do not apologize on the brand's behalf. State facts neutrally.
 6. Stay within stated word counts. Going long signals uncertainty.
 7. Output valid JSON matching the output schema exactly. No commentary before or after.
 8. When a triggered observation is provided, prefer its content for `worth_knowing`.
+9. Prioritize ingredient names and functions; avoid citing numeric ingredient positions in user-facing copy.
+10. Do not include concentration guesses or ordering math in prose.
+11. Include profile-fit evidence explicitly: mention type-fit outcome and at least one concern/benefit alignment outcome using the provided scoring facts.
+12. When age/gender context is provided, briefly acknowledge demographic fit (or uncertainty) in either `works` or `worth_knowing`.
 </strict_rules>
 
 <output_schema>
@@ -66,10 +73,10 @@ Think carefully about the specific ingredients and positions before writing. The
 USER_PROMPT_TEMPLATE = """<user_profile>
 Age: {age}
 Gender: {gender}
-Skin type: {skin_type}
-Concerns (priority order): {concerns}
+Profile mode: {profile_mode}
+{type_label}: {profile_type}
+{concerns_label} (priority order): {concerns}
 Desired benefits: {benefits}
-Life stages: {life_stages}
 </user_profile>
 
 <product>
@@ -80,8 +87,11 @@ Declared for skin types: {declared_for}
 Label claims:
 {claims_list}
 
-Key ingredients (INCI order):
-{ingredients_list}
+All ingredients (INCI order):
+{all_ingredients_list}
+
+Key ingredients (highlighted):
+{key_ingredients_list}
 </product>
 
 <scoring_results>
@@ -91,6 +101,8 @@ Band: {band}
 
 Scoring breakdown:
 {scoring_breakdown}
+Profile-fit evidence:
+{profile_fit_evidence}
 
 Unmet needs: {unmet_needs}
 </scoring_results>
@@ -115,14 +127,29 @@ def build_prompt(
 ) -> str:
     observations = observations or []
 
-    life_stages = ", ".join(user.get("life_stages", [])) or "none"
+    profile_mode = str(user.get("mode") or "skincare").strip().lower()
+    if profile_mode not in {"skincare", "haircare", "lipcare"}:
+        profile_mode = "skincare"
     concerns = ", ".join(user.get("concerns", [])) or "none declared"
     benefits = ", ".join(user.get("benefits", [])) or "none specified"
+    if profile_mode == "haircare":
+        type_label = "Hair type"
+        concerns_label = "Hair concerns"
+        profile_type = user.get("hair_type") or user.get("skin_type", "-")
+    elif profile_mode == "lipcare":
+        type_label = "Lip type"
+        concerns_label = "Lip concerns"
+        profile_type = user.get("lip_type") or user.get("skin_type", "-")
+    else:
+        type_label = "Skin type"
+        concerns_label = "Skin concerns"
+        profile_type = user.get("skin_type", "-")
 
     declared_for = ", ".join(product.get("declared_for_skin_types", [])) or "not specified"
     claims = product.get("claims", [])
     claims_list = "\n".join(f"- {claim}" for claim in claims) if claims else "- (no specific claims)"
-    ingredients_list = _format_ingredients(product.get("key_ingredients", []))
+    all_ingredients_list = _format_ingredients(product.get("ingredients", []))
+    key_ingredients_list = _format_ingredients(product.get("key_ingredients", []))
 
     state = scoring.get("state", "unknown")
     score = scoring.get("score", "-")
@@ -130,6 +157,7 @@ def build_prompt(
     unmet = scoring.get("unmet_needs", [])
     unmet_str = ", ".join(unmet) if unmet else "[none]"
     breakdown_str = _format_breakdown(scoring.get("breakdown", []))
+    profile_fit_evidence = _profile_fit_evidence(scoring.get("breakdown", []))
 
     if observations:
         parts = []
@@ -147,20 +175,24 @@ def build_prompt(
     return USER_PROMPT_TEMPLATE.format(
         age=user.get("age", "-"),
         gender=user.get("gender", "-"),
-        skin_type=user.get("skin_type", "-"),
+        profile_mode=profile_mode,
+        type_label=type_label,
+        profile_type=profile_type,
+        concerns_label=concerns_label,
         concerns=concerns,
         benefits=benefits,
-        life_stages=life_stages,
         brand=product.get("brand", "-"),
         product_name=product.get("name", "-"),
         category=product.get("category", "-"),
         declared_for=declared_for,
         claims_list=claims_list,
-        ingredients_list=ingredients_list,
+        all_ingredients_list=all_ingredients_list,
+        key_ingredients_list=key_ingredients_list,
         state=state,
         score=score,
         band=band,
         scoring_breakdown=breakdown_str,
+        profile_fit_evidence=profile_fit_evidence,
         unmet_needs=unmet_str,
         observations_block=observations_block,
         editorial_notes=editorial_notes,
@@ -244,8 +276,36 @@ def _build_editorial_notes(*, scoring: dict[str, Any], observations: list[dict[s
         notes.append("- A triggered observation is provided. Use its editorial_text as the basis for worth_knowing.")
     else:
         notes.append("- No triggered observations. Build worth_knowing from the most useful scoring nuance.")
+    notes.append(
+        "- Ensure the prose reflects profile matching dimensions (type, concern, benefit, demographic when present), not only ingredient storytelling."
+    )
 
     return "\n".join(notes)
+
+
+def _profile_fit_evidence(breakdown: list[dict[str, Any]]) -> str:
+    if not breakdown:
+        return "- No structured profile-fit evidence available."
+    evidence: list[str] = []
+    for entry in breakdown:
+        category = str(entry.get("category", "")).strip().lower()
+        answer = str(entry.get("answer", "")).strip().lower()
+        note = str(entry.get("note", "")).strip()
+        concern = str(entry.get("concern", "")).strip()
+
+        if category == "skin_type":
+            evidence.append(f"- Type fit: {answer or 'unknown'} ({note or 'no note'})")
+        elif category.startswith("concern"):
+            label = f"Concern '{concern}'" if concern else "Concern"
+            evidence.append(f"- {label}: {answer or 'unknown'} ({note or 'no note'})")
+        elif category == "benefit_alignment":
+            evidence.append(f"- Benefit alignment: {answer or 'unknown'} ({note or 'no note'})")
+        elif category == "demographic":
+            evidence.append(f"- Demographic fit: {answer or 'unknown'} ({note or 'no note'})")
+
+    if not evidence:
+        return "- No profile-fit categories found in breakdown."
+    return "\n".join(evidence[:5])
 
 
 async def generate_tile_content(
@@ -314,7 +374,36 @@ def parse_response(*, text: str, inputs: dict[str, Any]) -> dict[str, Any]:
     if covered and (state != "great" or unmet):
         parsed["covered_message"] = None
 
-    return parsed
+    return _polish_tile_output(parsed)
+
+
+def _polish_tile_output(parsed: dict[str, Any]) -> dict[str, Any]:
+    out = dict(parsed)
+    for key in ("verdict", "works", "falls_short", "worth_knowing", "covered_message"):
+        value = out.get(key)
+        if not isinstance(value, str):
+            continue
+        cleaned = " ".join(value.split()).strip()
+        cleaned = _strip_position_phrases(cleaned)
+        cleaned = _ensure_terminal_punctuation(cleaned)
+        out[key] = cleaned
+    return out
+
+
+def _ensure_terminal_punctuation(text: str) -> str:
+    if not text:
+        return text
+    if text[-1] in ".!?":
+        return text
+    return f"{text}."
+
+
+def _strip_position_phrases(text: str) -> str:
+    cleaned = text
+    cleaned = re.sub(r"\s+at\s+(?:INCI\s+order|position)\s*#?\d+\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*\((?:INCI\s+orders?|positions?)\s*#?\d+(?:\s*[-,]\s*#?\d+)*\)", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
 
 
 class TileGenerationError(Exception):
