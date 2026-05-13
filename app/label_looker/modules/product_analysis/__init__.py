@@ -1,0 +1,2 @@
+"""Product analysis bounded context."""
+

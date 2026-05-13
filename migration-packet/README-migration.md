@@ -13,9 +13,9 @@ Use this document as the **single source of truth** for Cursor (or any engineer)
 | Method | Path (legacy) | Path (v1 app) | Auth |
 |--------|----------------|-----------------|------|
 | `POST` | `/scanner/image-conversion` | `/api/v1/scanner/image-conversion` | Legacy: `scannerAuthSSO`. V1: `authenticateAppUser`. |
-| `POST` | `/scanner/ingredients-analysis` | `/api/v1/scanner/ingredients-analysis` | Same split. |
+| `POST` | `/scanner/analyze-product` | `/api/v1/scanner/analyze-product` | Same split. **Node legacy** used `/ingredients-analysis`; Python exposes only `analyze-product`. |
+| `POST` | `/scanner/analyze-product/text` | `/api/v1/scanner/analyze-product/text` | Optional auth (`authenticate_any_user_optional`). Node may have used `text-ingredients-analysis`; Python only mounts `analyze-product/text`. |
 | `POST` | `/scanner/ingredient` | `/api/v1/scanner/ingredient` | Same split. **Query:** `name` (not body). |
-| `PUT` | `/scanner/feedback` | `/api/v1/scanner/feedback` | Same split. |
 | `GET` | `/scanner/scan-left` | `/api/v1/scanner/scan-left` | Same split. |
 
 ### Admin / panel analytics (legacy only — not registered under v1)
@@ -236,7 +236,9 @@ Message: `"Ingredient list"`.
 
 On failure after `ScanAnalysis` create, document is updated with `scanImageError: <message>`.
 
-### `POST …/ingredients-analysis`
+### `POST …/analyze-product`
+
+(Former Node path: `POST …/ingredients-analysis` — not registered on this FastAPI app; call `analyze-product` only.)
 
 **Success `data`:**
 
@@ -292,7 +294,7 @@ Message: `"Feedback added successfully"`.
 3. Mongo connection (same URI/DB).
 4. Auth dependencies (`verify-app-token`, `verify-token`+JWT, `verify-panel-token`) + `authorizeUser` equivalent.
 5. Multipart `image-conversion` + disk save + Anthropic image path + regex parse + `ScanAnalysis` writes.
-6. `ingredients-analysis` + JSON cleanup + `ScanAnalysis` update.
+6. `analyze-product` + JSON cleanup + `ScanAnalysis` update.
 7. `ingredient` query handler + AI article path + `getIngredientDetails` aggregation.
 8. `feedback`, `scan-left`.
 9. Admin routes + aggregations.
@@ -302,7 +304,7 @@ Message: `"Feedback added successfully"`.
 
 ## 12. “Do not change” checklist
 
-- [ ] Route paths and HTTP methods unchanged for each environment (legacy vs v1).
+- [ ] Route paths match the Python surface (canonical: `analyze-product`, `analyze-product/text`; legacy Node `ingredients-analysis` aliases are not mounted here).
 - [ ] Request field names unchanged (`image`, body keys, query `name`, typo `langauge`).
 - [ ] Response envelope (`ApiResponse` / error handler) unchanged.
 - [ ] Mongo field names and enum values unchanged (`rating`, `source: "Cluade-AI"`, article `status: "approved"`, etc.).

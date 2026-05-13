@@ -4,7 +4,7 @@ from typing import Any
 
 from bson import ObjectId
 
-from app.label_looker.settings import LabelLookerSettings
+from app.label_looker.core.settings import LabelLookerSettings
 
 
 def ingredient_detail_pipeline(ingredient_oid: ObjectId, s: LabelLookerSettings) -> list[dict[str, Any]]:
