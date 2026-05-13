@@ -1,0 +1,11 @@
+version: "1.0"
+matrix:
+  aqueous: {oily: excellent, combination: excellent, normal: good, dry: good, very_dry: ok}
+  lipidic: {oily: poor, combination: ok, normal: good, dry: excellent, very_dry: excellent}
+  silicone: {oily: good, combination: good, normal: good, dry: good, very_dry: ok}
+  powder: {oily: good, combination: good, normal: ok, dry: poor, very_dry: avoid}
+india_overrides:
+  silicone:
+    monsoon_acne_prone: -1
+    summer_hot_humid_acne_prone: -1
+

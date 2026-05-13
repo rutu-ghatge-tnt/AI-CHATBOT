@@ -1,0 +1,18 @@
+tier_map:
+  high:
+    - isopropyl myristate
+    - myristyl myristate
+    - laureth-4
+    - coconut oil
+    - coccus nucifera oil
+  moderate:
+    - ethylhexyl palmitate
+    - isopropyl palmitate
+    - glyceryl stearate
+    - oleyl alcohol
+    - cetyl alcohol
+  low:
+    - squalane
+    - dimethicone
+    - niacinamide
+

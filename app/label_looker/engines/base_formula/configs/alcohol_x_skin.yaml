@@ -1,0 +1,7 @@
+version: "1.0"
+matrix:
+  none: {oily_hydrated: excellent, oily_dehydrated: excellent, combination: excellent, normal: excellent, dry_or_compromised: excellent}
+  low: {oily_hydrated: good, oily_dehydrated: good, combination: good, normal: good, dry_or_compromised: good}
+  medium: {oily_hydrated: ok, oily_dehydrated: poor, combination: ok, normal: poor, dry_or_compromised: avoid}
+  high: {oily_hydrated: ok, oily_dehydrated: avoid, combination: poor, normal: poor, dry_or_compromised: avoid}
+

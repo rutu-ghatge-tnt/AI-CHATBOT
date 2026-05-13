@@ -1,0 +1,7 @@
+version: "1.0"
+matrix:
+  matte: {oily: excellent, combination: good, normal: ok, dry: poor, very_dry: avoid}
+  natural: {oily: good, combination: excellent, normal: excellent, dry: good, very_dry: ok}
+  dewy: {oily: poor, combination: ok, normal: good, dry: excellent, very_dry: excellent}
+  luminous: {oily: poor, combination: ok, normal: good, dry: good, very_dry: good}
+

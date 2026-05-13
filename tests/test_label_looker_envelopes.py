@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.label_looker.errors import ScannerApiError
+from app.label_looker.core.errors import ScannerApiError
 
 
 def test_error_envelope_uses_message_when_no_errors():
@@ -26,7 +26,7 @@ def test_error_envelope_uses_errors_array():
 def test_api_success_jsonable_objectid():
     from bson import ObjectId
 
-    from app.label_looker.responses import api_success
+    from app.label_looker.core.responses import api_success
 
     r = api_success({"_id": ObjectId("507f1f77bcf86cd799439011")})
     body = r.body.decode()
