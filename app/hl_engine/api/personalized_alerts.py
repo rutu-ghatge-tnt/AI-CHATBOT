@@ -1,3 +1,4 @@
+import logging
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query
 
@@ -16,6 +17,8 @@ from app.hl_engine.services.alert_generator import generate_alert
 from app.hl_engine.services.profile_personalizer import personalize_alert
 from app.hl_engine.services.scoring_engine import calculate_skin_score
 from app.hl_engine.services.weather_fetcher import fetch_environmental_data
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hl/v2", tags=["HLHP Personalized Alerts"])
 user_details_col = hl_db["user_details"]
@@ -110,18 +113,45 @@ def _map_skin_type(raw_value: str | None) -> SkinType:
         return SkinType.NORMAL
 
 
+def _default_user_profile(user_id: str) -> UserProfile:
+    """Same baseline as a partial Mongo row (see skin_concerns fallback below)."""
+    return UserProfile(
+        user_id=user_id,
+        skin_type=SkinType.NORMAL,
+        skin_concerns=[SkinConcern.SENSITIVITY],
+        gender=Gender.OTHER,
+        age_bracket=AgeBracket.AGE_25_30,
+        hair_type=None,
+        hair_concerns=[],
+    )
+
+
+def _user_details_lookup_filter(user_id: str) -> dict:
+    """Match common shapes: camelCase userId, snake_case user_id, ObjectId, document _id."""
+    clauses: list[dict] = [
+        {"userId": user_id},
+        {"user_id": user_id},
+    ]
+    if ObjectId.is_valid(user_id):
+        oid = ObjectId(user_id)
+        clauses.extend(({"userId": oid}, {"_id": oid}))
+    return {"$or": clauses}
+
+
 async def _get_user_profile(user_id: str) -> UserProfile:
     """
     Load profile from `skin_bb.user_details`.
-    Supports both ObjectId and string userId storage.
+    Supports string/ObjectId userId, snake_case user_id, and legacy _id lookups.
+    If no document exists (common when local Mongo is empty but dev is not), use defaults
+    instead of failing the whole alert.
     """
-    query = {"$or": [{"userId": user_id}]}
-    if ObjectId.is_valid(user_id):
-        query["$or"].append({"userId": ObjectId(user_id)})
-
-    doc = await user_details_col.find_one(query)
+    doc = await user_details_col.find_one(_user_details_lookup_filter(user_id))
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Profile not found for user_id={user_id}")
+        logger.warning(
+            "HLHP personalized alert: no user_details row for user_id=%s; using default profile",
+            user_id,
+        )
+        return _default_user_profile(user_id)
 
     skin_type = _map_skin_type(doc.get("skinType"))
     skin_concerns = _map_skin_concerns(_normalize_list(doc.get("skinConcerns")))
