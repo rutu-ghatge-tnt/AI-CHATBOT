@@ -253,9 +253,8 @@ def evaluate_suitability(
     }
 
 
-def evaluate_observations(
+def build_observation_candidates(
     *,
-    state: str,
     safety: dict[str, Any],
     unmet_needs: list[str],
     product_primary: str,
@@ -297,6 +296,74 @@ def evaluate_observations(
                 }
             )
     candidates.append({"id": "C01", "family": "C", "priority": 4, "name": "Category context", "editorial_text": "This product may be solid in category terms, but personal fit is the deciding factor."})
+    return candidates
+
+
+_OBSERVATION_FALLBACK: dict[str, dict[str, Any]] = {
+    "M04": {"id": "M04", "family": "M", "priority": 1, "name": "Claim-to-profile mismatch", "editorial_text": "The formula appears optimized for a different primary concern than yours."},
+    "U03": {"id": "U03", "family": "U", "priority": 2, "name": "Gap filler direction", "editorial_text": "A key profile need is not fully addressed by this formula."},
+    "U04": {"id": "U04", "family": "U", "priority": 2, "name": "Soft safety context", "editorial_text": "A soft safety context applies for your profile."},
+    "F01": {"id": "F01", "family": "F", "priority": 3, "name": "Formulation orientation", "editorial_text": "The formula has clear claim alignment, but fit still depends on profile-to-concern match."},
+    "O10": {"id": "O10", "family": "O", "priority": 1, "name": "Comedogenic load note", "editorial_text": "This formula includes pore-clogging risk markers, so monitor congestion breakouts closely."},
+    "O11": {"id": "O11", "family": "O", "priority": 1, "name": "Fungal-acne trigger note", "editorial_text": "Potential Malassezia trigger ingredients are present for fungal-acne-prone skin."},
+    "C01": {"id": "C01", "family": "C", "priority": 4, "name": "Category context", "editorial_text": "This product may be solid in category terms, but personal fit is the deciding factor."},
+}
+
+
+def resolve_observations_by_ids(
+    *,
+    ids: list[str],
+    safety: dict[str, Any],
+    unmet_needs: list[str],
+    product_primary: str = "",
+    claims: list[str] | None = None,
+    base_formula: BaseFormulaRecord | None = None,
+    user_flags: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Rebuild full observation cards for stored ids (legacy hydration)."""
+    pool = {
+        str(row["id"]): row
+        for row in build_observation_candidates(
+            safety=safety,
+            unmet_needs=unmet_needs,
+            product_primary=product_primary,
+            claims=claims or [],
+            base_formula=base_formula,
+            user_flags=user_flags,
+        )
+    }
+    out: list[dict[str, Any]] = []
+    for raw_id in ids:
+        oid = str(raw_id or "").strip()
+        if not oid:
+            continue
+        if oid in pool:
+            out.append(dict(pool[oid]))
+            continue
+        fallback = _OBSERVATION_FALLBACK.get(oid)
+        if fallback:
+            out.append(dict(fallback))
+    return out
+
+
+def evaluate_observations(
+    *,
+    state: str,
+    safety: dict[str, Any],
+    unmet_needs: list[str],
+    product_primary: str,
+    claims: list[str],
+    base_formula: BaseFormulaRecord | None = None,
+    user_flags: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    candidates = build_observation_candidates(
+        safety=safety,
+        unmet_needs=unmet_needs,
+        product_primary=product_primary,
+        claims=claims,
+        base_formula=base_formula,
+        user_flags=user_flags,
+    )
 
     def eff_priority(obs: dict[str, Any]) -> int:
         p = int(obs.get("priority", 4))
