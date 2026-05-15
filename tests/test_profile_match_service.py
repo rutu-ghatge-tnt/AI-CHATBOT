@@ -76,6 +76,50 @@ def test_safety_gates_for_sensitive_fragrance_and_barrier_alcohol():
     assert safety["severity"] in {"hard", "block"}
 
 
+def test_resolve_observations_by_ids_rehydrates_legacy_ids():
+    observations = profile_match_engines.resolve_observations_by_ids(
+        ids=["U03", "C01"],
+        safety={"severity": "clear", "triggers": []},
+        unmet_needs=["oiliness"],
+        product_primary="dryness",
+        claims=["hydration"],
+    )
+    assert len(observations) == 2
+    assert observations[0]["id"] == "U03"
+    assert observations[0]["name"]
+    assert "oiliness" in observations[0]["editorial_text"]
+    assert observations[1]["id"] == "C01"
+    assert observations[1]["editorial_text"]
+
+
+def test_stored_triggered_observations_rehydrates_id_only_rows():
+    doc = {
+        "state": "low",
+        "engine_breakdown": {
+            "suitability": {"band": "low", "unmet_needs": ["oiliness"]},
+            "safety": {"severity": "clear", "triggers": []},
+        },
+        "triggered_obs": ["U03"],
+    }
+    observations = profile_match_service._stored_triggered_observations(doc)
+    assert observations
+    assert observations[0]["id"] == "U03"
+    assert observations[0]["editorial_text"]
+    assert observations[0]["name"]
+
+
+def test_stored_triggered_observations_keeps_full_objects():
+    full = [
+        {
+            "id": "U03",
+            "name": "Gap filler direction",
+            "editorial_text": "Your key unmet need is oiliness; consider pairing with a product that targets it directly.",
+        }
+    ]
+    doc = {"triggered_observations": full, "triggered_obs": ["U03"]}
+    assert profile_match_service._stored_triggered_observations(doc) == full
+
+
 def test_observations_include_comedogenic_and_fungal_notes_when_flagged():
     observations = profile_match_engines.evaluate_observations(
         state="good",

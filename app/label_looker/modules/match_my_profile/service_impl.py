@@ -267,17 +267,58 @@ async def _resolve_ingredients_from_rows(
     return out
 
 
+def _stored_observation_ids(doc: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    raw = doc.get("triggered_observations")
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                oid = str(item.get("id") or "").strip()
+                if oid:
+                    ids.append(oid)
+            elif isinstance(item, str) and item.strip():
+                ids.append(item.strip())
+    if not ids:
+        legacy_ids = doc.get("triggered_obs")
+        if isinstance(legacy_ids, list):
+            ids = [str(sid).strip() for sid in legacy_ids if isinstance(sid, str) and str(sid).strip()]
+    return ids
+
+
+def _observation_context_from_scan_doc(doc: dict[str, Any]) -> dict[str, Any]:
+    breakdown = doc.get("engine_breakdown") if isinstance(doc.get("engine_breakdown"), dict) else {}
+    suitability = breakdown.get("suitability") if isinstance(breakdown.get("suitability"), dict) else {}
+    safety = breakdown.get("safety") if isinstance(breakdown.get("safety"), dict) else {"severity": "clear", "triggers": []}
+    unmet_needs = suitability.get("unmet_needs") if isinstance(suitability.get("unmet_needs"), list) else []
+    return {
+        "state": str(doc.get("state") or suitability.get("band") or suitability.get("state") or "low"),
+        "safety": safety,
+        "unmet_needs": [str(x) for x in unmet_needs if str(x).strip()],
+    }
+
+
 def _stored_triggered_observations(doc: dict[str, Any]) -> list[Any]:
     """Rehydrate observation objects; legacy rows may only have string ids in ``triggered_obs``."""
     raw = doc.get("triggered_observations")
-    if isinstance(raw, list):
-        if not raw:
-            return []
-        return raw if isinstance(raw[0], dict) else []
-    legacy_ids = doc.get("triggered_obs")
-    if isinstance(legacy_ids, list):
-        return [{"id": sid} for sid in legacy_ids if isinstance(sid, str) and sid.strip()]
-    return []
+    if isinstance(raw, list) and raw and all(
+        isinstance(item, dict) and str(item.get("editorial_text") or "").strip() for item in raw
+    ):
+        return raw
+
+    ids = _stored_observation_ids(doc)
+    if not ids:
+        return []
+
+    ctx = _observation_context_from_scan_doc(doc)
+    return profile_match_engines.resolve_observations_by_ids(
+        ids=ids,
+        safety=ctx["safety"],
+        unmet_needs=ctx["unmet_needs"],
+        product_primary="",
+        claims=[],
+        base_formula=None,
+        user_flags=None,
+    )
 
 
 def _build_match_product(product: dict[str, Any]) -> dict[str, Any]:
