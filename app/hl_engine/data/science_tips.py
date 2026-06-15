@@ -74,6 +74,11 @@ SCIENCE_TIPS = [
         "tags": ["temp_high", "uv_high"],
     },
     {
+        "fact": "Warmer temperatures increase sweat and oil — reapply sunscreen if you've been outdoors for a while.",
+        "source": "Rajan, Sunscreens for Skin of Color (Springer 2024), Ch. 12",
+        "tags": ["temp_high"],
+    },
+    {
         "fact": "Above about 43 °C, skin's repair system actually slows down — heat is a stressor in its own right.",
         "source": "Treatment of Dry Skin Syndrome (Lodén & Maibach 2012), Ch. 6 (Denda)",
         "tags": ["temp_high"],
@@ -87,12 +92,19 @@ SCIENCE_TIPS = [
 
 
 def pick(condition_tags: list[str]) -> dict:
-    """Pick the tip with the most overlap with the day's tags."""
+    """Pick the tip whose tags best match today's actual conditions."""
     if not condition_tags:
         return SCIENCE_TIPS[0]
+    tag_set = set(condition_tags)
+    fully_applicable = [t for t in SCIENCE_TIPS if all(tag in tag_set for tag in t["tags"])]
+    if fully_applicable:
+        return min(fully_applicable, key=lambda t: len(t["tags"]))
     scored = sorted(
         SCIENCE_TIPS,
-        key=lambda t: sum(1 for tag in t["tags"] if tag in condition_tags),
+        key=lambda t: (
+            sum(1 for tag in t["tags"] if tag in tag_set),
+            -len(t["tags"]),
+        ),
         reverse=True,
     )
     return scored[0]

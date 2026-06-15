@@ -20,6 +20,8 @@ def _get_cluster(env_data) -> str:
         return "high_humidity"
     if hum_low:
         return "low_humidity"
+    if temp_hot or env_data.temperature_c >= 27:
+        return "warm"
     return "mild"
 
 
