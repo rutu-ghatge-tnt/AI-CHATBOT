@@ -1,6 +1,7 @@
 from app.hl_engine.data.age_priorities import get_age_priority, reorder_steps_by_age
 from app.hl_engine.data.concern_emphasis import get_concern_key_dont
 from app.hl_engine.data.gender_language import apply_language_swap, get_gender_tip
+from app.hl_engine.data.scenarios import SCENARIOS, lookup_l2
 from app.hl_engine.data.texture_map import get_textured_product
 from app.hl_engine.models.alert import AlertResponse, ProtectionStep
 from app.hl_engine.models.environmental import EnvironmentalData
@@ -9,6 +10,7 @@ from app.hl_engine.models.profile import UserProfile
 from app.hl_engine.models.score import SkinScore
 from app.hl_engine.services.hair_alert_generator import generate_hair_alert
 from app.hl_engine.services.headline_builder import build_personalized_headline
+from app.hl_engine.services.scenario_matcher import match_scenario
 from app.hl_engine.services.scoring_engine import calculate_burn_time
 
 
@@ -28,12 +30,22 @@ def personalize_alert(
     env: EnvironmentalData,
     score: SkinScore,
 ) -> PersonalizedAlertResponse:
+    scenario_num, _ = match_scenario(env)
+    scenario = SCENARIOS[scenario_num]
+
     personalized_steps = []
     for step in generic_alert.protection_steps:
+        action = step.action
+        if step.product_category == "sunscreen":
+            action = lookup_l2(
+                scenario,
+                profile.skin_type.value,
+                profile.primary_concern.value,
+            )
         personalized_steps.append(
             ProtectionStep(
                 step_number=step.step_number,
-                action=get_textured_product(step.product_category, profile.skin_type, step.action),
+                action=get_textured_product(step.product_category, profile.skin_type, action),
                 reason=step.reason,
                 product_category=step.product_category,
             )

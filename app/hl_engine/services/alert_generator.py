@@ -1,8 +1,7 @@
-import random
 from datetime import datetime, timezone
 
-from app.hl_engine.data.scenarios import SCENARIOS
-from app.hl_engine.data.science_nuggets import SCIENCE_NUGGETS
+from app.hl_engine.data.scenarios import SCENARIOS, lookup_l2
+from app.hl_engine.data.science_tips import pick as pick_science_tip
 from app.hl_engine.data.thresholds import SCENARIO_THRESHOLDS, SEVERITY_BANDS
 from app.hl_engine.models.alert import AlertResponse, ProtectionStep
 from app.hl_engine.models.environmental import EnvironmentalData
@@ -14,6 +13,12 @@ from app.hl_engine.services.scoring_engine import (
     get_spf_reapply_interval,
 )
 
+_DEFAULT_KEY_DONT = "Do not skip SPF or barrier support when conditions are unstable."
+_DEFAULT_EVENING = "Gentle cleanse -> targeted treatment -> barrier moisturizer."
+_DEFAULT_WEEKLY = "Use one recovery mask and one gentle exfoliation session weekly."
+_SERUM_ACTION = "Use an antioxidant or niacinamide support serum"
+_SERUM_REASON = "Helps defend against oxidative load from UV and pollution"
+
 
 def _get_color_and_icon(band: SeverityBand) -> tuple[str, str]:
     for _, _, band_name, color, icon in SEVERITY_BANDS:
@@ -22,37 +27,22 @@ def _get_color_and_icon(band: SeverityBand) -> tuple[str, str]:
     return "#F39C12", "🛡️"
 
 
-def _select_science_nugget(env: EnvironmentalData):
-    tags = []
-    t = SCENARIO_THRESHOLDS
-    if env.uv_index >= t["uvi_high"]:
-        tags.append("uvi_high")
-    if env.temperature_c >= t["temp_high"]:
-        tags.append("temp_high")
-    if env.aqi > t["aqi_high"]:
-        tags.append("aqi_high")
-    if env.humidity_pct < 30:
-        tags.append("humidity_low")
-    elif env.humidity_pct >= t["humidity_high"]:
-        tags.append("humidity_high")
-    relevant = [n for n in SCIENCE_NUGGETS if any(tag in tags for tag in n["relevant_when"])] or SCIENCE_NUGGETS
-    picked = random.choice(relevant)
-    return picked["fact"], picked["source"]
-
-
 def _interpolate(template: str, env: EnvironmentalData, score: SkinScore) -> str:
-    return template.format(
-        uv=env.uv_index,
-        temp=round(env.temperature_c, 1),
-        aqi=env.aqi,
-        humidity=round(env.humidity_pct),
-        score=score.total,
-        burn_time=calculate_burn_time(env.uv_index) or "N/A",
-        spf_interval=get_spf_reapply_interval(env.temperature_c),
-        location=env.location_name,
-        dominant_threat=score.dominant_threat,
-        band=score.band.value,
-    )
+    try:
+        return template.format(
+            uv=env.uv_index,
+            temp=round(env.temperature_c, 1),
+            aqi=env.aqi,
+            humidity=round(env.humidity_pct),
+            score=score.total,
+            burn_time=calculate_burn_time(env.uv_index) or "N/A",
+            spf_interval=get_spf_reapply_interval(env.temperature_c),
+            location=env.location_name,
+            dominant_threat=score.dominant_threat,
+            band=score.band.value,
+        )
+    except (KeyError, ValueError):
+        return template
 
 
 def _friendly_factor_name(name: str) -> str:
@@ -65,21 +55,46 @@ def _friendly_factor_name(name: str) -> str:
     return mapping.get(name, name)
 
 
-def _build_compact_headline(
-    env: EnvironmentalData,
-    score: SkinScore,
-    health_advisory: str | None,
-    first_step_action: str,
-) -> str:
+def _build_compact_headline(score: SkinScore, first_step_action: str) -> str:
     dominant = _friendly_factor_name(score.dominant_threat)
     secondary = ", ".join(_friendly_factor_name(s) for s in score.secondary_threats[:2])
     risk_part = f"{dominant} is the main risk"
     if secondary:
         risk_part += f" with pressure from {secondary}"
+    action = first_step_action.rstrip(". ").strip()
+    return f"{risk_part[0].upper() + risk_part[1:]}. {action}."
 
-    headline = f"{risk_part[0].upper() + risk_part[1:]}. {first_step_action}."
 
-    return headline
+def _moisturizer_action(env: EnvironmentalData) -> str:
+    if env.humidity_pct >= SCENARIO_THRESHOLDS["humidity_high"]:
+        return "Use a lightweight gel moisturizer"
+    return "Use a barrier-support cream moisturizer"
+
+
+def _build_protection_steps(env: EnvironmentalData, scenario: dict) -> list[ProtectionStep]:
+    """Map new L2/L3 scenario copy into the legacy three-step structure."""
+    l2 = lookup_l2(scenario, "normal", None)
+    moisturizer = _moisturizer_action(env)
+    return [
+        ProtectionStep(
+            step_number=1,
+            action=l2,
+            reason="Matches today's UV, heat, and pollution load.",
+            product_category="sunscreen",
+        ),
+        ProtectionStep(
+            step_number=2,
+            action=_SERUM_ACTION,
+            reason=_SERUM_REASON,
+            product_category="serum",
+        ),
+        ProtectionStep(
+            step_number=3,
+            action=moisturizer,
+            reason="Supports barrier while minimizing congestion risk.",
+            product_category="moisturizer",
+        ),
+    ]
 
 
 def generate_alert(env: EnvironmentalData, score: SkinScore) -> AlertResponse:
@@ -87,35 +102,25 @@ def generate_alert(env: EnvironmentalData, score: SkinScore) -> AlertResponse:
     scenario = SCENARIOS[scenario_num]
 
     color, icon = _get_color_and_icon(score.band)
-    whats_happening = _interpolate(scenario["whats_happening"], env, score)
-    compact_headline = _interpolate(scenario["compact_headline"], env, score)
-    alert_body = _interpolate(scenario["alert_body"], env, score)
-    key_dont = _interpolate(scenario["key_dont"], env, score)
+    whats_happening = (
+        f"Conditions in {env.location_name} increase stress from "
+        f"{_friendly_factor_name(score.dominant_threat)}. {scenario['L1']}"
+    )
+    alert_body = (
+        f"UV {env.uv_index}, temp {round(env.temperature_c, 1)}C, "
+        f"AQI {env.aqi}, humidity {round(env.humidity_pct)}% indicate elevated skin stress."
+    )
 
-    spf_interval = get_spf_reapply_interval(env.temperature_c)
-    steps = []
-    for idx, step in enumerate(scenario["steps"], start=1):
-        steps.append(
-            ProtectionStep(
-                step_number=idx,
-                action=step["action"].format(spf_interval=spf_interval),
-                reason=step["reason"],
-                product_category=step["product_category"],
-            )
-        )
+    steps = _build_protection_steps(env, scenario)
 
-    science_fact_raw, science_source = _select_science_nugget(env)
-    science_fact = _interpolate(science_fact_raw, env, score)
+    tags = scenario.get("science_tags") or []
+    tip = pick_science_tip(tags)
+    science_fact = _interpolate(tip["fact"], env, score)
+    science_source = tip["source"]
 
     _, _, _, health_advisory = _apply_overrides(score.band_raw, score.factors, env)
-    if steps:
-        compact_headline = _build_compact_headline(
-            env=env,
-            score=score,
-            health_advisory=health_advisory,
-            first_step_action=steps[0].action,
-        )
-        compact_headline = f"{icon} {compact_headline}"
+    compact_headline = _build_compact_headline(score, steps[0].action)
+    compact_headline = f"{icon} {compact_headline}"
 
     if score.band in (SeverityBand.CODE_RED, SeverityBand.HOSTILE):
         expand_cta = "See full protection plan ->"
@@ -140,9 +145,9 @@ def generate_alert(env: EnvironmentalData, score: SkinScore) -> AlertResponse:
         whats_happening=whats_happening,
         alert_body=alert_body,
         protection_steps=steps,
-        key_dont=key_dont,
-        evening_recovery=scenario["evening_recovery"],
-        weekly_boost=scenario["weekly_boost"],
+        key_dont=_DEFAULT_KEY_DONT,
+        evening_recovery=_DEFAULT_EVENING,
+        weekly_boost=_DEFAULT_WEEKLY,
         science_fact=science_fact,
         science_source=science_source,
         scenario_code=scenario_code,
@@ -155,4 +160,3 @@ def generate_alert(env: EnvironmentalData, score: SkinScore) -> AlertResponse:
         weather_api_url=env.weather_api_url,
         raw_weather_payload=env.raw_weather_payload,
     )
-

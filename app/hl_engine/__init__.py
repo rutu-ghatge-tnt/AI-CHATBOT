@@ -1,2 +1,1 @@
-"""HL (Hyperlocal) engine package."""
-
+"""SkinBB Hyperlocal (HLHP) engine package."""

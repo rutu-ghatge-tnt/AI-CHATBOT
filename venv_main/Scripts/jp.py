@@ -1,4 +1,4 @@
-#!C:\Projects\SkinBB\SkinBB_AI_Tools\venv_main\Scripts\python.exe
+#!D:\AI-Tools\venv_main\Scripts\python.exe
 
 import sys
 import json

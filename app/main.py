@@ -4,6 +4,10 @@ import sys
 import warnings
 import logging
 
+# Limit BLAS/OpenMP threads before numpy/scipy/torch are imported downstream
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv

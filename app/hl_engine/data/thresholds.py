@@ -1,3 +1,14 @@
+"""
+Score thresholds, severity bands, scenario cut-points.
+
+Calibration sourced from SkinBB_HLHP_Evidence_Base.xlsx.
+
+Tuple layouts
+-------------
+Factor tables (scoring_engine): (low, high, points, label, alert_level, skin_impact)
+Severity bands (alert_generator): (low, high, name, hex_color, icon)
+"""
+
 TEMP_THRESHOLDS = [
     (-50, 5, 0, "Extreme Cold", "Critical", "Barrier stress from cold and dehydration risk."),
     (5, 15, 5, "Cold", "High", "Low sebum output and tighter skin barrier."),
@@ -51,6 +62,9 @@ SCENARIO_THRESHOLDS = {
     "humidity_high": 60,
 }
 
+# Alias used by the unified engine modules
+SCENARIO_CUTS = SCENARIO_THRESHOLDS
+
 THREAT_PRIORITY = ["uv_index", "aqi", "temperature", "humidity"]
 
 SPF_REAPPLY_INTERVALS = {
@@ -63,3 +77,12 @@ SPF_REAPPLY_INTERVALS = {
 FITZPATRICK_MULTIPLIERS = {1: 2.5, 2: 3.0, 3: 5.0, 4: 6.7, 5: 10.0, 6: 15.0}
 DEFAULT_FITZPATRICK = 4
 
+
+def points_for(value: float, table) -> tuple[int, str]:
+    """Score lookup for unified engine — reads points + label from any factor table."""
+    for row in table:
+        lo, hi, pts, label = row[0], row[1], row[2], row[3]
+        if lo <= value < hi:
+            return pts, label
+    tail = table[-1]
+    return tail[2], tail[3]
