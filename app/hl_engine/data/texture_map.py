@@ -39,10 +39,34 @@ def get_textured_product(product_category: str, skin_type: SkinType, generic_act
 
     prefix = texture.get("prefix", "").strip()
     suffix = texture.get("suffix", "").strip()
-    updated = generic_action
+    action = generic_action.strip()
+    trailing_dot = action.endswith(".")
+    core = action.rstrip(". ").strip()
+    lower = core.lower()
 
-    if prefix:
-        updated = f"{prefix} {generic_action.lower()}"
-    if suffix:
-        updated = f"{updated} - {suffix}"
+    # L2 scenario lines ("Pick a …") are already product-specific — add suffix only.
+    if lower.startswith("pick "):
+        updated = core
+        if suffix:
+            updated = f"{updated} — {suffix}"
+    elif lower.startswith("use "):
+        updated = core
+        if prefix:
+            if lower.startswith("use a "):
+                updated = f"Use a {prefix.lower()} {core[6:]}"
+            elif lower.startswith("use an "):
+                updated = f"Use a {prefix.lower()} {core[7:]}"
+            else:
+                updated = f"Use {prefix.lower()} {core[4:]}"
+        if suffix:
+            updated = f"{updated} — {suffix}"
+    else:
+        updated = core
+        if prefix:
+            updated = f"{prefix} {core.lower()}"
+        if suffix:
+            updated = f"{updated} — {suffix}"
+
+    if trailing_dot and not updated.endswith("."):
+        updated += "."
     return updated
