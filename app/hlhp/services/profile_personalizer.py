@@ -16,6 +16,34 @@ from app.hlhp.services.hair_alert_generator import generate_hair_alert
 from app.hlhp.services.scoring_engine import calculate_burn_time
 
 
+def _friendly_factor_name(name: str) -> str:
+    return {
+        "uv_index": "UV",
+        "temperature": "temperature",
+        "aqi": "air quality",
+        "humidity": "humidity",
+    }.get(name, name)
+
+
+def _build_compact_headline(score: SkinScore, first_step_action: str) -> str:
+    dominant = _friendly_factor_name(score.dominant_threat)
+    secondary = ", ".join(_friendly_factor_name(s) for s in score.secondary_threats[:2])
+    risk_part = f"{dominant} is the main risk"
+    if secondary:
+        risk_part += f" with pressure from {secondary}"
+    action = first_step_action.rstrip(". ").strip()
+    return f"{risk_part[0].upper() + risk_part[1:]}. {action}."
+
+
+def _science_from_finding(finding) -> tuple[str, str]:
+    """Keep science tip aligned with the selected evidence row."""
+    if finding.quantified:
+        return finding.quantified, finding.science_citation
+    if finding.mechanism:
+        return finding.mechanism, finding.science_citation
+    return finding.alert_short or finding.sub_effect, finding.science_citation
+
+
 def _cleanser_for_skin_type(skin_type_value: str) -> str:
     return {
         "oily": "Gel cleanser",
@@ -73,6 +101,16 @@ def personalize_alert(
     for step in personalized_steps:
         step.action = apply_language_swap(step.action, profile.gender)
 
+    personalized_alert_body = (
+        f"UV {env.uv_index}, temp {round(env.temperature_c, 1)}C, "
+        f"AQI {env.aqi}, humidity {round(env.humidity_pct)}% — "
+        f"{primary.finding.factor} alert ({primary.finding.id})."
+    )
+    personalized_compact_headline = (
+        f"{generic_alert.icon} {_build_compact_headline(score, personalized_steps[0].action)}"
+    )
+    personalized_science_fact, personalized_science_source = _science_from_finding(primary.finding)
+
     age_config = get_age_priority(profile.age_bracket)
     personalized_evening_recovery = age_config["evening_template"].format(
         cleanser=_cleanser_for_skin_type(profile.skin_type.value)
@@ -85,17 +123,17 @@ def personalize_alert(
         aqi=generic_alert.aqi,
         humidity_pct=generic_alert.humidity_pct,
         skin_score=generic_alert.skin_score,
-        compact_headline=generic_alert.compact_headline,
+        compact_headline=personalized_compact_headline,
         score_badge=generic_alert.score_badge,
         expand_cta=generic_alert.expand_cta,
-        whats_happening=generic_alert.whats_happening,
-        alert_body=generic_alert.alert_body,
-        protection_steps=generic_alert.protection_steps,
-        key_dont=generic_alert.key_dont,
+        whats_happening=personalized_whats_happening,
+        alert_body=personalized_alert_body,
+        protection_steps=personalized_steps,
+        key_dont=personalized_key_dont,
         evening_recovery=generic_alert.evening_recovery,
         weekly_boost=generic_alert.weekly_boost,
-        science_fact=primary.science_fact,
-        science_source=primary.science_source,
+        science_fact=personalized_science_fact,
+        science_source=personalized_science_source,
         scenario_code=primary.finding.id,
         scenario_number=primary.finding.row_number,
         health_advisory=generic_alert.health_advisory,

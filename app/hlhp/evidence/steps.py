@@ -13,6 +13,14 @@ _MOIST_HIGH = "Use a lightweight gel moisturizer"
 _MOIST_LOW = "Use a barrier-support cream moisturizer"
 
 
+def _looks_like_internal_token(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    # Snapshot tokens like "sleep_screen_break_periocular_care" are not user-facing copy.
+    return " " not in stripped and "_" in stripped
+
+
 def _category_from_text(text: str) -> str:
     lower = text.lower()
     if any(w in lower for w in ("sunscreen", "spf", "uv protection", "mineral")):
@@ -28,6 +36,8 @@ def _category_from_text(text: str) -> str:
 
 def _primary_action(finding: EvidenceFinding) -> tuple[str, str, str]:
     text = finding.product_implication or finding.alert_short or finding.mechanism
+    if _looks_like_internal_token(text):
+        text = finding.alert_short or finding.mechanism
     if not text:
         defaults = {
             "UV": "Use broad-spectrum sunscreen before outdoor exposure",
