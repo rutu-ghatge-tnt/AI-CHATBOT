@@ -56,8 +56,8 @@ from app.ai_ingredient_intelligence.api.ingredient_costs import router as ingred
 from app.ai_ingredient_intelligence.api.ingredient_history import router as ingredient_history_router
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.health_checks import router as health_checks_router
-from app.hl_engine.api.alerts import router as hl_alerts_router
-from app.hl_engine.api.personalized_alerts import router as hl_personalized_alerts_router
+from app.hlhp.api.alerts import router as hl_alerts_router
+from app.hlhp.api.personalized_alerts import router as hl_personalized_alerts_router
 
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
@@ -334,7 +334,7 @@ app.include_router(product_comparison_router, prefix="/api")
 # ✅ Add health checks API
 app.include_router(health_checks_router, prefix="/api")
 
-# ✅ Add HL engine API
+# ✅ Add HLHP engine API
 app.include_router(hl_alerts_router, prefix="/api")
 app.include_router(hl_personalized_alerts_router, prefix="/api")
 

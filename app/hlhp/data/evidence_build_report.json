@@ -1,0 +1,832 @@
+{
+  "generated_at": "2026-06-16T10:59:12.057372+00:00",
+  "source_workbook": "HLHP_Evidence_Base.xlsx",
+  "sheets_exported": [
+    "README",
+    "Book Inventory",
+    "UV",
+    "Temperature",
+    "Humidity",
+    "Pollution",
+    "Nutritional Status",
+    "Lifestyle",
+    "Science Nuggets",
+    "Glossary",
+    "Gaps & Conflicts",
+    "Coverage_Matrix"
+  ],
+  "counts": {
+    "findings": 507,
+    "science_nuggets": 18,
+    "book_inventory": 256,
+    "glossary": 42,
+    "gaps_conflicts": 15,
+    "coverage_grids": 4
+  },
+  "build_autofixes": [
+    "UV-2: sanitised alert_l1_guest",
+    "UV-2: sanitised alert_l1_personalised",
+    "UV-37: sanitised alert_l1_personalised",
+    "UV-51: sanitised alert_l1_guest",
+    "TEM-16: sanitised alert_l1_guest",
+    "TEM-16: sanitised alert_l1_personalised",
+    "TEM-25: sanitised alert_l1_guest",
+    "TEM-25: sanitised alert_l1_personalised",
+    "HUM-14: sanitised alert_l1_guest",
+    "HUM-14: sanitised alert_l1_personalised",
+    "HUM-42: sanitised alert_l1_guest",
+    "HUM-42: sanitised alert_l1_personalised",
+    "HUM-74: sanitised alert_l1_guest",
+    "POL-45: sanitised alert_l1_guest",
+    "POL-45: sanitised alert_l1_personalised",
+    "NUT-4: sanitised alert_l1_personalised",
+    "NUT-8: sanitised alert_l1_personalised",
+    "NUT-13: sanitised alert_l1_guest",
+    "NUT-22: sanitised alert_l1_guest",
+    "NUT-22: sanitised alert_l1_personalised",
+    "NUT-27: sanitised alert_l1_guest",
+    "NUT-27: sanitised alert_l1_personalised",
+    "NUT-31: sanitised alert_l1_guest",
+    "NUT-31: sanitised alert_l1_personalised",
+    "NUT-49: sanitised alert_l1_guest",
+    "NUT-49: sanitised alert_l1_personalised",
+    "NUT-55: sanitised alert_l1_guest",
+    "NUT-55: sanitised alert_l1_personalised",
+    "NUT-56: sanitised alert_l1_guest",
+    "NUT-56: sanitised alert_l1_personalised",
+    "LIF-28: sanitised alert_l1_guest",
+    "LIF-28: sanitised alert_l1_personalised",
+    "LIF-32: sanitised alert_l1_guest",
+    "LIF-32: sanitised alert_l1_personalised",
+    "LIF-33: sanitised alert_l1_personalised",
+    "LIF-57: sanitised alert_l1_guest",
+    "LIF-57: sanitised alert_l1_personalised"
+  ],
+  "build_warnings": [],
+  "build_report": {
+    "voice_violations": [],
+    "citation_issues": [],
+    "coverage_report": {
+      "methodology": "Rule-based coverage from Trigger_User_Filter tokens and concern aliases.",
+      "computed_grids": [
+        {
+          "title": "Trigger × Skin Type",
+          "columns": [
+            "dry",
+            "normal",
+            "combination",
+            "oily",
+            "sensitive"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                126,
+                124,
+                124,
+                124,
+                136
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                27,
+                26,
+                30,
+                31,
+                29
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                76,
+                53,
+                56,
+                60,
+                61
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                51,
+                52,
+                56,
+                52,
+                57
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                40,
+                36,
+                43,
+                47,
+                69
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                40,
+                36,
+                43,
+                47,
+                69
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Trigger × Skin Concern",
+          "columns": [
+            "acne",
+            "melasma",
+            "pigmentation",
+            "tan",
+            "aging",
+            "photoaging",
+            "eczema",
+            "psoriasis",
+            "dullness",
+            "dark_circles",
+            "dehydration",
+            "large_pores",
+            "hair_loss",
+            "rosacea"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                1,
+                33,
+                24,
+                1,
+                5,
+                8,
+                6,
+                5,
+                1,
+                6,
+                1,
+                1,
+                1,
+                6
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                5,
+                1,
+                1,
+                1,
+                1,
+                1,
+                4,
+                4,
+                1,
+                1,
+                4,
+                1,
+                1,
+                3
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                3,
+                1,
+                1,
+                1,
+                3,
+                3,
+                17,
+                10,
+                1,
+                1,
+                13,
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                4,
+                2,
+                12,
+                1,
+                8,
+                8,
+                2,
+                1,
+                1,
+                1,
+                2,
+                1,
+                5,
+                1
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                22,
+                2,
+                2,
+                1,
+                14,
+                15,
+                20,
+                20,
+                1,
+                9,
+                1,
+                1,
+                14,
+                15
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                22,
+                2,
+                2,
+                1,
+                14,
+                15,
+                20,
+                20,
+                1,
+                9,
+                1,
+                1,
+                14,
+                15
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Trigger × Gender",
+          "columns": [
+            "female",
+            "male"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                27,
+                1
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                2,
+                1
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                12,
+                1
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                6,
+                1
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                33,
+                1
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                33,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Trigger × Age band",
+          "columns": [
+            "18-25",
+            "25-40",
+            "40-60",
+            "60+"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                3,
+                19,
+                6,
+                1
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                1,
+                1,
+                2,
+                3
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                2,
+                1,
+                12,
+                4
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                1,
+                6,
+                3,
+                1
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                12,
+                13,
+                5,
+                2
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                12,
+                13,
+                5,
+                2
+              ]
+            }
+          ]
+        }
+      ],
+      "true_gap_count": 0,
+      "true_gaps": [],
+      "thin_cells": [
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "acne",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "dehydration",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "hair_loss",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "melasma",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "pigmentation",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "aging",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "photoaging",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "dark_circles",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "hair_loss",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "melasma",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "pigmentation",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "dark_circles",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "hair_loss",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "rosacea",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "melasma",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "eczema",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "psoriasis",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "dark_circles",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "dehydration",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "rosacea",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "melasma",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "pigmentation",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "dehydration",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "melasma",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "pigmentation",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "dehydration",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "UV",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Temperature",
+          "column": "female",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Temperature",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Humidity",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Pollution",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Sleep",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Stress",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "UV",
+          "column": "60+",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Temperature",
+          "column": "18-25",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Temperature",
+          "column": "25-40",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Temperature",
+          "column": "40-60",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Humidity",
+          "column": "18-25",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Humidity",
+          "column": "25-40",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Pollution",
+          "column": "18-25",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Pollution",
+          "column": "60+",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Sleep",
+          "column": "60+",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Stress",
+          "column": "60+",
+          "computed_count": 2,
+          "status": "thin"
+        }
+      ]
+    },
+    "gaps_conflicts_count": 15,
+    "glossary_entries": 42,
+    "book_inventory_count": 256
+  }
+}
