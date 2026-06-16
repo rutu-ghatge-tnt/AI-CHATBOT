@@ -9,6 +9,10 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Limit BLAS/OpenMP threads before numpy/scipy/torch load (avoids OpenBLAS OOM with --reload)
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 def main():
     """Start the SkinBB backend server"""
     
