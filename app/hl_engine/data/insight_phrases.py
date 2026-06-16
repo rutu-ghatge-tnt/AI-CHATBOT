@@ -40,7 +40,6 @@ INSIGHT_PHRASES = {
     ("dark_circles", "high_aqi"): "Pollution increases under-eye dullness.",
     ("dark_circles", "high_humidity"): "Puffiness can make circles look deeper.",
     ("dark_circles", "low_humidity"): "Dryness stresses thin under-eye skin first.",
-    ("dark_circles", "warm"): "Heat can bring under-eye puffiness — stay hydrated and use SPF.",
     ("dark_circles", "mild"): "Good day for eye-care absorption.",
     ("pores", "high_uv_hot"): "Pores are opening while oil rises.",
     ("pores", "high_uv"): "UV can loosen pore support over time.",

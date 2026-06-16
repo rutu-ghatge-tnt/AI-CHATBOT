@@ -20,43 +20,6 @@ _SERUM_ACTION = "Use an antioxidant or niacinamide support serum"
 _SERUM_REASON = "Helps defend against oxidative load from UV and pollution"
 
 
-def _condition_tags(env: EnvironmentalData) -> list[str]:
-    """Live weather tags for science tips — not the scenario taxonomy label."""
-    t = SCENARIO_THRESHOLDS
-    tags = []
-    if env.uv_index >= t["uvi_high"]:
-        tags.append("uv_high")
-    if env.aqi > t["aqi_high"]:
-        tags.append("aqi_high")
-    if env.temperature_c >= t["temp_high"]:
-        tags.append("temp_high")
-    if env.humidity_pct < 40:
-        tags.append("humidity_low")
-    elif env.humidity_pct >= t["humidity_high"]:
-        tags.append("humidity_high")
-    return tags
-
-
-def _science_pick_tags(env: EnvironmentalData, score: SkinScore) -> list[str]:
-    """Pick science-tip tags from actual readings; never a stale scenario label."""
-    tags = _condition_tags(env)
-    if tags:
-        return tags
-    t = SCENARIO_THRESHOLDS
-    if score.dominant_threat == "temperature" and env.temperature_c >= 27:
-        return ["temp_high"]
-    if score.dominant_threat == "uv_index" and env.uv_index >= 2:
-        return ["uv_high"]
-    if score.dominant_threat == "aqi":
-        return ["aqi_high"]
-    if score.dominant_threat == "humidity":
-        if env.humidity_pct >= t["humidity_high"]:
-            return ["humidity_high"]
-        if env.humidity_pct < 40:
-            return ["humidity_low"]
-    return ["uv_high"]
-
-
 def _get_color_and_icon(band: SeverityBand) -> tuple[str, str]:
     for _, _, band_name, color, icon in SEVERITY_BANDS:
         if band_name == band.value:
@@ -150,7 +113,7 @@ def generate_alert(env: EnvironmentalData, score: SkinScore) -> AlertResponse:
 
     steps = _build_protection_steps(env, scenario)
 
-    tags = _science_pick_tags(env, score)
+    tags = scenario.get("science_tags") or []
     tip = pick_science_tip(tags)
     science_fact = _interpolate(tip["fact"], env, score)
     science_source = tip["source"]
