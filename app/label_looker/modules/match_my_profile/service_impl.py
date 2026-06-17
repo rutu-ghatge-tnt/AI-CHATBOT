@@ -14,8 +14,18 @@ from app.label_looker.engines.base_formula.derive import derive_base_formula_rec
 from app.label_looker.core.constants import totalScanIngedientPerDay
 from app.label_looker.core.errors import ScannerApiError
 from app.label_looker.core.settings import get_label_looker_settings
-from app.label_looker.services.common_flow import count_scans_today, end_user_owns_scan_document, extract_user_id
+from app.label_looker.services.common_flow import (
+    count_scans_today,
+    end_user_owns_scan_document,
+    extract_user_id,
+    require_end_user_owns_scan,
+)
+from app.label_looker.services.expected_benefit_options import (
+    build_expected_benefit_options,
+    validate_desired_benefits,
+)
 from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
+from app.label_looker.services.user_profile_flow import load_full_user_profile, merge_auth_user_details, user_details_lookup_filter
 
 logger = logging.getLogger(__name__)
 
@@ -25,35 +35,7 @@ def _extract_user_id(user: dict[str, Any]) -> Any:
 
 
 def _effective_user_details_for_match(details: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
-    """
-    Label Looker persists profile edits in Mongo `user_details`. For new users that row is empty
-    while Node `user-details` (auth) already returns age / gender / skin / hair fields — merge so
-    GET /profile and scoring see the same facts as Node.
-    """
-    merged = dict(details or {})
-    scalar_keys = ("age", "gender", "skinType", "hairType")
-    for k in scalar_keys:
-        v = merged.get(k)
-        if v is None or (isinstance(v, str) and not str(v).strip()):
-            uval = user.get(k)
-            if uval is not None and (not isinstance(uval, str) or str(uval).strip()):
-                merged[k] = uval
-    list_keys = ("skinConcerns", "skinGoals", "hairConcerns", "hairGoals")
-    for k in list_keys:
-        cur = merged.get(k)
-        if cur is None:
-            uval = user.get(k)
-            merged[k] = list(uval) if isinstance(uval, list) else ([] if uval is None else [str(uval)])
-        elif isinstance(cur, list) and len(cur) == 0:
-            uval = user.get(k)
-            if isinstance(uval, list) and len(uval) > 0:
-                merged[k] = list(uval)
-    if not str(merged.get("name") or "").strip():
-        fn = str(user.get("firstName") or "").strip()
-        ln = str(user.get("lastName") or "").strip()
-        if fn or ln:
-            merged["name"] = f"{fn} {ln}".strip()
-    return merged
+    return merge_auth_user_details(details, user)
 
 
 def _safe_list(raw: Any) -> list[str]:
@@ -85,6 +67,10 @@ def _as_string_list(raw: Any) -> list[str]:
 
 
 def _safe_scalar(raw: Any) -> str:
+    if isinstance(raw, list):
+        if not raw:
+            return ""
+        return _safe_scalar(raw[0])
     if isinstance(raw, str):
         return raw.strip()
     if isinstance(raw, dict):
@@ -145,11 +131,11 @@ def _extract_desired_benefits(*, body: dict[str, Any], details: dict[str, Any], 
 
 
 def _extract_desired_benefits_from_body(*, body: dict[str, Any], mode: str) -> list[str]:
+    _ = mode
     body_benefits = _first_present(
         body.get("desiredBenefits"),
         body.get("desiredBenefit"),
         body.get("benefits"),
-        body.get("skinGoals") if mode == "skincare" else body.get("hairGoals"),
         body.get("mainBenefit"),
     )
     if isinstance(body_benefits, list):
@@ -383,16 +369,36 @@ async def _count_scans_today(coll: AsyncIOMotorCollection, profile_url: str | No
 async def _find_latest_product_analysis_detail(*, scan_coll: AsyncIOMotorCollection, product_ref: Any | None) -> dict[str, Any] | None:
     if product_ref is None:
         return None
-    doc = await scan_coll.find_one({"productId": product_ref, "analyticDetail": {"$exists": True, "$ne": None}, "ingredientAnalysisError": None}, sort=[("updatedAt", -1)])
+    s = get_label_looker_settings()
+    from app.label_looker.core.db import get_scanner_db
+    from app.label_looker.services.product_analysis_store import find_product_analysis
+
+    db = get_scanner_db()
+    stored = await find_product_analysis(coll=db[s.coll_product_analysis], product_ref=product_ref)
+    if stored and isinstance(stored.get("analyticDetail"), dict):
+        return stored.get("analyticDetail")
+    doc = await scan_coll.find_one(
+        {
+            "productId": product_ref,
+            "analyticDetail": {"$exists": True, "$ne": None},
+            "ingredientAnalysisError": None,
+        },
+        sort=[("updatedAt", -1)],
+    )
     if not doc:
         return None
     analytic = doc.get("analyticDetail")
     return analytic if isinstance(analytic, dict) else None
 
 
-async def get_profile(*, user: dict[str, Any]) -> dict[str, Any]:
+async def get_profile(*, user: dict[str, Any], product_id: str | None = None) -> dict[str, Any]:
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
+    from app.label_looker.modules.product_analysis.analysis_service_impl import (
+        _fetch_product_by_id,
+        _resolve_analysis_mode,
+    )
+    from app.label_looker.services.profile_form import assess_profile_completeness, build_profile_form_values
 
     db = get_scanner_db()
     user_details_coll = db[s.coll_user_details]
@@ -400,17 +406,35 @@ async def get_profile(*, user: dict[str, Any]) -> dict[str, Any]:
     user_id = _extract_user_id(user)
     if user_id is None:
         raise ScannerApiError(401, "Unauthorized")
-    details_raw = await user_details_coll.find_one({"userId": user_id}) or {}
-    details = _effective_user_details_for_match(details_raw, user)
+    details_raw = await load_full_user_profile(user_id=user_id, user=user)
+    details = details_raw
     scans_used = await _count_scans_today(scan_coll, user.get("profileUrl"))
+
+    mode = "skincare"
+    if product_id and str(product_id).strip():
+        products_coll = db[s.coll_products]
+        product = await _fetch_product_by_id(products_coll=products_coll, product_id=product_id.strip())
+        mode = _resolve_analysis_mode(body={}, product=product, specific_type=None, main_benefit=None)
+
+    completeness = assess_profile_completeness(details=details, auth_user=user, mode=mode)
+    form_values = build_profile_form_values(details=details, auth_user=user)
+
     profile = {
         "id": str(user_id),
         "name": details.get("name") or user.get("firstName"),
-        "age": details.get("age"),
-        "gender": details.get("gender"),
+        "age": completeness["form"]["flat"].get("age") or details.get("age"),
+        "gender": completeness["form"]["flat"].get("gender") or details.get("gender"),
         "category_profiles": {
-            "skin": {"type": details.get("skinType"), "concerns": _safe_list(details.get("skinConcerns")), "benefits_wanted": _safe_list(details.get("skinGoals"))},
-            "hair": {"type": details.get("hairType"), "concerns": _safe_list(details.get("hairConcerns")), "benefits_wanted": _safe_list(details.get("hairGoals"))},
+            "skin": {
+                "type": completeness["form"]["skin"].get("skinType") or details.get("skinType"),
+                "concerns": _safe_list(completeness["form"]["skin"].get("skinConcerns") or details.get("skinConcerns")),
+                "benefits_wanted": _safe_list(completeness["form"]["skin"].get("skinGoals") or details.get("skinGoals")),
+            },
+            "hair": {
+                "type": completeness["form"]["hair"].get("hairType") or details.get("hairType"),
+                "concerns": _safe_list(completeness["form"]["hair"].get("hairConcerns") or details.get("hairConcerns")),
+                "benefits_wanted": _safe_list(completeness["form"]["hair"].get("hairGoals") or details.get("hairGoals")),
+            },
         },
         "safety": {
             "life_stages": _safe_list(details.get("lifeStages") or details.get("life_stages")),
@@ -419,56 +443,72 @@ async def get_profile(*, user: dict[str, Any]) -> dict[str, Any]:
             "medications": _safe_list(details.get("medications")),
         },
         "credits": {"free_used": scans_used, "free_limit": totalScanIngedientPerDay, "paid_remaining": 0},
+        "form": form_values,
+        "fieldStatus": completeness["fieldStatus"],
+        "missingFields": completeness["missingFields"],
+        "missingFieldDetails": completeness["missingFieldDetails"],
+        "highlightFields": completeness["highlightFields"],
+        "hasRequiredForScan": completeness["hasRequiredForScan"],
+        "requiredFieldsForScan": completeness["requiredFieldsForScan"],
+        "scanMode": mode,
     }
     profile["categoryProfiles"] = profile["category_profiles"]
-    profile["benefitsWanted"] = {"skin": profile["category_profiles"]["skin"]["benefits_wanted"], "hair": profile["category_profiles"]["hair"]["benefits_wanted"]}
+    profile["benefitsWanted"] = {
+        "skin": profile["category_profiles"]["skin"]["benefits_wanted"],
+        "hair": profile["category_profiles"]["hair"]["benefits_wanted"],
+    }
     return profile
 
 
 async def patch_profile(*, user: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
+    from app.label_looker.services.profile_form import profile_updates_from_form_body
+
     db = get_scanner_db()
     user_details_coll = db[s.coll_user_details]
     user_id = _extract_user_id(user)
     if user_id is None:
         raise ScannerApiError(401, "Unauthorized")
     updates: dict[str, Any] = {"updatedAt": datetime.now()}
+    form_updates = profile_updates_from_form_body(body)
+    updates.update(form_updates)
+
     if "name" in body:
         updates["name"] = body.get("name")
-    if "age" in body:
+    if "age" in body and "age" not in form_updates:
         updates["age"] = body.get("age")
-    if "gender" in body:
+    if "gender" in body and "gender" not in form_updates:
         updates["gender"] = body.get("gender")
     category_profiles = body.get("category_profiles") or body.get("categoryProfiles")
     if isinstance(category_profiles, dict):
         skin = category_profiles.get("skin")
         if isinstance(skin, dict):
-            if "type" in skin:
+            if "type" in skin and "skinType" not in updates:
                 updates["skinType"] = skin.get("type")
-            if "concerns" in skin:
+            if "concerns" in skin and "skinConcerns" not in updates:
                 updates["skinConcerns"] = _as_string_list(skin.get("concerns"))
-            elif "skinConcerns" in skin:
+            elif "skinConcerns" in skin and "skinConcerns" not in updates:
                 updates["skinConcerns"] = _as_string_list(skin.get("skinConcerns"))
-            if "benefits_wanted" in skin:
+            if "benefits_wanted" in skin and "skinGoals" not in updates:
                 updates["skinGoals"] = _as_string_list(skin.get("benefits_wanted"))
-            elif "benefitsWanted" in skin:
+            elif "benefitsWanted" in skin and "skinGoals" not in updates:
                 updates["skinGoals"] = _as_string_list(skin.get("benefitsWanted"))
-            elif "skinGoals" in skin:
+            elif "skinGoals" in skin and "skinGoals" not in updates:
                 updates["skinGoals"] = _as_string_list(skin.get("skinGoals"))
         hair = category_profiles.get("hair")
         if isinstance(hair, dict):
-            if "type" in hair:
+            if "type" in hair and "hairType" not in updates:
                 updates["hairType"] = hair.get("type")
-            if "concerns" in hair:
+            if "concerns" in hair and "hairConcerns" not in updates:
                 updates["hairConcerns"] = _as_string_list(hair.get("concerns"))
-            elif "hairConcerns" in hair:
+            elif "hairConcerns" in hair and "hairConcerns" not in updates:
                 updates["hairConcerns"] = _as_string_list(hair.get("hairConcerns"))
-            if "benefits_wanted" in hair:
+            if "benefits_wanted" in hair and "hairGoals" not in updates:
                 updates["hairGoals"] = _as_string_list(hair.get("benefits_wanted"))
-            elif "benefitsWanted" in hair:
+            elif "benefitsWanted" in hair and "hairGoals" not in updates:
                 updates["hairGoals"] = _as_string_list(hair.get("benefitsWanted"))
-            elif "hairGoals" in hair:
+            elif "hairGoals" in hair and "hairGoals" not in updates:
                 updates["hairGoals"] = _as_string_list(hair.get("hairGoals"))
     safety = body.get("safety")
     if isinstance(safety, dict):
@@ -480,8 +520,13 @@ async def patch_profile(*, user: dict[str, Any], body: dict[str, Any]) -> dict[s
             updates["conditions"] = safety.get("conditions")
         if "medications" in safety:
             updates["medications"] = safety.get("medications")
-    await user_details_coll.update_one({"userId": user_id}, {"$set": {"userId": user_id, **updates}}, upsert=True)
-    return await get_profile(user=user)
+    product_id = body.get("productId") or body.get("product_id")
+    await user_details_coll.update_one(
+        user_details_lookup_filter(user_id),
+        {"$set": {"userId": user_id, **updates}},
+        upsert=True,
+    )
+    return await get_profile(user=user, product_id=str(product_id).strip() if product_id else None)
 
 
 async def score_product(*, user: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
@@ -509,8 +554,8 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
     user_id = _extract_user_id(user)
     if user_id is None:
         raise ScannerApiError(401, "Unauthorized")
-    details_raw = await user_details_coll.find_one({"userId": user_id}) or {}
-    details = _effective_user_details_for_match(details_raw, user)
+    details_raw = await load_full_user_profile(user_id=user_id, user=user)
+    details = details_raw
     product_ref = _normalize_product_ref(product_id)
     product = await products_coll.find_one({"_id": product_ref})
     if not product:
@@ -527,7 +572,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
     age = _first_present(details.get("age"), body.get("age"))
     gender = _safe_scalar(_first_present(details.get("gender"), body.get("gender")))
     benefits_from_body = _extract_desired_benefits_from_body(body=body, mode=mode)
-    benefits = benefits_from_body or _extract_desired_benefits(body=body, details=details, mode=mode)
+    benefit_options = build_expected_benefit_options(product=product, mode=mode)
     life_stages = _safe_list(details.get("lifeStages") or details.get("life_stages"))
     conditions = _safe_list(details.get("conditions"))
 
@@ -542,11 +587,35 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         missing_profile_fields.append("hairConcerns" if mode == "haircare" else "skinConcerns")
     missing_inputs: list[dict[str, Any]] = []
     if missing_profile_fields:
-        missing_inputs.append({"source": "profile", "fields": missing_profile_fields, "rule": "Needs validation confirmation: accept if 2 same, else 3rd value final."})
+        missing_inputs.append(
+            {
+                "source": "profile",
+                "fields": missing_profile_fields,
+                "rule": "Complete profile once (age, gender, type, concerns) before matching.",
+            }
+        )
     if not benefits_from_body:
-        missing_inputs.append({"source": "request", "fields": ["desiredBenefits"], "rule": "Required on every match request; do not persist to profile defaults."})
+        missing_inputs.append(
+            {
+                "source": "request",
+                "fields": ["desiredBenefits"],
+                "rule": "Select expected benefits for this product on every scan.",
+                "expectedBenefitOptions": benefit_options.get("expectedBenefitOptions"),
+                "selectionRules": benefit_options.get("selectionRules"),
+            }
+        )
     if missing_inputs:
+        from app.label_looker.services.profile_form import assess_profile_completeness
+
+        completeness = assess_profile_completeness(details=details, auth_user=user, mode=mode)
+        for block in missing_inputs:
+            if block.get("source") == "profile":
+                block["highlightFields"] = completeness["highlightFields"]
+                block["missingFieldDetails"] = completeness["missingFieldDetails"]
+                block["form"] = completeness["form"]
         raise ScannerApiError(400, f"Missing required match input(s) for {mode}", errors=missing_inputs)
+
+    benefits = validate_desired_benefits(desired=benefits_from_body, options_payload=benefit_options)
 
     tile_product = _build_match_product(product)
     tile_product["declared_for_skin_types"] = [x.lower().strip() for x in declared_types if str(x).strip()]
@@ -664,6 +733,9 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "full_analysis": {"ingredients": tile_product.get("ingredients", []), "key_ingredients": tile_product.get("key_ingredients", []), "claims_checked": tile_product.get("claims", []), "legacy_analytic_detail": legacy_analytic_detail},
         "credits_remaining": {"free": max(0, totalScanIngedientPerDay - scans_used), "paid": 0},
         "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
+        "expected_benefit_options": benefit_options.get("expectedBenefitOptions"),
+        "selection_rules": benefit_options.get("selectionRules"),
+        "mode": mode,
     }
     response: dict[str, Any] = {"result": match_result}
     response.update(match_result)
@@ -682,6 +754,8 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
     response["creditsRemaining"] = response["credits_remaining"]
     response["baseFormula"] = response["base_formula"]
     response["overridesApplied"] = response["overrides_applied"]
+    response["expectedBenefitOptions"] = response["expected_benefit_options"]
+    response["selectionRules"] = response["selection_rules"]
     if state == "gate":
         gate_severity = "block" if safety["severity"] == "block" else "hard"
         response["gate_severity"] = gate_severity
@@ -696,16 +770,22 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
 
 
 async def submit_feedback(*, user: dict[str, Any], scan_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    _ = user
     if not ObjectId.is_valid(scan_id):
         raise ScannerApiError(400, "Invalid scan_id")
     sentiment = body.get("sentiment")
     if sentiment not in ("up", "down"):
         raise ScannerApiError(400, "sentiment must be 'up' or 'down'")
+    user_id = _extract_user_id(user)
+    if user_id is None:
+        raise ScannerApiError(401, "Unauthorized")
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
     db = get_scanner_db()
     scan_coll = db[s.coll_scan_analysis]
+    doc = await scan_coll.find_one({"_id": ObjectId(scan_id)})
+    if not doc:
+        raise ScannerApiError(404, "Scan not found")
+    require_end_user_owns_scan(doc=doc, user=user, user_id=user_id)
     payload = {"sentiment": sentiment, "category": body.get("category"), "note": body.get("note"), "submittedAt": datetime.now()}
     post_scan_action = body.get("post_scan_action") or body.get("postScanAction")
     res = await scan_coll.update_one({"_id": ObjectId(scan_id)}, {"$set": {"feedback": payload, "post_scan_action": post_scan_action, "updatedAt": datetime.now()}})

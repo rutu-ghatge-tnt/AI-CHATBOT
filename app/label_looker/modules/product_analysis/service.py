@@ -1,6 +1,7 @@
 """Canonical service facade for product analysis flows."""
 
 from app.label_looker.modules.product_analysis.analysis_service import (
+    get_expected_benefit_options,
     ingredient_analysis,
     ingredient_analysis_from_text,
     profile_validation_status,
@@ -21,6 +22,7 @@ __all__ = [
     "number_of_scan_left",
     "submit_profile_validation",
     "profile_validation_status",
+    "get_expected_benefit_options",
     "user_scan_by_id",
     "user_scan_list",
 ]

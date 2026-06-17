@@ -25,6 +25,7 @@ class LabelLookerSettings:
     coll_user_details: str
     coll_products: str
     coll_branded_ingredient: str
+    coll_product_analysis: str
     aws_bucket_name: str
     aws_region: str
     aws_scan_images_prefix: str
@@ -69,6 +70,7 @@ def get_label_looker_settings() -> LabelLookerSettings:
         coll_user_details=os.getenv("LABEL_LOOKER_USER_DETAILS_COLLECTION", "user_details"),
         coll_products=os.getenv("LABEL_LOOKER_PRODUCTS_COLLECTION", "products"),
         coll_branded_ingredient=os.getenv("LABEL_LOOKER_BRANDED_INGREDIENT_COLLECTION", "ingre_branded_ingredients"),
+        coll_product_analysis=os.getenv("LABEL_LOOKER_PRODUCT_ANALYSIS_COLLECTION", "product_analyses"),
         aws_bucket_name=os.getenv("AWS_BUCKET_NAME", "sbb-dev-media").strip(),
         aws_region=os.getenv("AWS_REGION", "ap-south-1").strip(),
         aws_scan_images_prefix=os.getenv("AWS_SCAN_IMAGES_PREFIX", "product-scan-images/").strip(),

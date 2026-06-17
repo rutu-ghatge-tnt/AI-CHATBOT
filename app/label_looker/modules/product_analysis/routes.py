@@ -33,8 +33,7 @@ def build_scanner_router(auth_user: Callable[..., Coroutine[Any, Any, dict[str, 
 
     @r.put("/feedback")
     async def feedback(body: dict[str, Any] = Body(...), user: dict[str, Any] = Depends(auth_user)):
-        _ = user
-        await service.put_feedback(body=body)
+        await service.put_feedback(body=body, user=user)
         return api_success({}, message="Feedback added successfully")
 
     @r.get("/scan-left")
@@ -49,6 +48,10 @@ def build_public_text_router(
     auth_required: Callable[..., Coroutine[Any, Any, dict[str, Any]]],
 ) -> APIRouter:
     r = APIRouter()
+
+    @r.get("/product/{product_id}/expected-benefit-options")
+    async def expected_benefit_options(product_id: str):
+        return api_success(await service.get_expected_benefit_options(product_id=product_id), message="Success")
 
     @r.post("/analyze-product/text")
     async def analyze_product_text(body: dict[str, Any] = Body(...), user: dict[str, Any] | None = Depends(auth_optional)):
