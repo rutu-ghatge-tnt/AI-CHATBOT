@@ -12,31 +12,44 @@ from app.label_looker.core.settings import get_label_looker_settings
 from app.label_looker.services.profile_taxonomy_resolver import resolve_profile_taxonomy_refs
 
 
-def user_details_lookup_filter(user_id: Any) -> dict[str, Any]:
+def user_details_lookup_filter(user_id: Any, *, mongo_user_id: ObjectId | None = None) -> dict[str, Any]:
     """Match common shapes: camelCase userId, snake_case user_id, ObjectId, document _id."""
     uid = str(user_id).strip() if user_id is not None else ""
-    if not uid:
+    clauses: list[dict[str, Any]] = []
+    if mongo_user_id is not None:
+        clauses.extend(
+            (
+                {"userId": mongo_user_id},
+                {"user_id": mongo_user_id},
+            )
+        )
+    if user_id is not None:
+        clauses.extend(({"userId": user_id}, {"user_id": user_id}))
+    if uid:
+        clauses.extend(({"userId": uid}, {"user_id": uid}))
+        if ObjectId.is_valid(uid):
+            oid = ObjectId(uid)
+            clauses.extend(({"userId": oid}, {"user_id": oid}, {"_id": oid}))
+    if not clauses:
         return {"userId": user_id}
-    clauses: list[dict[str, Any]] = [
-        {"userId": user_id},
-        {"user_id": user_id},
-        {"userId": uid},
-        {"user_id": uid},
-    ]
-    if ObjectId.is_valid(uid):
-        oid = ObjectId(uid)
-        clauses.extend(({"userId": oid}, {"user_id": oid}, {"_id": oid}))
-    return {"$or": clauses}
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for clause in clauses:
+        key = str(sorted(clause.items()))
+        if key not in seen:
+            seen.add(key)
+            unique.append(clause)
+    return {"$or": unique} if len(unique) > 1 else unique[0]
 
 
 def users_lookup_filter(*, user_id: Any, auth_user: dict[str, Any] | None) -> dict[str, Any]:
-    """Match `skin_bb.users` by _id or profileUrl."""
+    """Match `skin_bb.users` by _id, externalId, or profileUrl."""
     clauses: list[dict[str, Any]] = []
     uid = str(user_id).strip() if user_id is not None else ""
     if uid and ObjectId.is_valid(uid):
-        oid = ObjectId(uid)
-        clauses.append({"_id": oid})
+        clauses.append({"_id": ObjectId(uid)})
     if uid:
+        clauses.append({"externalId": uid})
         clauses.append({"profileUrl": uid})
     if auth_user:
         for key in ("externalId", "id", "_id", "userId", "user_id"):
@@ -49,10 +62,13 @@ def users_lookup_filter(*, user_id: Any, auth_user: dict[str, Any] | None) -> di
             if ObjectId.is_valid(s):
                 clauses.append({"_id": ObjectId(s)})
             else:
-                clauses.append({"profileUrl": s})
+                clauses.append({"externalId": s})
         profile_url = auth_user.get("profileUrl")
         if isinstance(profile_url, str) and profile_url.strip():
             clauses.append({"profileUrl": profile_url.strip()})
+        front_name = auth_user.get("frontName")
+        if isinstance(front_name, str) and front_name.strip():
+            clauses.append({"profileUrl": front_name.strip()})
     if not clauses:
         return {"_id": user_id}
     # Deduplicate clause dicts
@@ -64,6 +80,23 @@ def users_lookup_filter(*, user_id: Any, auth_user: dict[str, Any] | None) -> di
             seen.add(key)
             unique.append(clause)
     return {"$or": unique}
+
+
+async def resolve_users_collection_id(
+    *,
+    users_coll: AsyncIOMotorCollection,
+    user_id: Any,
+    auth_user: dict[str, Any] | None,
+) -> ObjectId | None:
+    """Map app auth id (UUID externalId) to Mongo `users._id` for user_details joins."""
+    account = await users_coll.find_one(users_lookup_filter(user_id=user_id, auth_user=auth_user), projection={"_id": 1})
+    if account and account.get("_id") is not None:
+        oid = account["_id"]
+        return oid if isinstance(oid, ObjectId) else ObjectId(str(oid))
+    uid = str(user_id).strip() if user_id is not None else ""
+    if uid and ObjectId.is_valid(uid):
+        return ObjectId(uid)
+    return None
 
 
 def _unwrap_scalar_array(value: Any) -> Any:
@@ -202,7 +235,17 @@ async def load_merged_user_details(
     Load profile from `user_details`, enrich with `users` account row, auth user, and
     resolved taxonomy labels (ObjectId → string).
     """
-    raw = await user_details_coll.find_one(user_details_lookup_filter(user_id)) or {}
+    mongo_user_id: ObjectId | None = None
+    if users_coll is not None:
+        mongo_user_id = await resolve_users_collection_id(
+            users_coll=users_coll,
+            user_id=user_id,
+            auth_user=user,
+        )
+
+    raw = await user_details_coll.find_one(
+        user_details_lookup_filter(user_id, mongo_user_id=mongo_user_id)
+    ) or {}
     normalized = normalize_mongo_profile_shape(raw)
 
     account: dict[str, Any] = {}

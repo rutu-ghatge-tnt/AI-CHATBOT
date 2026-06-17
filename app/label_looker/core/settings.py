@@ -53,7 +53,11 @@ def get_label_looker_settings() -> LabelLookerSettings:
 
     return LabelLookerSettings(
         skin_bb_base_url=base,
-        skin_bb_client_secret=(os.getenv("SKIN_BB_CLIENT_SECRET") or "").strip(),
+        skin_bb_client_secret=(
+            os.getenv("SKIN_BB_CLIENT_SECRET")
+            or os.getenv("ACCESS_TOKEN_SECRET")
+            or ""
+        ).strip(),
         anthropic_api_key=anthropic_key,
         anthropic_model=(os.getenv("ANTHROPIC_MODEL") or os.getenv("CLAUDE_MODEL") or "claude-sonnet-4-20250514").strip(),
         mongo_uri=mongo_uri,

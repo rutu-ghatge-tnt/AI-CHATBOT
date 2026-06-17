@@ -55,3 +55,40 @@ def test_validate_desired_benefits_accepts_catalog_label():
     first = options["expectedBenefitOptions"][0]
     cleaned = validate_desired_benefits(desired=[first["label"]], options_payload=options)
     assert cleaned == [first["label"]]
+
+
+def test_validate_accepts_pdp_tag_names_for_hair_product():
+    product = {
+        "productType": "Shampoo",
+        "productName": "EnagenBio Hair Cleanser",
+        "description": "sulphate-free damage repair shampoo with keratin for frizzy hair",
+        "benefit": [],
+    }
+    tag_names = [
+        "Sulphate Free Shampoo",
+        "Damage Repair Shampoo",
+        "Frizz Control Shampoo",
+    ]
+    options = build_expected_benefit_options(product=product, mode="haircare", tag_names=tag_names)
+    cleaned = validate_desired_benefits(
+        desired=["Frizz Control Shampoo", "Damage Repair Shampoo"],
+        options_payload=options,
+        product=product,
+        tag_names=tag_names,
+    )
+    assert cleaned == ["Frizz Control", "Repair"]
+
+
+def test_hair_options_include_hair_fall_control():
+    product = {
+        "productType": "Shampoo",
+        "productName": "EnagenBio Hair Cleanser",
+        "benefit": [],
+    }
+    options = build_expected_benefit_options(
+        product=product,
+        mode="haircare",
+        tag_names=["Frizz Control Shampoo"],
+    )
+    labels = [row["label"] for row in options["expectedBenefitOptions"]]
+    assert "Hair Fall Control" in labels

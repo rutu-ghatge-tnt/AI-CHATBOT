@@ -17,6 +17,11 @@ from app.label_looker.modules.product_analysis.analysis_service_impl import (
     _product_list_values,
     _resolve_analysis_mode,
 )
+from app.label_looker.services.product_marketing_signals import (
+    marketing_claim_tokens,
+    match_benefit_labels_from_marketing,
+    resolve_product_tag_names,
+)
 
 _LIP_BENEFIT_IDS = frozenset(
     {
@@ -113,7 +118,29 @@ def _catalog_entries(mode: str) -> list[dict[str, Any]]:
     return out
 
 
-def _resolve_product_type_key(product: dict[str, Any]) -> str:
+def _resolve_product_type_key(
+    product: dict[str, Any],
+    *,
+    tag_names: list[str] | None = None,
+) -> str:
+    marketing_corpus = " ".join(
+        [
+            str(product.get("productType") or ""),
+            str(product.get("subCategory") or product.get("subcategory") or ""),
+            str(product.get("productName") or product.get("name") or ""),
+            " ".join(tag_names or []),
+        ]
+    ).lower()
+    for needle, type_key in (
+        ("hair cleanser", "shampoo"),
+        ("shampoo", "shampoo"),
+        ("conditioner", "conditioner"),
+        ("hair mask", "hair_mask"),
+        ("hair oil", "hair_oil"),
+        ("hair serum", "hair_serum"),
+    ):
+        if needle in marketing_corpus:
+            return type_key
     for raw in (
         product.get("productType"),
         product.get("subCategory"),
@@ -151,8 +178,13 @@ def _product_type_row(mode: str, type_key: str) -> dict[str, Any] | None:
     return None
 
 
-def _claim_tokens(product: dict[str, Any]) -> set[str]:
-    tokens: set[str] = set()
+def _claim_tokens(
+    product: dict[str, Any],
+    *,
+    tag_names: list[str] | None = None,
+    mode: str = "skincare",
+) -> set[str]:
+    tokens = marketing_claim_tokens(product=product, tag_names=tag_names, mode=mode)
     for value in _product_list_values(product, "benefit", "benefits", "claims", "claim"):
         tokens.add(_norm_token(value))
         for part in re.split(r"[,/&]+", str(value)):
@@ -206,14 +238,21 @@ def _resolve_benefit_mode(*, product: dict[str, Any], mode: str | None) -> str:
     return _resolve_analysis_mode(body={}, product=product, specific_type=None, main_benefit=None)
 
 
-def build_expected_benefit_options(*, product: dict[str, Any], mode: str | None = None) -> dict[str, Any]:
+def build_expected_benefit_options(
+    *,
+    product: dict[str, Any],
+    mode: str | None = None,
+    tag_names: list[str] | None = None,
+) -> dict[str, Any]:
     resolved_mode = _resolve_benefit_mode(product=product, mode=mode)
-    type_key = _resolve_product_type_key(product)
+    type_key = _resolve_product_type_key(product, tag_names=tag_names)
     type_row = _product_type_row(resolved_mode, type_key)
-    claim_tokens = _claim_tokens(product)
+    claim_tokens = _claim_tokens(product, tag_names=tag_names, mode=resolved_mode)
     catalog = _catalog_entries(resolved_mode)
+    max_options = 35 if resolved_mode == "haircare" else 20
 
     recommended: list[dict[str, Any]] = []
+    parents: list[dict[str, Any]] = []
     others: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -227,8 +266,6 @@ def build_expected_benefit_options(*, product: dict[str, Any], mode: str | None 
         }
 
     for entry in catalog:
-        if not _entry_matches_product_type(entry, type_row):
-            continue
         if _entry_matches_claim(entry, claim_tokens):
             key = entry["id"]
             if key not in seen:
@@ -246,7 +283,20 @@ def build_expected_benefit_options(*, product: dict[str, Any], mode: str | None 
                     recommended.append(_option(entry, recommended_flag=True, source="product_type"))
 
     for entry in catalog:
-        if not _entry_matches_product_type(entry, type_row):
+        if not entry.get("is_parent"):
+            continue
+        key = entry["id"]
+        if key in seen:
+            continue
+        if resolved_mode != "haircare" and type_row is not None and not _entry_matches_product_type(entry, type_row):
+            continue
+        seen.add(key)
+        parents.append(_option(entry, recommended_flag=False, source="catalog_parent"))
+
+    for entry in catalog:
+        if entry.get("is_parent"):
+            continue
+        if type_row is not None and not _entry_matches_product_type(entry, type_row):
             continue
         key = entry["id"]
         if key in seen:
@@ -254,16 +304,17 @@ def build_expected_benefit_options(*, product: dict[str, Any], mode: str | None 
         seen.add(key)
         others.append(_option(entry, recommended_flag=False, source="catalog"))
 
-    options = recommended + others
+    options = recommended + parents + others
     if not options and catalog:
-        options = [_option(e, recommended_flag=False, source="catalog_fallback") for e in catalog[:12]]
+        options = [_option(e, recommended_flag=False, source="catalog_fallback") for e in catalog[:max_options]]
 
     return {
         "mode": resolved_mode,
         "productType": type_key or None,
         "productTypeLabel": (type_row or {}).get("label"),
-        "expectedBenefitOptions": options[:20],
+        "expectedBenefitOptions": options[:max_options],
         "selectionRules": {"min": 1, "max": 3, "requiredEachScan": True},
+        "tagNames": list(tag_names or []),
     }
 
 
@@ -271,6 +322,7 @@ async def get_expected_benefit_options_for_product_id(
     *,
     products_coll: AsyncIOMotorCollection,
     product_id: Any,
+    tags_coll: AsyncIOMotorCollection | None = None,
 ) -> dict[str, Any]:
     product_ref = _normalize_product_ref(product_id)
     if product_ref is None:
@@ -278,7 +330,10 @@ async def get_expected_benefit_options_for_product_id(
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=product_ref)
     if not product:
         raise ScannerApiError(404, "Product not found")
-    out = build_expected_benefit_options(product=product)
+    tag_names: list[str] | None = None
+    if tags_coll is not None:
+        tag_names = await resolve_product_tag_names(product=product, tags_coll=tags_coll)
+    out = build_expected_benefit_options(product=product, tag_names=tag_names)
     out["productId"] = str(product_ref)
     return out
 
@@ -291,13 +346,74 @@ async def get_expected_benefit_options(*, product_id: Any) -> dict[str, Any]:
     return await get_expected_benefit_options_for_product_id(
         products_coll=db[s.coll_products],
         product_id=product_id,
+        tags_coll=db["product_tags"],
     )
+
+
+def _resolve_desired_benefit_label(
+    raw: str,
+    *,
+    allowed: dict[str, str],
+    mode: str,
+    product: dict[str, Any] | None = None,
+    tag_names: list[str] | None = None,
+) -> str | None:
+    token = _norm_token(raw)
+    if token in allowed:
+        return allowed[token]
+
+    raw_lower = str(raw or "").strip().lower()
+    if product is not None:
+        tag_candidates = list(tag_names or [])
+        if raw_lower:
+            tag_candidates.append(raw)
+        for tag in tag_candidates:
+            if not str(tag).strip():
+                continue
+            if _norm_token(tag) != token and raw_lower != str(tag).strip().lower():
+                continue
+            for label in match_benefit_labels_from_marketing(
+                product=product,
+                tag_names=[str(tag)],
+                mode=mode,
+            ):
+                normalized = _norm_token(label)
+                if normalized in allowed:
+                    return allowed[normalized]
+        for label in match_benefit_labels_from_marketing(
+            product=product,
+            tag_names=tag_candidates,
+            mode=mode,
+        ):
+            normalized = _norm_token(label)
+            if normalized in allowed and normalized in token:
+                return allowed[normalized]
+
+    for entry in _catalog_entries(mode):
+        label = str(entry.get("label") or "").strip()
+        if not label:
+            continue
+        candidates = {_norm_token(label), _norm_token(str(entry.get("id") or ""))}
+        candidates.update(_norm_token(str(x)) for x in entry.get("search_terms") or [])
+        if token in candidates:
+            normalized = _norm_token(label)
+            if normalized in allowed:
+                return allowed[normalized]
+        for term in entry.get("search_terms") or []:
+            term_lower = str(term).strip().lower()
+            if len(term_lower) >= 4 and term_lower in raw_lower:
+                normalized = _norm_token(label)
+                if normalized in allowed:
+                    return allowed[normalized]
+    return None
 
 
 def validate_desired_benefits(
     *,
     desired: list[str],
     options_payload: dict[str, Any],
+    product: dict[str, Any] | None = None,
+    tag_names: list[str] | None = None,
 ) -> list[str]:
     """Return normalized labels; raise ScannerApiError if any selection is outside options."""
     allowed: dict[str, str] = {}
@@ -310,12 +426,19 @@ def validate_desired_benefits(
             allowed[_norm_token(label)] = label
         if bid:
             allowed[_norm_token(bid)] = label or bid
+    mode = str(options_payload.get("mode") or "skincare")
+    resolved_tags = tag_names if tag_names is not None else list(options_payload.get("tagNames") or [])
     cleaned: list[str] = []
     for raw in desired:
-        token = _norm_token(str(raw))
-        if not token:
+        if not str(raw).strip():
             continue
-        resolved = allowed.get(token)
+        resolved = _resolve_desired_benefit_label(
+            str(raw),
+            allowed=allowed,
+            mode=mode,
+            product=product,
+            tag_names=resolved_tags,
+        )
         if not resolved:
             raise ScannerApiError(
                 400,

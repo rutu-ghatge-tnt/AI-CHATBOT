@@ -1368,6 +1368,7 @@ async def _ingredient_analysis_from_text_impl(
         "ingredientAnalysisError": None,
         "sourceType": "text",
         "productId": product_id_ref,
+        "scanPhase": "analysis",
         "createdAt": now,
         "updatedAt": now,
     }

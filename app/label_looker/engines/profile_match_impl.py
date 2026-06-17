@@ -8,14 +8,31 @@ from app.label_looker.engines.base_formula.types import BaseFormulaRecord, Runti
 
 _TERM_ALIASES: dict[str, set[str]] = {
     "hydration": {"hydrate", "hydrating", "moisture", "moisturizing", "plumping"},
-    "brightening": {"glow", "radiance", "radiant", "tone", "uneven tone"},
-    "dark spots": {"dark-spot", "dark spots", "pigmentation", "hyperpigmentation", "spots"},
+    "brightening": {"glow", "radiance", "radiant", "tone", "uneven tone", "depigmenting", "depigmentation"},
+    "dark spots": {"dark-spot", "dark spots", "pigmentation", "hyperpigmentation", "spots", "dark-spots"},
+    "dark circles": {"dark-circles", "dark circles", "under-eye", "under eye"},
     "acne": {"pimples", "breakouts", "blemish"},
     "pores": {"pore", "large pores", "open pores"},
     "barrier repair": {"barrier", "repair", "skin barrier", "barrier support"},
     "soothing": {"calming", "calm", "anti-redness", "redness"},
-    "oil control": {"sebum", "shine control", "mattifying"},
+    "oil control": {"sebum", "shine control", "mattifying", "less oil", "less_oil"},
+    "dullness": {"dull", "dull skin"},
+    "spot fading": {"spot_fading", "spot fading", "fade spots"},
 }
+
+_LIFESTYLE_CONCERN_TERMS: set[str] = {
+    "sleep deprivation",
+    "sleep-deprivation",
+    "sleep-deprivation-insomnia",
+    "insomnia",
+    "screen time",
+    "screen-time",
+    "stress",
+    "fatigue",
+    "lifestyle",
+}
+
+_PIGMENTATION_RELATED: set[str] = {"dark spots", "brightening", "pigmentation", "hyperpigmentation", "spot fading"}
 
 
 def _canonicalize_term(value: str) -> str:
@@ -31,7 +48,7 @@ def _canonicalize_term(value: str) -> str:
             return canonical
         if cleaned in aliases:
             return canonical
-    return cleaned
+    return cleaned.replace(" ", "-") if "-" in raw else cleaned
 
 
 def _expand_text_to_terms(value: str) -> set[str]:
@@ -50,7 +67,17 @@ def _expand_text_to_terms(value: str) -> set[str]:
     return terms
 
 
+def _is_lifestyle_concern(concern: str) -> bool:
+    c = _canonicalize_term(concern)
+    compact = c.replace(" ", "-")
+    if compact in _LIFESTYLE_CONCERN_TERMS or c in _LIFESTYLE_CONCERN_TERMS:
+        return True
+    return any(term in compact for term in ("sleep", "insomnia", "screen-time", "screen time"))
+
+
 def skin_type_match(user_skin: str, declared_types: list[str]) -> str:
+    if not declared_types:
+        return "unknown"
     matrix: dict[tuple[str, str], str] = {
         ("oily", "oily"): "exact",
         ("oily", "combination"): "adjacent",
@@ -86,7 +113,188 @@ def score_to_band(score: int) -> str:
         return "great"
     if score >= 60:
         return "good"
+    if score >= 40:
+        return "mixed"
     return "low"
+
+
+def _skin_type_points_and_ceiling(type_match: str) -> tuple[int, int, str]:
+    mapping: dict[str, tuple[int, int, str]] = {
+        "exact": (15, 100, "yes"),
+        "adjacent": (11, 85, "partial"),
+        "unknown": (12, 100, "partial"),
+        "opposite": (0, 55, "no"),
+    }
+    return mapping.get(type_match, (12, 100, "partial"))
+
+
+def _concern_points_for_match(
+    *,
+    concern: str,
+    primary: str,
+    product_benefits_set: set[str],
+    max_points: int,
+) -> tuple[int, str, str]:
+    c = _canonicalize_term(concern)
+    if _is_lifestyle_concern(concern):
+        return (
+            0,
+            "n/a",
+            f"{concern} is a lifestyle factor — this scan focuses on formula fit for your selected benefits and skin profile.",
+        )
+    if c and c == primary:
+        return max_points, "yes", f"This product directly targets your concern: {concern}."
+    if c and c in product_benefits_set:
+        pts = max(1, round(max_points * 0.55))
+        return pts, "partial", f"This product partly supports your concern: {concern}."
+    if c == "dark circles" and product_benefits_set & _PIGMENTATION_RELATED:
+        pts = max(1, round(max_points * 0.35))
+        return (
+            pts,
+            "partial",
+            f"This product may help surface pigmentation, but under-eye dark circles ({concern}) usually need targeted eye care.",
+        )
+    return 0, "no", f"This product does not clearly address your concern: {concern}."
+
+
+def _benefit_points(normalized_benefits: list[str], product_benefits_set: set[str]) -> tuple[int, str, str, list[str], list[str]]:
+    if not normalized_benefits:
+        return 0, "no", "No scan goals were provided.", [], []
+    matched = [b for b in normalized_benefits if b in product_benefits_set]
+    unmatched = [b for b in normalized_benefits if b not in product_benefits_set]
+    total = len(normalized_benefits)
+    match_count = len(matched)
+    if match_count == 0:
+        return (
+            0,
+            "no",
+            f"Your selected benefits are not clearly supported by this formula (0 out of {total} matched).",
+            matched,
+            unmatched,
+        )
+    if match_count == total:
+        return (
+            40,
+            "yes",
+            f"Your selected benefits align strongly with this product ({match_count} out of {total} matched).",
+            matched,
+            unmatched,
+        )
+    points = max(8, round(40 * (match_count / total)))
+    return (
+        points,
+        "partial",
+        f"Some of your selected benefits are present ({match_count} out of {total} matched).",
+        matched,
+        unmatched,
+    )
+
+
+def _build_fit_axes(
+    *,
+    normalized_benefits: list[str],
+    product_benefits_set: set[str],
+    concerns: list[str],
+    type_match: str,
+    safety_severity: str = "clear",
+    mode: str = "skincare",
+) -> list[dict[str, Any]]:
+    axes: list[dict[str, Any]] = []
+    for benefit in normalized_benefits:
+        matched = benefit in product_benefits_set
+        axes.append(
+            {
+                "id": f"goal_{benefit}",
+                "kind": "scan_goal",
+                "label": benefit.replace("-", " ").title(),
+                "status": "strong" if matched else "weak",
+                "score": 92 if matched else 18,
+            }
+        )
+    for concern in concerns[:3]:
+        if _is_lifestyle_concern(concern):
+            axes.append(
+                {
+                    "id": f"lifestyle_{_canonicalize_term(concern)}",
+                    "kind": "lifestyle",
+                    "label": concern.replace("-", " ").title(),
+                    "status": "informational",
+                    "score": None,
+                    "note": "Lifestyle factors are noted but not scored against the INCI formula.",
+                }
+            )
+            continue
+        c = _canonicalize_term(concern)
+        if c == "dark circles" and product_benefits_set & _PIGMENTATION_RELATED:
+            status, score = "partial", 45
+        elif c in product_benefits_set:
+            status, score = "strong", 80
+        else:
+            status, score = "weak", 20
+        axes.append(
+            {
+                "id": f"concern_{c or concern}",
+                "kind": "profile_concern",
+                "label": concern.replace("-", " ").title(),
+                "status": status,
+                "score": score,
+            }
+        )
+    type_kind = "hair_type" if mode == "haircare" else "skin_type"
+    type_label = "Hair type fit" if mode == "haircare" else "Skin type fit"
+    type_note_unknown = (
+        "Product hair-type targeting is not specified in catalog; formula comfort was scored separately."
+        if mode == "haircare"
+        else "Product skin-type targeting is not specified in catalog; formula comfort was scored separately."
+    )
+    if type_match == "unknown":
+        axes.append(
+            {
+                "id": f"{type_kind}_fit",
+                "kind": type_kind,
+                "label": type_label,
+                "status": "informational",
+                "score": None,
+                "note": type_note_unknown,
+            }
+        )
+    elif type_match == "exact":
+        axes.append({"id": f"{type_kind}_fit", "kind": type_kind, "label": type_label, "status": "strong", "score": 88})
+    elif type_match == "adjacent":
+        axes.append({"id": f"{type_kind}_fit", "kind": type_kind, "label": type_label, "status": "partial", "score": 65})
+    else:
+        axes.append({"id": f"{type_kind}_fit", "kind": type_kind, "label": type_label, "status": "weak", "score": 25})
+    if safety_severity not in ("clear", "soft"):
+        axes.append(
+            {
+                "id": "safety",
+                "kind": "safety",
+                "label": "Safety for your profile",
+                "status": "caution" if safety_severity == "hard" else "blocked",
+                "score": 0,
+            }
+        )
+    return axes
+
+
+def _derive_works_for_user(
+    *,
+    band: str,
+    matched_benefits: list[str],
+    unmatched_benefits: list[str],
+    safety_severity: str,
+) -> str:
+    if safety_severity in ("block", "hard"):
+        return "no"
+    if unmatched_benefits:
+        return "partial" if matched_benefits else "no"
+    if matched_benefits and band in ("great", "good", "mixed"):
+        return "yes" if band in ("great", "good") else "partial"
+    if band in ("great", "good"):
+        return "yes"
+    if band == "mixed":
+        return "partial"
+    return "no"
 
 
 def evaluate_safety(*, age: int | None, life_stages: list[str], conditions: list[str], key_ingredients: list[dict[str, Any]]) -> dict[str, Any]:
@@ -158,59 +366,77 @@ def evaluate_suitability(
     product_benefits: list[str],
     runtime_context: RuntimeContext | None = None,
     base_formula: BaseFormulaRecord | None = None,
+    safety_severity: str = "clear",
+    mode: str = "skincare",
 ) -> dict[str, Any]:
-    type_match = skin_type_match(skin_type.lower(), [x.lower() for x in declared_types]) if declared_types else "opposite"
-    type_points = {"exact": 20, "adjacent": 10, "opposite": 0}[type_match]
-    ceiling = {"exact": 100, "adjacent": 80, "opposite": 55}[type_match]
+    type_match = skin_type_match(skin_type.lower(), [x.lower() for x in declared_types])
+    type_points, ceiling, type_answer = _skin_type_points_and_ceiling(type_match)
 
     primary = _canonicalize_term(product_primary)
     product_benefits_set: set[str] = set()
     for value in product_benefits:
         product_benefits_set.update(_expand_text_to_terms(str(value)))
-    concern_weights = [(33, 20), (14, 9), (8, 5)]
+
     user_type_label = str(skin_type or "").strip().lower() or "not specified"
-    product_type_label = ", ".join(x.strip().lower() for x in declared_types if str(x).strip()) or "not specified"
+    product_type_label = ", ".join(x.strip().lower() for x in declared_types if str(x).strip()) or "not specified in catalog"
+    profile_type_word = "hair type" if mode == "haircare" else "skin type"
     type_note_map = {
-        "exact": f"Your skin type is {user_type_label} and this product is designed for {product_type_label}, so this is a direct match.",
-        "adjacent": f"Your skin type is {user_type_label} and this product is designed for {product_type_label}, so this is a close (partial) match.",
-        "opposite": f"Your skin type is {user_type_label}, while this product is designed for {product_type_label}, so this is an opposite match and may not suit your current profile.",
+        "exact": f"Your {profile_type_word} is {user_type_label} and this product is designed for {product_type_label}, so this is a direct match.",
+        "adjacent": f"Your {profile_type_word} is {user_type_label} and this product is designed for {product_type_label}, so this is a close (partial) match.",
+        "unknown": f"Your {profile_type_word} is {user_type_label}. This product does not list target types in our catalog, so type fit was not penalized.",
+        "opposite": f"Your {profile_type_word} is {user_type_label}, while this product is designed for {product_type_label}, so this may not suit your current profile.",
     }
-    breakdown: list[dict[str, Any]] = [{"category": "skin_type", "weight": 0.20, "answer": "yes" if type_match == "exact" else "partial" if type_match == "adjacent" else "no", "points_awarded": type_points, "note": type_note_map.get(type_match, "Type-fit data is limited for this product.")}]
+    type_category = "hair_type" if mode == "haircare" else "skin_type"
+    breakdown: list[dict[str, Any]] = [
+        {
+            "category": type_category,
+            "weight": 0.15,
+            "answer": type_answer,
+            "points_awarded": type_points,
+            "note": type_note_map.get(type_match, "Type-fit data is limited for this product."),
+        }
+    ]
+
+    concern_weight_schedule = [0.12, 0.05, 0.03]
+    concern_point_schedule = [12, 5, 3]
     unmet_needs: list[str] = []
     concern_points = 0
     for idx, concern in enumerate(concerns[:3]):
-        c = _canonicalize_term(concern)
-        primary_pts, benefit_pts = concern_weights[idx]
-        if c and c == primary:
-            pts, ans, note = (primary_pts, "yes", f"This product directly targets your concern: {concern}.")
-        elif c and c in product_benefits_set:
-            pts, ans, note = (benefit_pts, "partial", f"This product partly supports your concern: {concern}.")
-        else:
-            pts, ans, note = (0, "no", f"This product does not clearly address your concern: {concern}.")
-            if idx == 0 and c:
-                unmet_needs.append(concern)
+        pts, ans, note = _concern_points_for_match(
+            concern=concern,
+            primary=primary,
+            product_benefits_set=product_benefits_set,
+            max_points=concern_point_schedule[idx],
+        )
+        if ans == "no" and idx == 0 and _canonicalize_term(concern) and not _is_lifestyle_concern(concern):
+            unmet_needs.append(concern)
         concern_points += pts
-        breakdown.append({"category": f"concern_{idx + 1}", "weight": [0.33, 0.14, 0.08][idx], "answer": ans, "points_awarded": pts, "note": note, "concern": concern})
+        breakdown.append(
+            {
+                "category": f"concern_{idx + 1}",
+                "weight": concern_weight_schedule[idx],
+                "answer": ans,
+                "points_awarded": pts,
+                "note": note,
+                "concern": concern,
+            }
+        )
 
     normalized_benefits = [_canonicalize_term(b) for b in benefits if _canonicalize_term(b)]
-    benefit_match = sum(1 for b in normalized_benefits if b in product_benefits_set)
-    unmatched_benefits = [b for b in normalized_benefits if b not in product_benefits_set]
-    benefit_points = min(benefit_match * 2, 10)
+    benefit_points, benefit_answer, benefit_note, matched_benefits, unmatched_benefits = _benefit_points(
+        normalized_benefits,
+        product_benefits_set,
+    )
     breakdown.append(
         {
             "category": "benefit_alignment",
-            "weight": 0.10,
-            "answer": "yes" if benefit_points >= 6 else "partial" if benefit_points > 0 else "no",
+            "weight": 0.40,
+            "answer": benefit_answer,
             "points_awarded": benefit_points,
-            "note": (
-                f"Your expected benefits are strongly aligned with this product ({benefit_match} out of {len(normalized_benefits)} matched)."
-                if benefit_points >= 6
-                else f"Some of your expected benefits are present, but not all ({benefit_match} out of {len(normalized_benefits)} matched)."
-                if benefit_points > 0
-                else f"Your expected benefits are not clearly supported by this formula ({benefit_match} out of {len(normalized_benefits)} matched)."
-            ),
+            "note": benefit_note,
         }
     )
+
     base_formula_score = {"total": 0.0, "details": [], "has_finish_axis": False, "rationale_strings": []}
     if runtime_context is not None and base_formula is not None:
         base_formula_score = score_base_formula(runtime_context, base_formula)
@@ -225,18 +451,32 @@ def evaluate_suitability(
         )
 
     raw_score = type_points + concern_points + benefit_points + float(base_formula_score["total"])
-    final_score = min(raw_score, ceiling)
+    final_score = min(int(round(raw_score)), ceiling)
     override_result = None
     if runtime_context is not None and base_formula is not None:
         override_result = apply_overrides(
             ctx=runtime_context,
             base_formula=base_formula,
-            suitability_score=final_score,
+            suitability_score=float(final_score),
             base_formula_score=base_formula_score,
         )
-        final_score = min(override_result["score_after"], ceiling)
+        final_score = min(int(round(override_result["score_after"])), ceiling)
     band = score_to_band(final_score)
     unmet_for_response = unmatched_benefits[:1] or unmet_needs
+    fit_axes = _build_fit_axes(
+        normalized_benefits=normalized_benefits,
+        product_benefits_set=product_benefits_set,
+        concerns=concerns,
+        type_match=type_match,
+        safety_severity=safety_severity,
+        mode=mode,
+    )
+    works_for_user = _derive_works_for_user(
+        band=band,
+        matched_benefits=matched_benefits,
+        unmatched_benefits=unmatched_benefits,
+        safety_severity=safety_severity,
+    )
     return {
         "raw_score": raw_score,
         "final_score": final_score,
@@ -247,9 +487,11 @@ def evaluate_suitability(
         "unmet_needs": unmet_for_response,
         "unmet_profile_concerns": unmet_needs,
         "unmatched_desired_benefits": unmatched_benefits,
-        "matched_desired_benefits": [b for b in normalized_benefits if b in product_benefits_set],
+        "matched_desired_benefits": matched_benefits,
         "base_formula_score": base_formula_score,
         "override_result": override_result,
+        "fit_axes": fit_axes,
+        "works_for_user": works_for_user,
     }
 
 
@@ -261,6 +503,7 @@ def build_observation_candidates(
     claims: list[str],
     base_formula: BaseFormulaRecord | None = None,
     user_flags: dict[str, Any] | None = None,
+    mode: str = "skincare",
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     claims_set = {x.lower().strip() for x in claims if str(x).strip()}
@@ -274,7 +517,7 @@ def build_observation_candidates(
         candidates.append({"id": "U04", "family": "U", "priority": 2, "name": "Soft safety context", "editorial_text": str(safety["triggers"][0].get("explanation") or "A soft safety context applies for your profile.")})
     if claims_set:
         candidates.append({"id": "F01", "family": "F", "priority": 3, "name": "Formulation orientation", "editorial_text": "The formula has clear claim alignment, but fit still depends on profile-to-concern match."})
-    if base_formula:
+    if base_formula and mode != "haircare":
         if str(base_formula.get("comedogenic_risk") or "") in {"high", "moderate"}:
             candidates.append(
                 {
@@ -355,6 +598,7 @@ def evaluate_observations(
     claims: list[str],
     base_formula: BaseFormulaRecord | None = None,
     user_flags: dict[str, Any] | None = None,
+    mode: str = "skincare",
 ) -> list[dict[str, Any]]:
     candidates = build_observation_candidates(
         safety=safety,
@@ -363,12 +607,13 @@ def evaluate_observations(
         claims=claims,
         base_formula=base_formula,
         user_flags=user_flags,
+        mode=mode,
     )
 
     def eff_priority(obs: dict[str, Any]) -> int:
         p = int(obs.get("priority", 4))
         oid = str(obs.get("id") or "")
-        if state == "low" and oid == "U03":
+        if state in ("low", "mixed") and oid == "U03":
             return 0
         if state == "great" and oid == "F01":
             return 0
@@ -384,4 +629,3 @@ def evaluate_observations(
             continue
         selected.append(obs)
     return selected
-

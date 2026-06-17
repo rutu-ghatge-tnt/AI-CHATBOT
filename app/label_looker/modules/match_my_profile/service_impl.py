@@ -24,14 +24,61 @@ from app.label_looker.services.expected_benefit_options import (
     build_expected_benefit_options,
     validate_desired_benefits,
 )
+from app.label_looker.services.product_marketing_signals import (
+    build_product_benefit_signals,
+    resolve_product_tag_names,
+)
 from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
-from app.label_looker.services.user_profile_flow import load_full_user_profile, merge_auth_user_details, user_details_lookup_filter
+from app.label_looker.services.user_profile_flow import load_full_user_profile, merge_auth_user_details, resolve_users_collection_id, user_details_lookup_filter
 
 logger = logging.getLogger(__name__)
 
 
 def _extract_user_id(user: dict[str, Any]) -> Any:
     return extract_user_id(user)
+
+
+def _has_score_request_body(body: dict[str, Any]) -> bool:
+    if body.get("product_id") or body.get("productId"):
+        return True
+    desired = body.get("desiredBenefits") or body.get("desired_benefits")
+    if isinstance(desired, list) and desired:
+        return True
+    if isinstance(desired, str) and desired.strip():
+        return True
+    return False
+
+
+def _extract_analysis_scan_id(body: dict[str, Any]) -> str | None:
+    for key in ("analysisScanId", "analysis_scan_id"):
+        raw = body.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    scan_raw = body.get("scan_id") or body.get("scanId")
+    if isinstance(scan_raw, str) and scan_raw.strip() and _has_score_request_body(body):
+        return scan_raw.strip()
+    return None
+
+
+async def _load_linked_analysis_scan(
+    *,
+    scan_coll: AsyncIOMotorCollection,
+    analysis_scan_id: str,
+    user: dict[str, Any],
+    user_id: Any,
+    product_ref: Any,
+) -> dict[str, Any] | None:
+    if not ObjectId.is_valid(analysis_scan_id):
+        raise ScannerApiError(400, "Invalid analysisScanId")
+    oid = ObjectId(analysis_scan_id)
+    doc = await scan_coll.find_one({"_id": oid})
+    if not doc:
+        raise ScannerApiError(404, "Analysis scan not found")
+    require_end_user_owns_scan(doc=doc, user=user, user_id=user_id)
+    linked_product = doc.get("productId")
+    if linked_product is not None and product_ref is not None and str(linked_product) != str(product_ref):
+        raise ScannerApiError(400, "analysisScanId does not match this product")
+    return doc
 
 
 def _effective_user_details_for_match(details: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
@@ -155,23 +202,13 @@ def _product_list_values(product: dict[str, Any] | None, *keys: str) -> list[str
     return list(dict.fromkeys(out))
 
 
-def _infer_product_benefit_signals(*, product: dict[str, Any], tile_product: dict[str, Any]) -> list[str]:
-    out: list[str] = []
-    out.extend(_product_list_values(product, "benefit", "benefits", "claims", "claim"))
-    primary = _safe_scalar(product.get("primaryConcern"))
-    if primary:
-        out.append(primary)
-    for row in (tile_product.get("ingredients") or []) + (tile_product.get("key_ingredients") or []):
-        if not isinstance(row, dict):
-            continue
-        out.extend(_safe_list(row.get("functions")))
-        out.extend(_safe_list(row.get("addresses")))
-        inci_name = _safe_scalar(row.get("inci_name")).lower()
-        if any(k in inci_name for k in ("hyaluron", "glycerin", "panthenol", "betaine", "sodium pca", "urea")):
-            out.append("hydration")
-        if any(k in inci_name for k in ("niacinamide", "ascorb", "vitamin c", "arbutin", "tranexamic")):
-            out.append("brightening")
-    return list(dict.fromkeys(x for x in out if isinstance(x, str) and x.strip()))
+async def _resolve_product_tag_names_for_match(
+    *,
+    product: dict[str, Any],
+    db: Any,
+) -> list[str]:
+    tags_coll = db["product_tags"]
+    return await resolve_product_tag_names(product=product, tags_coll=tags_coll)
 
 
 def _normalize_product_ref(product_id: Any) -> Any | None:
@@ -521,9 +558,17 @@ async def patch_profile(*, user: dict[str, Any], body: dict[str, Any]) -> dict[s
         if "medications" in safety:
             updates["medications"] = safety.get("medications")
     product_id = body.get("productId") or body.get("product_id")
+    users_coll = db[s.coll_user]
+    mongo_user_id = await resolve_users_collection_id(users_coll=users_coll, user_id=user_id, auth_user=user)
+    user_details_key = user_details_lookup_filter(user_id, mongo_user_id=mongo_user_id)
+    set_doc = dict(updates)
+    if mongo_user_id is not None:
+        set_doc["userId"] = mongo_user_id
+    elif user_id is not None:
+        set_doc["userId"] = user_id
     await user_details_coll.update_one(
-        user_details_lookup_filter(user_id),
-        {"$set": {"userId": user_id, **updates}},
+        user_details_key,
+        {"$set": set_doc},
         upsert=True,
     )
     return await get_profile(user=user, product_id=str(product_id).strip() if product_id else None)
@@ -531,7 +576,7 @@ async def patch_profile(*, user: dict[str, Any], body: dict[str, Any]) -> dict[s
 
 async def score_product(*, user: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
     requested_scan_id = body.get("scan_id") or body.get("scanId")
-    if isinstance(requested_scan_id, str) and requested_scan_id.strip():
+    if isinstance(requested_scan_id, str) and requested_scan_id.strip() and not _has_score_request_body(body):
         return await get_scan_result(user=user, scan_id=requested_scan_id.strip())
     return await _score_product_impl(user=user, body=body)
 
@@ -548,18 +593,29 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
     ingredient_coll = db[s.coll_ingredient]
     user_details_coll = db[s.coll_user_details]
     scan_coll = db[s.coll_scan_analysis]
-    scans_used_before = await _count_scans_today(scan_coll, user.get("profileUrl"))
-    if scans_used_before >= totalScanIngedientPerDay:
-        raise ScannerApiError(402, "insufficient_credits")
     user_id = _extract_user_id(user)
     if user_id is None:
         raise ScannerApiError(401, "Unauthorized")
+    product_ref = _normalize_product_ref(product_id)
+    analysis_scan_id = _extract_analysis_scan_id(body)
+    linked_analysis = None
+    if analysis_scan_id:
+        linked_analysis = await _load_linked_analysis_scan(
+            scan_coll=scan_coll,
+            analysis_scan_id=analysis_scan_id,
+            user=user,
+            user_id=user_id,
+            product_ref=product_ref,
+        )
+    scans_used_before = await _count_scans_today(scan_coll, user.get("profileUrl"))
+    if linked_analysis is None and scans_used_before >= totalScanIngedientPerDay:
+        raise ScannerApiError(402, "insufficient_credits")
     details_raw = await load_full_user_profile(user_id=user_id, user=user)
     details = details_raw
-    product_ref = _normalize_product_ref(product_id)
     product = await products_coll.find_one({"_id": product_ref})
     if not product:
         raise ScannerApiError(404, "Product not found")
+    tag_names = await _resolve_product_tag_names_for_match(product=product, db=db)
     mode = _normalize_mode_for_match(body=body, product=product)
     if mode == "haircare":
         type_value = _safe_scalar(_first_present(details.get("hairType"), body.get("hairType")))
@@ -572,7 +628,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
     age = _first_present(details.get("age"), body.get("age"))
     gender = _safe_scalar(_first_present(details.get("gender"), body.get("gender")))
     benefits_from_body = _extract_desired_benefits_from_body(body=body, mode=mode)
-    benefit_options = build_expected_benefit_options(product=product, mode=mode)
+    benefit_options = build_expected_benefit_options(product=product, mode=mode, tag_names=tag_names)
     life_stages = _safe_list(details.get("lifeStages") or details.get("life_stages"))
     conditions = _safe_list(details.get("conditions"))
 
@@ -615,7 +671,12 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
                 block["form"] = completeness["form"]
         raise ScannerApiError(400, f"Missing required match input(s) for {mode}", errors=missing_inputs)
 
-    benefits = validate_desired_benefits(desired=benefits_from_body, options_payload=benefit_options)
+    benefits = validate_desired_benefits(
+        desired=benefits_from_body,
+        options_payload=benefit_options,
+        product=product,
+        tag_names=tag_names,
+    )
 
     tile_product = _build_match_product(product)
     tile_product["declared_for_skin_types"] = [x.lower().strip() for x in declared_types if str(x).strip()]
@@ -640,9 +701,16 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             benefits=benefits,
             declared_types=declared_types,
             product_primary=str(product.get("primaryConcern") or ""),
-            product_benefits=_infer_product_benefit_signals(product=product, tile_product=tile_product),
+            product_benefits=build_product_benefit_signals(
+                product=product,
+                tile_product=tile_product,
+                tag_names=tag_names,
+                mode=mode,
+            ),
             runtime_context=runtime_context,
             base_formula=base_formula,
+            safety_severity=str(safety.get("severity") or "clear"),
+            mode=mode,
         )
         state = suitability["band"]
         scoring = {
@@ -659,6 +727,8 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             "desired_benefits": benefits,
             "base_formula_score": suitability.get("base_formula_score"),
             "overrides_applied": (suitability.get("override_result") or {}).get("overrides_applied", []),
+            "fit_axes": suitability.get("fit_axes", []),
+            "works_for_user": suitability.get("works_for_user"),
         }
 
     tile_user = {"mode": mode, "age": age if age is not None else "—", "gender": gender or "—", "skin_type": type_value.lower() if type_value else "—", "hair_type": type_value.lower() if mode == "haircare" and type_value else "—", "concerns": concerns, "benefits": benefits, "life_stages": life_stages}
@@ -671,6 +741,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         claims=_product_list_values(product, "claims", "benefit"),
         base_formula=base_formula,
         user_flags=runtime_context.get("flags"),
+        mode=mode,
     )
     tile_inputs = {"user": tile_user, "product": tile_product, "scoring": scoring, "observations": observations}
     tiles_meta: dict[str, Any] = {"source": "claude", "model": s.anthropic_model}
@@ -701,21 +772,44 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "triggered_observations": observations,
         "scanImageError": None,
         "ingredientAnalysisError": None,
-        "createdAt": now,
+        "scanPhase": "complete",
         "updatedAt": now,
     }
-    ins = await scan_coll.insert_one(doc)
+    if linked_analysis is not None:
+        scan_id = linked_analysis["_id"]
+        await scan_coll.update_one({"_id": scan_id}, {"$set": doc})
+    else:
+        doc["createdAt"] = now
+        doc["scanPhase"] = "match_only"
+        ins = await scan_coll.insert_one(doc)
+        scan_id = ins.inserted_id
     scans_used = await _count_scans_today(scan_coll, user.get("profileUrl"))
     cta = _build_cta(state=state or "low", product_price=product.get("price"))
-    legacy_analytic_detail = await _find_latest_product_analysis_detail(scan_coll=scan_coll, product_ref=product_ref)
-    band_label_map = {"great": "Great Match", "good": "Good Match", "low": "Low Match", "gate": "Gate"}
+    if linked_analysis and isinstance(linked_analysis.get("analyticDetail"), dict):
+        legacy_analytic_detail = linked_analysis["analyticDetail"]
+    else:
+        legacy_analytic_detail = await _find_latest_product_analysis_detail(scan_coll=scan_coll, product_ref=product_ref)
+    analysis_ingredients = (
+        linked_analysis.get("ingredients")
+        if linked_analysis and isinstance(linked_analysis.get("ingredients"), list)
+        else tile_product.get("ingredients", [])
+    )
+    band_label_map = {
+        "great": "Great Match",
+        "good": "Good Match",
+        "mixed": "Mixed Match",
+        "low": "Low Match",
+        "gate": "Gate",
+    }
     match_result: dict[str, Any] = {
-        "scan_id": str(ins.inserted_id),
+        "scan_id": str(scan_id),
         "state": state,
         "band": scoring.get("band"),
         "band_label": band_label_map.get(str(scoring.get("band")), "Match"),
         "score": scoring.get("score"),
         "ceiling_applied": scoring.get("ceiling_applied"),
+        "works_for_user": scoring.get("works_for_user"),
+        "fit_axes": scoring.get("fit_axes", []),
         "tiles": tiles,
         "breakdown": scoring.get("breakdown", []),
         "unmet_needs": scoring.get("unmet_needs", []),
@@ -730,42 +824,32 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "base_formula": scoring.get("base_formula_score"),
         "overrides_applied": scoring.get("overrides_applied", []),
         "cta": cta,
-        "full_analysis": {"ingredients": tile_product.get("ingredients", []), "key_ingredients": tile_product.get("key_ingredients", []), "claims_checked": tile_product.get("claims", []), "legacy_analytic_detail": legacy_analytic_detail},
+        "full_analysis": {"ingredients": analysis_ingredients, "key_ingredients": tile_product.get("key_ingredients", []), "claims_checked": tile_product.get("claims", []), "legacy_analytic_detail": legacy_analytic_detail},
         "credits_remaining": {"free": max(0, totalScanIngedientPerDay - scans_used), "paid": 0},
         "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
         "expected_benefit_options": benefit_options.get("expectedBenefitOptions"),
         "selection_rules": benefit_options.get("selectionRules"),
         "mode": mode,
     }
-    response: dict[str, Any] = {"result": match_result}
-    response.update(match_result)
-    response["scanId"] = response["scan_id"]
-    response["bandLabel"] = response["band_label"]
-    response["ceilingApplied"] = response["ceiling_applied"]
-    response["scoredFor"] = response["scored_for"]
-    response["desiredBenefits"] = response["desired_benefits"]
-    response["unmetNeeds"] = response["unmet_needs"]
-    response["unmetProfileConcerns"] = response["unmet_profile_concerns"]
-    response["unmatchedDesiredBenefits"] = response["unmatched_desired_benefits"]
-    response["matchedDesiredBenefits"] = response["matched_desired_benefits"]
-    response["positionReference"] = response["position_reference"]
-    response["triggeredObservations"] = response["triggered_observations"]
-    response["fullAnalysis"] = response["full_analysis"]
-    response["creditsRemaining"] = response["credits_remaining"]
-    response["baseFormula"] = response["base_formula"]
-    response["overridesApplied"] = response["overrides_applied"]
-    response["expectedBenefitOptions"] = response["expected_benefit_options"]
-    response["selectionRules"] = response["selection_rules"]
+    from app.label_looker.services.match_response import build_match_api_payload
+
+    response = build_match_api_payload(match_result)
+    response["result"]["expected_benefit_options"] = match_result["expected_benefit_options"]
+    response["result"]["selection_rules"] = match_result["selection_rules"]
+    response["expectedBenefitOptions"] = match_result["expected_benefit_options"]
+    response["selectionRules"] = match_result["selection_rules"]
     if state == "gate":
         gate_severity = "block" if safety["severity"] == "block" else "hard"
-        response["gate_severity"] = gate_severity
-        response["override_allowed"] = gate_severity == "hard"
-        response["gate"] = {
+        gate_payload = {
             "title": "Not Recommended" if gate_severity == "block" else "Proceed with caution",
             "summary": (safety["triggers"][0]["explanation"] if safety["triggers"] else "Safety concern detected."),
             "evidence": (safety["triggers"][0]["explanation"] if safety["triggers"] else "Rule-based safety gate triggered."),
             "label_vs_formula": "This safety call is based on profile-to-ingredient checks, not just marketing claims.",
+            "gate_severity": gate_severity,
+            "override_allowed": gate_severity == "hard",
         }
+        response["gate"] = gate_payload
+        response["result"]["gate"] = gate_payload
     return response
 
 
@@ -813,7 +897,13 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
     suitability = doc.get("engine_breakdown", {}).get("suitability", {})
     safety = doc.get("engine_breakdown", {}).get("safety", {}) if isinstance(doc.get("engine_breakdown"), dict) else {}
     scans_used = await _count_scans_today(scan_coll, user.get("profileUrl") or doc.get("userProfileUrl"))
-    band_label_map = {"great": "Great Match", "good": "Good Match", "low": "Low Match", "gate": "Gate"}
+    band_label_map = {
+        "great": "Great Match",
+        "good": "Good Match",
+        "mixed": "Mixed Match",
+        "low": "Low Match",
+        "gate": "Gate",
+    }
     match_result: dict[str, Any] = {
         "scan_id": scan_id,
         "state": doc.get("state"),
@@ -821,6 +911,8 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
         "band_label": band_label_map.get(str(doc.get("band")), "Match"),
         "score": doc.get("score"),
         "ceiling_applied": suitability.get("ceiling_applied"),
+        "works_for_user": suitability.get("works_for_user"),
+        "fit_axes": suitability.get("fit_axes", []),
         "tiles": doc.get("tile_content") if isinstance(doc.get("tile_content"), dict) else {},
         "breakdown": suitability.get("breakdown", []),
         "unmet_needs": suitability.get("unmet_needs", []),
@@ -839,23 +931,7 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
         "credits_remaining": {"free": max(0, totalScanIngedientPerDay - scans_used), "paid": 0},
         "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
     }
-    response: dict[str, Any] = {"result": match_result}
-    response.update(match_result)
-    response["scanId"] = response["scan_id"]
-    response["bandLabel"] = response["band_label"]
-    response["ceilingApplied"] = response["ceiling_applied"]
-    response["unmetNeeds"] = response["unmet_needs"]
-    response["scoredFor"] = response["scored_for"]
-    response["desiredBenefits"] = response["desired_benefits"]
-    response["profileContext"] = response["profile_context"]
-    response["unmetProfileConcerns"] = response["unmet_profile_concerns"]
-    response["unmatchedDesiredBenefits"] = response["unmatched_desired_benefits"]
-    response["matchedDesiredBenefits"] = response["matched_desired_benefits"]
-    response["positionReference"] = response["position_reference"]
-    response["triggeredObservations"] = response["triggered_observations"]
-    response["postScanAction"] = response["post_scan_action"]
-    response["creditsRemaining"] = response["credits_remaining"]
-    response["baseFormula"] = response["base_formula"]
-    response["overridesApplied"] = response["overrides_applied"]
-    return response
+    from app.label_looker.services.match_response import build_match_api_payload
+
+    return build_match_api_payload(match_result)
 
