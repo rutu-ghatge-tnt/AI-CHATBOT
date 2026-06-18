@@ -15,8 +15,17 @@ from app.label_looker.core.constants import DEFAULT_LANGUAGE, totalScanIngedient
 from app.label_looker.core.errors import ScannerApiError
 from app.label_looker.core.settings import get_label_looker_settings
 from app.label_looker.prompts_controller import ingredient_analysis_user_message
-from app.label_looker.services.common_flow import count_scans_today, end_user_owns_scan_document, extract_user_id, local_midnight
+from app.label_looker.services.common_flow import (
+    count_scans_today,
+    end_user_owns_scan_document,
+    extract_user_id,
+    local_midnight,
+    require_end_user_owns_scan,
+    user_owned_scans_filter,
+)
 from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
+from app.label_looker.services.user_profile_flow import load_full_user_profile, load_merged_user_details, user_details_lookup_filter
+from app.label_looker.services.product_analysis_store import find_product_analysis, upsert_product_analysis
 from app.label_looker.text_extract import extract_first_json_object
 
 logger = logging.getLogger(__name__)
@@ -322,11 +331,10 @@ def _resolve_analysis_mode(
 
 def _required_fields_for_mode(mode: str) -> list[str]:
     if mode == "haircare":
-        return ["age", "gender", "hairType", "hairConcerns", "expectedBenefit"]
+        return ["age", "gender", "hairType", "hairConcerns"]
     if mode == "lipcare":
-        # lipcare keeps away from hair fields; prioritize lip fields, fallback to skin fields.
-        return ["age", "gender", "lipType", "lipConcerns", "expectedBenefit"]
-    return ["age", "gender", "skinType", "skinConcerns", "expectedBenefit"]
+        return ["age", "gender", "lipType", "lipConcerns"]
+    return ["age", "gender", "skinType", "skinConcerns"]
 
 
 def _current_field_value(details: dict[str, Any], mode: str, field: str) -> Any:
@@ -350,7 +358,7 @@ def _current_field_value(details: dict[str, Any], mode: str, field: str) -> Any:
                         pass
         return None
     if field == "expectedBenefit":
-        # expectedBenefit is analysis-scoped; don't bind it to persisted profile goals.
+        # Per-product scan input only — not part of persisted profile validation.
         return None
     if mode == "lipcare":
         if field in ("lipType", "lipConcerns"):
@@ -421,7 +429,7 @@ async def _upsert_validation_state(
     mode_state.setdefault("lastAnsweredScanCount", -1)
     llv[mode] = mode_state
     await user_details_coll.update_one(
-        {"userId": user_id},
+        user_details_lookup_filter(user_id),
         {"$set": {"userId": user_id, "labelLookerValidation": llv, "updatedAt": datetime.now()}},
         upsert=True,
     )
@@ -776,6 +784,41 @@ async def _find_user_product_existing_analysis(
     return doc
 
 
+async def _resolve_prefetched_product_analysis(
+    *,
+    product_ref: Any | None,
+    product_analysis_coll: AsyncIOMotorCollection,
+    scan_coll: AsyncIOMotorCollection,
+    personalized: bool,
+) -> tuple[dict[str, Any], list[str], str, Any | None] | None:
+    """
+    Return (analyticDetail, ingredients, cacheType, sourceId) from product_analyses
+    or legacy scan cache. Catalog store wins over scan_analyses rows.
+    """
+    if product_ref is None:
+        return None
+    stored = await find_product_analysis(coll=product_analysis_coll, product_ref=product_ref)
+    if stored:
+        analytic = dict(stored.get("analyticDetail") or {})
+        analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
+        ingredients = stored.get("ingredients")
+        if not isinstance(ingredients, list):
+            ingredients = []
+        return analytic, ingredients, "product_catalog", stored.get("_id")
+    if not personalized:
+        cached = await _find_cached_non_personalized_analysis(
+            scan_coll=scan_coll,
+            product_ref=product_ref,
+        )
+        if cached:
+            analytic = dict(cached.get("analyticDetail") or {})
+            ingredients = cached.get("ingredients")
+            if not isinstance(ingredients, list):
+                ingredients = []
+            return analytic, ingredients, "scan", cached.get("_id")
+    return None
+
+
 def _build_personalization_context(details: dict[str, Any]) -> str:
     keys = [
         "skinType",
@@ -1028,6 +1071,9 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
 
 
 async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
+    if user is None or _extract_user_id(user) is None:
+        raise ScannerApiError(401, "Please login to view ingredient analysis")
+
     scan_id = body.get("scanId")
     if not scan_id:
         raise ScannerApiError(400, "scanId is required")
@@ -1041,6 +1087,7 @@ async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
     branded_ingredient_coll: AsyncIOMotorCollection = db[s.coll_branded_ingredient]
     ingredient_coll: AsyncIOMotorCollection = db[s.coll_ingredient]
+    product_analysis_coll: AsyncIOMotorCollection = db[s.coll_product_analysis]
 
     oid = ObjectId(str(scan_id)) if ObjectId.is_valid(str(scan_id)) else None
     if oid is None:
@@ -1050,13 +1097,27 @@ async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any
     if not doc:
         raise ScannerApiError(404, "Scan not found")
 
+    user_id = _extract_user_id(user or {})
+    require_end_user_owns_scan(doc=doc, user=user, user_id=user_id)
+
     ingredients = body.get("ingredients")
     if ingredients is None or (isinstance(ingredients, list) and len(ingredients) == 0):
         ingredients = doc.get("extractedIngredients") or []
 
     product_id_ref = _normalize_product_ref(body.get("productId"))
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=product_id_ref)
-    if product:
+    if product_id_ref is not None:
+        if not product:
+            raise ScannerApiError(404, "Product not found")
+        from_product = await _ingredients_from_product(
+            product=product,
+            branded_ingredients_coll=branded_ingredient_coll,
+            ingredient_coll=ingredient_coll,
+        )
+        if not from_product:
+            raise ScannerApiError(400, "Product has no resolvable INCI ingredients in catalog")
+        ingredients = from_product
+    elif product:
         from_product = await _ingredients_from_product(
             product=product,
             branded_ingredients_coll=branded_ingredient_coll,
@@ -1081,94 +1142,87 @@ async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any
     personalized = bool(body.get("personalizedMatching"))
     if personalized and user is None:
         raise ScannerApiError(401, "Please login to use personalized matching")
-    user_id = _extract_user_id(user or {})
-    details_doc = await user_details_coll.find_one({"userId": user_id}) if user_id is not None else None
+    details_doc = (
+        await load_full_user_profile(user_id=user_id, user=user)
+        if user_id is not None
+        else None
+    )
     personalization_context = _build_personalization_context(details_doc or {}) if personalized else None
 
-    if not personalized:
-        cached = await _find_cached_non_personalized_analysis(
-            scan_coll=scan_coll,
-            product_ref=product_id_ref,
-        )
-        if cached:
-            cached_analytic = dict(cached.get("analyticDetail") or {})
-            cached_ingredients = cached.get("ingredients")
-            if not isinstance(cached_ingredients, list):
-                cached_ingredients = []
-            resolved = ingredients if isinstance(ingredients, list) else []
-            ing_to_store = resolved if resolved else cached_ingredients
-            await scan_coll.update_one(
-                {"_id": oid},
-                {
-                    "$set": {
-                        "analyticDetail": cached_analytic,
-                        "ingredients": ing_to_store,
-                        "productId": product_id_ref,
-                        "personalizedMatching": False,
-                        "analysisCacheHit": True,
-                        "analysisCacheSourceScanId": cached.get("_id"),
-                        "ingredientAnalysisError": None,
-                        "updatedAt": datetime.now(),
-                    }
-                },
-            )
-            profile_validation = None
-            if user_id is not None:
-                mode = _resolve_analysis_mode(
-                    body=body,
-                    product=product,
-                    specific_type=specific_type,
-                    main_benefit=main_benefit,
-                )
-                details_doc = details_doc or {}
-                mode_state = await _upsert_validation_state(
-                    user_details_coll=user_details_coll,
-                    user_id=user_id,
-                    mode=mode,
-                    bump_scan_count=True,
-                    details_doc=details_doc,
-                )
-                profile_validation = _build_prompt_payload(
-                    mode=mode,
-                    mode_state=mode_state,
-                    details=details_doc,
-                    force_prompt_if_missing=False,
-                )
-            return {
-                "scanId": str(scan_id),
-                "analyticDetail": cached_analytic,
-                "ingredients": ing_to_store,
-                "profileValidation": profile_validation,
-            }
-
-    text_block = "\n".join(str(x) for x in ingredients) if isinstance(ingredients, list) else str(ingredients)
-    user_msg = ingredient_analysis_user_message(
-        ingredients_text=text_block,
-        specific_type=specific_type,
-        main_benefit=main_benefit,
-        langauge=str(language),
-        personalization_context=personalization_context,
+    prefetched = await _resolve_prefetched_product_analysis(
+        product_ref=product_id_ref,
+        product_analysis_coll=product_analysis_coll,
+        scan_coll=scan_coll,
+        personalized=personalized,
     )
+    if prefetched:
+        cached_analytic, cached_ingredients, cache_type, cache_source_id = prefetched
+        resolved = ingredients if isinstance(ingredients, list) else []
+        ing_to_store = resolved if resolved else cached_ingredients
+        cache_fields: dict[str, Any] = {
+            "analyticDetail": cached_analytic,
+            "ingredients": ing_to_store,
+            "productId": product_id_ref,
+            "personalizedMatching": personalized,
+            "analysisCacheHit": True,
+            "analysisCacheType": cache_type,
+            "ingredientAnalysisError": None,
+            "updatedAt": datetime.now(),
+        }
+        if cache_type == "product_catalog":
+            cache_fields["analysisCacheSourceProductAnalysisId"] = cache_source_id
+            cache_fields["analysisCacheSourceScanId"] = None
+        else:
+            cache_fields["analysisCacheSourceScanId"] = cache_source_id
+            cache_fields["analysisCacheSourceProductAnalysisId"] = None
+        await scan_coll.update_one({"_id": oid}, {"$set": cache_fields})
+        profile_validation = None
+        if user_id is not None:
+            mode = _resolve_analysis_mode(
+                body=body,
+                product=product,
+                specific_type=specific_type,
+                main_benefit=main_benefit,
+            )
+            details_doc = details_doc or {}
+            mode_state = await _upsert_validation_state(
+                user_details_coll=user_details_coll,
+                user_id=user_id,
+                mode=mode,
+                bump_scan_count=True,
+                details_doc=details_doc,
+            )
+            profile_validation = _build_prompt_payload(
+                mode=mode,
+                mode_state=mode_state,
+                details=details_doc,
+                force_prompt_if_missing=False,
+            )
+        return {
+            "scanId": str(scan_id),
+            "analyticDetail": cached_analytic,
+            "ingredients": ing_to_store,
+            "profileValidation": profile_validation,
+            "cacheHit": True,
+            "cacheType": cache_type,
+        }
 
     client = AsyncAnthropic(api_key=s.anthropic_api_key)
     try:
-        msg = await client.messages.create(
-            model=s.anthropic_model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-        raw = "".join(getattr(b, "text", "") for b in msg.content)
-        parsed = extract_first_json_object(raw)
-        analytic, ing_out = _normalize_analysis_payload(parsed, ingredients)
-        analytic = _apply_db_key_ingredients(analytic, db_key_ingredients)
-        analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
-        analytic = await _maybe_attach_ll2_tile_content(
-            analytic=analytic,
+        from app.label_looker.services.product_analysis_engine import run_claude_product_analysis
+
+        analytic, ing_out = await run_claude_product_analysis(
+            ing_list=[str(x) for x in ingredients] if isinstance(ingredients, list) else [],
+            product=product,
+            db_key_ingredients=db_key_ingredients,
+            specific_type=specific_type,
+            main_benefit=main_benefit,
+            language=str(language),
+            personalized=personalized,
+            personalization_context=personalization_context,
             body=body,
             details_doc=details_doc,
-            product=product,
             client=client,
-            anthropic_model=s.anthropic_model,
         )
         await scan_coll.update_one(
             {"_id": oid},
@@ -1179,12 +1233,26 @@ async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any
                     "productId": product_id_ref,
                     "personalizedMatching": personalized,
                     "analysisCacheHit": False,
+                    "analysisCacheType": "runtime",
                     "analysisCacheSourceScanId": None,
+                    "analysisCacheSourceProductAnalysisId": None,
                     "ingredientAnalysisError": None,
                     "updatedAt": datetime.now(),
                 }
             },
         )
+        if product_id_ref is not None and not personalized:
+            await upsert_product_analysis(
+                coll=product_analysis_coll,
+                product_ref=product_id_ref,
+                product=product,
+                analytic_detail=analytic,
+                ingredients=ing_out,
+                specific_type=specific_type,
+                main_benefit=main_benefit,
+                source="runtime",
+                model=s.anthropic_model,
+            )
         profile_validation = None
         if user_id is not None:
             mode = _resolve_analysis_mode(
@@ -1212,6 +1280,8 @@ async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any
             "analyticDetail": analytic,
             "ingredients": ing_out,
             "profileValidation": profile_validation,
+            "cacheHit": False,
+            "cacheType": "runtime",
         }
     except Exception as e:
         await scan_coll.update_one(
@@ -1234,6 +1304,9 @@ async def _ingredient_analysis_from_text_impl(
     body: dict[str, Any],
     user: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    if user is None or _extract_user_id(user) is None:
+        raise ScannerApiError(401, "Please login to view ingredient analysis")
+
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
 
@@ -1244,11 +1317,14 @@ async def _ingredient_analysis_from_text_impl(
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
     branded_ingredient_coll: AsyncIOMotorCollection = db[s.coll_branded_ingredient]
     ingredient_coll: AsyncIOMotorCollection = db[s.coll_ingredient]
+    product_analysis_coll: AsyncIOMotorCollection = db[s.coll_product_analysis]
 
     ingredients = body.get("ingredients")
     ingredients_text = body.get("ingredientsText")
     product_id_ref = _normalize_product_ref(body.get("productId"))
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=product_id_ref)
+    if product_id_ref is not None and not product:
+        raise ScannerApiError(404, "Product not found")
     product_ing_list = await _ingredients_from_product(
         product=product,
         branded_ingredients_coll=branded_ingredient_coll,
@@ -1259,7 +1335,9 @@ async def _ingredient_analysis_from_text_impl(
         branded_ingredients_coll=branded_ingredient_coll,
         ingredient_coll=ingredient_coll,
     )
-    if product_ing_list:
+    if product_id_ref and product:
+        if not product_ing_list:
+            raise ScannerApiError(400, "Product has no resolvable INCI ingredients in catalog")
         ing_list = list(product_ing_list)
     elif isinstance(ingredients, list) and ingredients:
         ing_list = [str(x).strip() for x in ingredients if str(x).strip()]
@@ -1274,54 +1352,15 @@ async def _ingredient_analysis_from_text_impl(
 
     personalization_context = None
     user_id = _extract_user_id(user or {})
-    details = await user_details_coll.find_one({"userId": user_id}) if user_id is not None else None
+    details = (
+        await load_full_user_profile(user_id=user_id, user=user)
+        if user_id is not None
+        else None
+    )
     if personalized:
         if user_id is None:
             raise ScannerApiError(401, "Please login to use personalized matching")
         personalization_context = _build_personalization_context(details or {})
-
-    # Prefer latest successful analysis for same user+product when available.
-    # This enables PDP reuse behavior without requiring auth-only history APIs.
-    existing_user_product = await _find_user_product_existing_analysis(
-        scan_coll=scan_coll,
-        user_id=user_id,
-        product_ref=product_id_ref,
-    )
-    if existing_user_product:
-        existing_analytic = dict(existing_user_product.get("analyticDetail") or {})
-        existing_ingredients = existing_user_product.get("ingredients")
-        if not isinstance(existing_ingredients, list):
-            existing_ingredients = []
-        ingredients_out = ing_list if ing_list else existing_ingredients
-        profile_validation = None
-        if user_id is not None:
-            mode = _resolve_analysis_mode(
-                body=body,
-                product=product,
-                specific_type=body.get("specificType"),
-                main_benefit=body.get("mainBenefit"),
-            )
-            mode_state = await _upsert_validation_state(
-                user_details_coll=user_details_coll,
-                user_id=user_id,
-                mode=mode,
-                bump_scan_count=False,
-                details_doc=details,
-            )
-            profile_validation = _build_prompt_payload(
-                mode=mode,
-                mode_state=mode_state,
-                details=details or {},
-                force_prompt_if_missing=False,
-            )
-        return {
-            "scanId": str(existing_user_product.get("_id")),
-            "analyticDetail": existing_analytic,
-            "ingredients": ingredients_out,
-            "profileValidation": profile_validation,
-            "cacheHit": True,
-            "cacheType": "user_product",
-        }
 
     now = datetime.now()
     scan_doc = {
@@ -1335,6 +1374,7 @@ async def _ingredient_analysis_from_text_impl(
         "ingredientAnalysisError": None,
         "sourceType": "text",
         "productId": product_id_ref,
+        "scanPhase": "analysis",
         "createdAt": now,
         "updatedAt": now,
     }
@@ -1350,58 +1390,60 @@ async def _ingredient_analysis_from_text_impl(
         }
     )
 
-    if not personalized:
-        cached = await _find_cached_non_personalized_analysis(
-            scan_coll=scan_coll,
-            product_ref=product_id_ref,
-        )
-        if cached:
-            cached_analytic = dict(cached.get("analyticDetail") or {})
-            cached_ingredients = cached.get("ingredients")
-            if not isinstance(cached_ingredients, list):
-                cached_ingredients = []
-            ing_to_store = ing_list if ing_list else cached_ingredients
-            await scan_coll.update_one(
-                {"_id": scan_id},
-                {
-                    "$set": {
-                        "analyticDetail": cached_analytic,
-                        "ingredients": ing_to_store,
-                        "personalizedMatching": False,
-                        "analysisCacheHit": True,
-                        "analysisCacheSourceScanId": cached.get("_id"),
-                        "ingredientAnalysisError": None,
-                        "updatedAt": datetime.now(),
-                    }
-                },
+    prefetched = await _resolve_prefetched_product_analysis(
+        product_ref=product_id_ref,
+        product_analysis_coll=product_analysis_coll,
+        scan_coll=scan_coll,
+        personalized=personalized,
+    )
+    if prefetched:
+        cached_analytic, cached_ingredients, cache_type, cache_source_id = prefetched
+        ing_to_store = ing_list if ing_list else cached_ingredients
+        cache_fields: dict[str, Any] = {
+            "analyticDetail": cached_analytic,
+            "ingredients": ing_to_store,
+            "personalizedMatching": personalized,
+            "analysisCacheHit": True,
+            "analysisCacheType": cache_type,
+            "ingredientAnalysisError": None,
+            "updatedAt": datetime.now(),
+        }
+        if cache_type == "product_catalog":
+            cache_fields["analysisCacheSourceProductAnalysisId"] = cache_source_id
+            cache_fields["analysisCacheSourceScanId"] = None
+        else:
+            cache_fields["analysisCacheSourceScanId"] = cache_source_id
+            cache_fields["analysisCacheSourceProductAnalysisId"] = None
+        await scan_coll.update_one({"_id": scan_id}, {"$set": cache_fields})
+        profile_validation = None
+        if user_id is not None:
+            mode = _resolve_analysis_mode(
+                body=body,
+                product=product,
+                specific_type=body.get("specificType"),
+                main_benefit=body.get("mainBenefit"),
             )
-            profile_validation = None
-            if user_id is not None:
-                mode = _resolve_analysis_mode(
-                    body=body,
-                    product=product,
-                    specific_type=body.get("specificType"),
-                    main_benefit=body.get("mainBenefit"),
-                )
-                mode_state = await _upsert_validation_state(
-                    user_details_coll=user_details_coll,
-                    user_id=user_id,
-                    mode=mode,
-                    bump_scan_count=True,
-                    details_doc=details,
-                )
-                profile_validation = _build_prompt_payload(
-                    mode=mode,
-                    mode_state=mode_state,
-                    details=details or {},
-                    force_prompt_if_missing=False,
-                )
-            return {
-                "scanId": str(scan_id),
-                "analyticDetail": cached_analytic,
-                "ingredients": ing_to_store,
-                "profileValidation": profile_validation,
-            }
+            mode_state = await _upsert_validation_state(
+                user_details_coll=user_details_coll,
+                user_id=user_id,
+                mode=mode,
+                bump_scan_count=True,
+                details_doc=details,
+            )
+            profile_validation = _build_prompt_payload(
+                mode=mode,
+                mode_state=mode_state,
+                details=details or {},
+                force_prompt_if_missing=False,
+            )
+        return {
+            "scanId": str(scan_id),
+            "analyticDetail": cached_analytic,
+            "ingredients": ing_to_store,
+            "profileValidation": profile_validation,
+            "cacheHit": True,
+            "cacheType": cache_type,
+        }
 
     specific_type = body.get("specificType")
     main_benefit = body.get("mainBenefit")
@@ -1410,34 +1452,23 @@ async def _ingredient_analysis_from_text_impl(
     if not main_benefit and product:
         main_benefit = _best_main_benefit(product)
     language = body.get("langauge") or DEFAULT_LANGUAGE
-    text_block = "\n".join(ing_list)
-    user_msg = ingredient_analysis_user_message(
-        ingredients_text=text_block,
-        specific_type=specific_type,
-        main_benefit=main_benefit,
-        langauge=str(language),
-        personalization_context=personalization_context,
-    )
 
     client = AsyncAnthropic(api_key=s.anthropic_api_key)
     try:
-        msg = await client.messages.create(
-            model=s.anthropic_model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-        raw = "".join(getattr(b, "text", "") for b in msg.content)
-        parsed = extract_first_json_object(raw)
-        analytic, ing_out = _normalize_analysis_payload(parsed, ing_list)
-        analytic = _apply_db_key_ingredients(analytic, db_key_ingredients)
-        analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
-        analytic = await _maybe_attach_ll2_tile_content(
-            analytic=analytic,
+        from app.label_looker.services.product_analysis_engine import run_claude_product_analysis
+
+        analytic, ing_out = await run_claude_product_analysis(
+            ing_list=ing_list,
+            product=product,
+            db_key_ingredients=db_key_ingredients,
+            specific_type=specific_type,
+            main_benefit=main_benefit,
+            language=str(language),
+            personalized=personalized,
+            personalization_context=personalization_context,
             body=body,
             details_doc=details,
-            product=product,
             client=client,
-            anthropic_model=s.anthropic_model,
         )
         await scan_coll.update_one(
             {"_id": scan_id},
@@ -1447,12 +1478,26 @@ async def _ingredient_analysis_from_text_impl(
                     "ingredients": ing_out,
                     "personalizedMatching": personalized,
                     "analysisCacheHit": False,
+                    "analysisCacheType": "runtime",
                     "analysisCacheSourceScanId": None,
+                    "analysisCacheSourceProductAnalysisId": None,
                     "ingredientAnalysisError": None,
                     "updatedAt": datetime.now(),
                 }
             },
         )
+        if product_id_ref is not None and not personalized:
+            await upsert_product_analysis(
+                coll=product_analysis_coll,
+                product_ref=product_id_ref,
+                product=product,
+                analytic_detail=analytic,
+                ingredients=ing_out,
+                specific_type=specific_type,
+                main_benefit=main_benefit,
+                source="runtime",
+                model=s.anthropic_model,
+            )
         profile_validation = None
         if user_id is not None:
             mode = _resolve_analysis_mode(
@@ -1479,6 +1524,8 @@ async def _ingredient_analysis_from_text_impl(
             "analyticDetail": analytic,
             "ingredients": ing_out,
             "profileValidation": profile_validation,
+            "cacheHit": False,
+            "cacheType": "runtime",
         }
     except Exception as e:
         await scan_coll.update_one(
@@ -1512,7 +1559,9 @@ async def _submit_profile_validation_impl(*, body: dict[str, Any], user: dict[st
     db = get_scanner_db()
     user_details_coll: AsyncIOMotorCollection = db[s.coll_user_details]
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
-    details = await user_details_coll.find_one({"userId": user_id}) or {"userId": user_id}
+    details = await load_full_user_profile(user_id=user_id, user=user)
+    if not details.get("userId"):
+        details = {**details, "userId": user_id}
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=body.get("productId"))
 
     resolved_mode = _resolve_analysis_mode(
@@ -1562,7 +1611,7 @@ async def _submit_profile_validation_impl(*, body: dict[str, Any], user: dict[st
         mode_state["finalized"] = True
         llv[resolved_mode] = mode_state
         set_doc["labelLookerValidation"] = llv
-    await user_details_coll.update_one({"userId": user_id}, {"$set": set_doc}, upsert=True)
+    await user_details_coll.update_one(user_details_lookup_filter(user_id), {"$set": set_doc}, upsert=True)
     await _sync_profile_to_user_service(
         token=str(user.get("_label_looker_access_token") or "").strip() or None,
         updates=updates_for_details,
@@ -1599,7 +1648,9 @@ async def _profile_validation_status_impl(*, body: dict[str, Any], user: dict[st
     db = get_scanner_db()
     user_details_coll: AsyncIOMotorCollection = db[s.coll_user_details]
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
-    details = await user_details_coll.find_one({"userId": user_id}) or {"userId": user_id}
+    details = await load_full_user_profile(user_id=user_id, user=user)
+    if not details.get("userId"):
+        details = {**details, "userId": user_id}
     product = await _fetch_product_by_id(products_coll=products_coll, product_id=body.get("productId"))
 
     resolved_mode = _resolve_analysis_mode(
@@ -1625,6 +1676,10 @@ async def _profile_validation_status_impl(*, body: dict[str, Any], user: dict[st
         if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, list) and len(val) == 0):
             missing_fields.append(f)
 
+    from app.label_looker.services.profile_form import assess_profile_completeness
+
+    completeness = assess_profile_completeness(details=details, auth_user=user, mode=resolved_mode)
+
     return {
         "userId": str(user_id),
         "mode": resolved_mode,
@@ -1635,10 +1690,14 @@ async def _profile_validation_status_impl(*, body: dict[str, Any], user: dict[st
         "finalized": bool(mode_state.get("finalized")),
         "shouldPromptNow": bool(prompt.get("shouldPrompt")),
         "prompt": prompt,
+        "form": completeness["form"],
+        "fieldStatus": completeness["fieldStatus"],
+        "missingFieldDetails": completeness["missingFieldDetails"],
+        "highlightFields": completeness["highlightFields"],
     }
 
 
-async def put_feedback(*, body: dict[str, Any]) -> None:
+async def put_feedback(*, body: dict[str, Any], user: dict[str, Any] | None = None) -> None:
     scan_id = body.get("scanId")
     if not scan_id:
         raise ScannerApiError(400, "scanId is required")
@@ -1655,6 +1714,12 @@ async def put_feedback(*, body: dict[str, Any]) -> None:
     oid = ObjectId(str(scan_id)) if ObjectId.is_valid(str(scan_id)) else None
     if oid is None:
         raise ScannerApiError(400, "Invalid scanId")
+
+    doc = await scan_coll.find_one({"_id": oid})
+    if not doc:
+        raise ScannerApiError(404, "Scan not found")
+    user_id = _extract_user_id(user or {})
+    require_end_user_owns_scan(doc=doc, user=user, user_id=user_id)
 
     fields: dict[str, Any] = {"updatedAt": datetime.now()}
     if rating is not None:
@@ -1737,7 +1802,7 @@ async def user_scan_list(*, user: dict[str, Any] | None, skip: int = 0, limit: i
     scan_coll: AsyncIOMotorCollection = db[s.coll_scan_analysis]
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
     cursor = (
-        scan_coll.find({"userId": user_id})
+        scan_coll.find(user_owned_scans_filter(user=user, user_id=user_id))
         .sort("createdAt", -1)
         .skip(max(0, int(skip)))
         .limit(max(1, min(int(limit), 100)))

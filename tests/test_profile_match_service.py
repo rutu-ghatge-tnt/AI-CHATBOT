@@ -15,12 +15,14 @@ def test_skin_type_match_exact_adjacent_opposite():
     assert profile_match_engines.skin_type_match("oily", ["oily"]) == "exact"
     assert profile_match_engines.skin_type_match("oily", ["combination"]) == "adjacent"
     assert profile_match_engines.skin_type_match("oily", ["dry"]) == "opposite"
+    assert profile_match_engines.skin_type_match("combination", []) == "unknown"
 
 
 def test_score_to_band_thresholds():
     assert profile_match_engines.score_to_band(85) == "great"
     assert profile_match_engines.score_to_band(60) == "good"
-    assert profile_match_engines.score_to_band(59) == "low"
+    assert profile_match_engines.score_to_band(45) == "mixed"
+    assert profile_match_engines.score_to_band(39) == "low"
 
 
 def test_suitability_worked_example_aligns_to_spec_shape():
@@ -33,10 +35,40 @@ def test_suitability_worked_example_aligns_to_spec_shape():
         product_benefits=["hydration", "dullness"],
     )
     assert result["type_match"] == "adjacent"
-    assert result["type_ceiling"] == 80
-    assert result["final_score"] == 15
+    assert result["type_ceiling"] == 85
+    assert result["final_score"] < 40
     assert result["band"] == "low"
-    assert "less oil" in result["unmet_needs"]
+    assert "less oil" in result["unmatched_desired_benefits"] or "oil control" in result["unmatched_desired_benefits"]
+
+
+def test_suitability_brightening_serum_with_profile_gaps_scores_reasonably():
+    """Exfoliate-like case: scan goal brightening should not collapse to a punitive low score."""
+    result = profile_match_engines.evaluate_suitability(
+        skin_type="combination",
+        concerns=["dark-circles", "sleep-deprivation-insomnia"],
+        benefits=["brightening"],
+        declared_types=[],
+        product_primary="",
+        product_benefits=["brightening", "pigmentation", "exfoliation", "dark spots"],
+        runtime_context=resolve_runtime_context(
+            {"id": "u1", "skin_type": "combination", "concerns": ["dark-circles"], "benefits": ["brightening"], "self_declared_flags": []},
+            None,
+            __import__("datetime").datetime(2026, 6, 17),
+        ),
+        base_formula={
+            "texture": "lotion",
+            "continuous_phase": "aqueous",
+            "alcohol_level": "none",
+            "fragrance_level": "none",
+        },
+    )
+    assert result["type_match"] == "unknown"
+    assert result["matched_desired_benefits"] == ["brightening"]
+    assert result["works_for_user"] in {"yes", "partial"}
+    assert result["final_score"] >= 60
+    assert result["band"] in {"good", "great", "mixed"}
+    goal_axes = [a for a in result["fit_axes"] if a.get("kind") == "scan_goal"]
+    assert goal_axes and goal_axes[0]["status"] == "strong"
 
 
 def test_safety_block_for_pregnancy_retinoid():
@@ -333,6 +365,22 @@ def test_effective_user_details_fills_from_auth_when_mongo_empty():
     assert merged["skinType"] == "normal"
     assert merged["skinGoals"] == ["hydration"]
     assert merged["name"] == "Rutu Ghatge"
+
+
+def test_extract_analysis_scan_id_prefers_explicit_key():
+    body = {"analysisScanId": "abc123", "scanId": "other", "productId": "p1", "desiredBenefits": ["brightening"]}
+    assert profile_match_service._extract_analysis_scan_id(body) == "abc123"
+
+
+def test_extract_analysis_scan_id_uses_scan_id_when_scoring():
+    body = {"scanId": "from-analysis", "productId": "p1", "desiredBenefits": ["brightening"]}
+    assert profile_match_service._extract_analysis_scan_id(body) == "from-analysis"
+
+
+def test_has_score_request_body_detects_product_and_benefits():
+    assert profile_match_service._has_score_request_body({"productId": "x"}) is True
+    assert profile_match_service._has_score_request_body({"desiredBenefits": ["a"]}) is True
+    assert profile_match_service._has_score_request_body({"scanId": "only"}) is False
 
 
 def test_effective_user_details_mongo_wins_when_set():

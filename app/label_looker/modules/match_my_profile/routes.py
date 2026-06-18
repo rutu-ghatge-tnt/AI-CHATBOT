@@ -11,6 +11,13 @@ from app.label_looker.modules.shared.responses import api_success
 def build_router(auth_user: Callable[..., Coroutine[Any, Any, dict[str, Any]]]) -> APIRouter:
     r = APIRouter()
 
+    @r.get("/product/{product_id}/expected-benefit-options")
+    async def expected_benefit_options_match(product_id: str, user: dict[str, Any] = Depends(auth_user)):
+        _ = user
+        from app.label_looker.services.expected_benefit_options import get_expected_benefit_options
+
+        return api_success(await get_expected_benefit_options(product_id=product_id), message="Success")
+
     @r.post("/score")
     async def profile_match_score(
         body: dict[str, Any] = Body(...),
@@ -29,8 +36,11 @@ def build_router(auth_user: Callable[..., Coroutine[Any, Any, dict[str, Any]]]) 
         return api_success(data, message="Feedback added successfully")
 
     @r.get("/profile")
-    async def profile_match_get_profile(user: dict[str, Any] = Depends(auth_user)):
-        data = await service.get_profile(user=user)
+    async def profile_match_get_profile(
+        productId: str | None = None,
+        user: dict[str, Any] = Depends(auth_user),
+    ):
+        data = await service.get_profile(user=user, product_id=productId)
         return api_success(data, message="Success")
 
     @r.patch("/profile")

@@ -52,9 +52,7 @@ def install_label_looker(app: FastAPI) -> None:
 
     from app.label_looker.core.deps_auth import (
         authenticate_any_user,
-        authenticate_any_user_optional,
         scanner_auth_sso,
-        scanner_auth_sso_optional,
     )
 
     app.include_router(
@@ -63,7 +61,7 @@ def install_label_looker(app: FastAPI) -> None:
         tags=["Label Looker — legacy /scanner"],
     )
     app.include_router(
-        public_text_routes(scanner_auth_sso_optional, scanner_auth_sso),
+        public_text_routes(scanner_auth_sso),
         prefix="/scanner",
         tags=["Label Looker — legacy /scanner"],
     )
@@ -74,7 +72,7 @@ def install_label_looker(app: FastAPI) -> None:
         tags=["Label Looker — v1 /api/v1/scanner"],
     )
     app.include_router(
-        public_text_routes(authenticate_any_user_optional, authenticate_any_user),
+        public_text_routes(authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
     )
