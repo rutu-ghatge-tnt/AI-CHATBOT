@@ -120,12 +120,12 @@ def score_to_band(score: int) -> str:
 
 def _skin_type_points_and_ceiling(type_match: str) -> tuple[int, int, str]:
     mapping: dict[str, tuple[int, int, str]] = {
-        "exact": (15, 100, "yes"),
-        "adjacent": (11, 85, "partial"),
-        "unknown": (12, 100, "partial"),
+        "exact": (30, 100, "yes"),
+        "adjacent": (22, 85, "partial"),
+        "unknown": (24, 100, "partial"),
         "opposite": (0, 55, "no"),
     }
-    return mapping.get(type_match, (12, 100, "partial"))
+    return mapping.get(type_match, (24, 100, "partial"))
 
 
 def _concern_points_for_match(
@@ -390,7 +390,7 @@ def evaluate_suitability(
     breakdown: list[dict[str, Any]] = [
         {
             "category": type_category,
-            "weight": 0.15,
+            "weight": 0.30,
             "answer": type_answer,
             "points_awarded": type_points,
             "note": type_note_map.get(type_match, "Type-fit data is limited for this product."),

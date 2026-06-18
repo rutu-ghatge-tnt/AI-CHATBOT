@@ -1071,6 +1071,9 @@ async def ingredient_analysis(*, body: dict[str, Any], user: dict[str, Any] | No
 
 
 async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
+    if user is None or _extract_user_id(user) is None:
+        raise ScannerApiError(401, "Please login to view ingredient analysis")
+
     scan_id = body.get("scanId")
     if not scan_id:
         raise ScannerApiError(400, "scanId is required")
@@ -1301,6 +1304,9 @@ async def _ingredient_analysis_from_text_impl(
     body: dict[str, Any],
     user: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    if user is None or _extract_user_id(user) is None:
+        raise ScannerApiError(401, "Please login to view ingredient analysis")
+
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
 

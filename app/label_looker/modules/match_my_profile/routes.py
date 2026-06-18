@@ -12,7 +12,8 @@ def build_router(auth_user: Callable[..., Coroutine[Any, Any, dict[str, Any]]]) 
     r = APIRouter()
 
     @r.get("/product/{product_id}/expected-benefit-options")
-    async def expected_benefit_options_match(product_id: str):
+    async def expected_benefit_options_match(product_id: str, user: dict[str, Any] = Depends(auth_user)):
+        _ = user
         from app.label_looker.services.expected_benefit_options import get_expected_benefit_options
 
         return api_success(await get_expected_benefit_options(product_id=product_id), message="Success")

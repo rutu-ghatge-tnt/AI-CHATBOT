@@ -44,36 +44,36 @@ def build_scanner_router(auth_user: Callable[..., Coroutine[Any, Any, dict[str, 
 
 
 def build_public_text_router(
-    auth_optional: Callable[..., Coroutine[Any, Any, dict[str, Any] | None]],
-    auth_required: Callable[..., Coroutine[Any, Any, dict[str, Any]]],
+    auth_user: Callable[..., Coroutine[Any, Any, dict[str, Any]]],
 ) -> APIRouter:
     r = APIRouter()
 
     @r.get("/product/{product_id}/expected-benefit-options")
-    async def expected_benefit_options(product_id: str):
+    async def expected_benefit_options(product_id: str, user: dict[str, Any] = Depends(auth_user)):
+        _ = user
         return api_success(await service.get_expected_benefit_options(product_id=product_id), message="Success")
 
     @r.post("/analyze-product/text")
-    async def analyze_product_text(body: dict[str, Any] = Body(...), user: dict[str, Any] | None = Depends(auth_optional)):
+    async def analyze_product_text(body: dict[str, Any] = Body(...), user: dict[str, Any] = Depends(auth_user)):
         return api_success(await service.ingredient_analysis_from_text(body=body, user=user), message="Success")
 
     @r.post("/profile-validation/submit")
-    async def profile_validation_submit(body: dict[str, Any] = Body(...), user: dict[str, Any] = Depends(auth_required)):
+    async def profile_validation_submit(body: dict[str, Any] = Body(...), user: dict[str, Any] = Depends(auth_user)):
         return api_success(await service.submit_profile_validation(body=body, user=user), message="Success")
 
     @r.post("/profile-validation/status")
-    async def profile_validation_status(body: dict[str, Any] = Body(...), user: dict[str, Any] = Depends(auth_required)):
+    async def profile_validation_status(body: dict[str, Any] = Body(...), user: dict[str, Any] = Depends(auth_user)):
         return api_success(await service.profile_validation_status(body=body, user=user), message="Success")
 
     @r.get("/user/analysis/{scan_id}")
-    async def user_analysis_by_id(scan_id: str, user: dict[str, Any] | None = Depends(auth_optional)):
+    async def user_analysis_by_id(scan_id: str, user: dict[str, Any] = Depends(auth_user)):
         return api_success(await service.user_scan_by_id(scan_id=scan_id, user=user), message="Success")
 
     @r.get("/user/analysis")
     async def user_analysis_list(
         skip: int = Query(0, ge=0),
         limit: int = Query(20, ge=1, le=100),
-        user: dict[str, Any] | None = Depends(auth_optional),
+        user: dict[str, Any] = Depends(auth_user),
     ):
         return api_success(await service.user_scan_list(user=user, skip=skip, limit=limit), message="Success")
 
