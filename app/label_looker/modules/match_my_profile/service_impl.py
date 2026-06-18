@@ -143,17 +143,12 @@ def _first_present(*values: Any) -> Any:
 
 
 def _normalize_mode_for_match(*, body: dict[str, Any], product: dict[str, Any]) -> str:
-    mode_hint = _safe_scalar(body.get("mode")).lower()
-    if mode_hint in {"skincare", "haircare"}:
-        return mode_hint
+    from app.label_looker.modules.product_analysis.analysis_service_impl import _resolve_analysis_mode
 
-    product_type = _safe_scalar(product.get("productType")).lower()
-    product_name = _safe_scalar(product.get("productName") or product.get("name")).lower()
-    if "hair" in product_type or "scalp" in product_type or "hair" in product_name:
-        return "haircare"
-    if _product_list_values(product, "hairTypes", "hairType", "hairConcerns"):
-        return "haircare"
-    return "skincare"
+    mode_hint = _safe_scalar(body.get("mode")).lower()
+    if mode_hint in {"skincare", "haircare", "lipcare"}:
+        return mode_hint
+    return _resolve_analysis_mode(body=body, product=product, specific_type=None, main_benefit=None)
 
 
 def _extract_desired_benefits(*, body: dict[str, Any], details: dict[str, Any], mode: str) -> list[str]:

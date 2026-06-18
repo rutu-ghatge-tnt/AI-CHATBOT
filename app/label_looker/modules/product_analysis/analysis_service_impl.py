@@ -71,17 +71,6 @@ def _infer_mode_from_product(product: dict[str, Any] | None) -> str | None:
             str(_metadata_value(product, "product-type") or "").lower(),
         ]
     )
-    skincare_keywords = [
-        "skin",
-        "face",
-        "serum",
-        "sunscreen",
-        "spf",
-        "moistur",
-        "cleanser",
-        "toner",
-        "cream",
-    ]
     if "lip" in ptype or "lip" in pname:
         return "lipcare"
     if _has_non_empty_list_field(product, "lipTypes", "lipType"):
@@ -89,7 +78,33 @@ def _infer_mode_from_product(product: dict[str, Any] | None) -> str | None:
     if _has_non_empty_list_field(product, "lipConcerns"):
         return "lipcare"
 
-    # If product text clearly says skincare, prefer skincare even if legacy hair fields exist.
+    # Hair products often include shared words (e.g. "cleanser") — detect hair before skincare keywords.
+    hair_text_keywords = [
+        "hair",
+        "scalp",
+        "shampoo",
+        "conditioner",
+        "dandruff",
+        "hairfall",
+        "hair fall",
+        "hair-cleanser",
+        "hair cleanser",
+    ]
+    if any(k in category_text for k in hair_text_keywords):
+        return "haircare"
+
+    skincare_keywords = [
+        "skin",
+        "face",
+        "serum",
+        "sunscreen",
+        "spf",
+        "moistur",
+        "toner",
+        "cream",
+    ]
+    if "cleanser" in category_text:
+        return "skincare"
     if any(k in category_text for k in skincare_keywords):
         return "skincare"
 
