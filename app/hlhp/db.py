@@ -1,17 +1,36 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+"""MongoDB access for HLHP profile and state."""
 
-from app.config import DB_NAME, MONGO_URI
+from __future__ import annotations
 
-# Dedicated HL engine Mongo client sourced directly from .env config.
-hl_mongo_client = AsyncIOMotorClient(
-    MONGO_URI,
-    serverSelectionTimeoutMS=30000,
-    connectTimeoutMS=20000,
-    socketTimeoutMS=60000,
-    maxPoolSize=30,
-    minPoolSize=3,
-    retryWrites=True,
-    retryReads=True,
-)
+import os
+from functools import lru_cache
 
-hl_db = hl_mongo_client[DB_NAME]
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
+
+@lru_cache
+def _client() -> AsyncIOMotorClient:
+    uri = os.getenv("MONGO_URI") or os.getenv("PRODUCTION_MONGO_URI", "")
+    if not uri:
+        raise RuntimeError("MONGO_URI is not configured")
+    return AsyncIOMotorClient(
+        uri,
+        serverSelectionTimeoutMS=30000,
+        connectTimeoutMS=20000,
+        socketTimeoutMS=120000,
+        maxPoolSize=20,
+        retryWrites=True,
+        retryReads=True,
+    )
+
+
+def get_hlhp_db() -> AsyncIOMotorDatabase:
+    return _client()[os.getenv("DB_NAME", "skin_bb")]
+
+
+class _DbProxy:
+    def __getitem__(self, name: str):
+        return get_hlhp_db()[name]
+
+
+hl_db = _DbProxy()

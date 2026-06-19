@@ -40,6 +40,26 @@ def select_carousel(
     *,
     max_slots: int = 5,
 ) -> list[EvidenceFinding]:
+    return _select_diverse(ranked, max_slots=max_slots)
+
+
+def select_fire_budget(
+    ranked: list[tuple[EvidenceFinding, float, int]],
+    *,
+    headline_slots: int = 3,
+    candidate_slots: int = 5,
+) -> tuple[list[EvidenceFinding], list[EvidenceFinding]]:
+    """v2 §13: 3 surfaced headlines + up to 5 swipe candidates."""
+    candidates = _select_diverse(ranked, max_slots=candidate_slots)
+    headlines = candidates[:headline_slots]
+    return headlines, candidates
+
+
+def _select_diverse(
+    ranked: list[tuple[EvidenceFinding, float, int]],
+    *,
+    max_slots: int,
+) -> list[EvidenceFinding]:
     selected: list[EvidenceFinding] = []
     used_factors: set[str] = set()
     used_sub_effects: set[str] = set()

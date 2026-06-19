@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from app.hlhp.core.bands import bucketize_environment
+from app.hlhp.core.phase import DayPhase, phase_used_label, resolve_day_phase
 from app.hlhp.core.profile_mode import resolve_mode
 from app.hlhp.core.season import indian_season
 from app.hlhp.evidence.loader import get_evidence_store
@@ -24,23 +26,29 @@ from app.hlhp.models.profile import UserProfile
 _HABIT_FACTORS = {"Nutritional Status", "Lifestyle"}
 
 
-def _pick_l1_text(finding: EvidenceFinding, guest_mode: bool) -> str:
-    if guest_mode:
-        return finding.alert_l1_guest or finding.alert_l1_personalised or finding.alert_short
-    return finding.alert_l1_personalised or finding.alert_l1_guest or finding.alert_short
-
-
 def _sanitize_l1(text: str, glossary: list[dict]) -> str:
     return apply_lay_voice(text, glossary)
 
 
-def _to_summary(finding: EvidenceFinding, l1_text: str) -> EvidenceAlertSummary:
+def _to_summary(
+    finding: EvidenceFinding,
+    l1_text: str,
+    *,
+    phase_used: str,
+) -> EvidenceAlertSummary:
     return EvidenceAlertSummary(
         id=finding.id,
         factor=finding.factor,
         l1_text=l1_text,
+        l2_text=finding.pick_l2(),
         priority=finding.priority,
         india_relevant=finding.india_relevant,
+        mood_verdict_tag=finding.mood_verdict_tag,
+        engagement_archetype=finding.engagement_archetype,
+        symptom_keyword=finding.symptom_keyword,
+        routine_action=finding.routine_action,
+        visual_icon_hint=finding.visual_icon_hint,
+        phase_used=phase_used,
     )
 
 
@@ -66,6 +74,8 @@ def select_evidence_bundle(
     profile: Optional[UserProfile] = None,
     guest_mode: Optional[bool] = None,
     user_id: Optional[str] = None,
+    day_phase: Optional[DayPhase] = None,
+    local_time: Optional[datetime] = None,
 ) -> EvidenceBundle:
     try:
         store = get_evidence_store()
@@ -79,6 +89,7 @@ def select_evidence_bundle(
     if profile is not None and not guest_mode:
         partial = resolve_mode(profile).value == "partial_personalised"
 
+    phase: DayPhase = day_phase or resolve_day_phase(local_time)
     bands = bucketize_environment(env)
     season = indian_season()
     candidates = match_findings(
@@ -89,6 +100,7 @@ def select_evidence_bundle(
         guest_mode=guest_mode,
         partial_personalised=partial,
         index=store.index,
+        day_phase=phase,
     )
 
     uid = user_id or (profile.user_id if profile else None)
@@ -114,37 +126,45 @@ def select_evidence_bundle(
             gaps_conflicts=gap_views,
             evidence_version=store.version,
             coverage_thin_cells=thin_cells[:5],
+            day_phase=phase,
         )
 
     ranked = rank_findings(candidates, profile=profile, partial_personalised=partial)
     finding, score, matched = ranked[0]
-    l1_text = _sanitize_l1(_pick_l1_text(finding, guest_mode), store.glossary)
+    phase_label = phase_used_label(finding.time_of_day_phase, phase)
+    l1_text = _sanitize_l1(finding.pick_l1(guest_mode=guest_mode, day_phase=phase), store.glossary)
     science_fact, science_source = _pick_science_nugget(store, finding, uid)
 
     carousel_findings = select_carousel(ranked, max_slots=5)
     carousel = [
-        _to_summary(f, _sanitize_l1(_pick_l1_text(f, guest_mode), store.glossary))
+        _to_summary(
+            f,
+            _sanitize_l1(f.pick_l1(guest_mode=guest_mode, day_phase=phase), store.glossary),
+            phase_used=phase_used_label(f.time_of_day_phase, phase),
+        )
         for f in carousel_findings
     ]
 
-    habit_ranked = [
-        item
-        for item in ranked
-        if item[0].factor in _HABIT_FACTORS
-    ]
+    habit_ranked = [item for item in ranked if item[0].factor in _HABIT_FACTORS]
     habit_alerts = [
-        _to_summary(f, _sanitize_l1(_pick_l1_text(f, guest_mode), store.glossary))
+        _to_summary(
+            f,
+            _sanitize_l1(f.pick_l1(guest_mode=guest_mode, day_phase=phase), store.glossary),
+            phase_used=phase_used_label(f.time_of_day_phase, phase),
+        )
         for f, _, _ in habit_ranked[:3]
     ]
 
     primary = EvidenceSelection(
         finding=finding,
         l1_text=l1_text,
+        l2_text=finding.pick_l2(),
         science_fact=science_fact,
         science_source=science_source,
         matched_filter_count=matched,
         rank_score=score,
         guest_mode=guest_mode,
+        phase_used=phase_label,
         carousel=carousel_findings,
     )
 
@@ -156,6 +176,7 @@ def select_evidence_bundle(
         gaps_conflicts=gap_views,
         evidence_version=store.version,
         coverage_thin_cells=thin_cells[:5],
+        day_phase=phase,
     )
 
 
@@ -165,8 +186,15 @@ def select_primary_finding(
     profile: Optional[UserProfile] = None,
     guest_mode: Optional[bool] = None,
     user_id: Optional[str] = None,
+    day_phase: Optional[DayPhase] = None,
+    local_time: Optional[datetime] = None,
 ) -> Optional[EvidenceSelection]:
     bundle = select_evidence_bundle(
-        env, profile=profile, guest_mode=guest_mode, user_id=user_id
+        env,
+        profile=profile,
+        guest_mode=guest_mode,
+        user_id=user_id,
+        day_phase=day_phase,
+        local_time=local_time,
     )
     return bundle.primary

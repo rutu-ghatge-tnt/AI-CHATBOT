@@ -10,6 +10,9 @@ from typing import Any
 
 import openpyxl
 
+from app.hlhp.core.trigger_bands import normalize_rh_band, trigger_bands_snapshot
+from app.hlhp.evidence.models import INTERNAL_SCIENCE_MARKER
+
 FACTOR_SHEETS = [
     "UV",
     "Temperature",
@@ -42,7 +45,7 @@ VALID_BANDS = {
         "very_poor",
         "severe",
     },
-    "rh": {"any", "very_low", "low", "moderate", "high", "very_high"},
+    "rh": {"any", "very_low", "low", "moderate", "comfortable", "high", "very_high"},
     "temp": {
         "any",
         "very_cold",
@@ -62,13 +65,44 @@ def mentions_sunscreen(text: str) -> bool:
     return bool(text and SUNSCREEN_RE.search(text))
 
 
-def _parse_band_list(raw: object) -> list[str]:
+def _parse_band_list(raw: object, *, dimension: str | None = None) -> list[str]:
     if raw is None:
         return ["any"]
     text = str(raw).strip().lower()
     if not text or text == "any":
         return ["any"]
-    return [part.strip() for part in text.split(",") if part.strip()]
+    bands = [part.strip() for part in text.split(",") if part.strip()]
+    if dimension == "rh":
+        bands = [normalize_rh_band(b) for b in bands]
+    return bands
+
+
+def _col_index(headers: list[object], *prefixes: str) -> int | None:
+    """Resolve column by exact name or prefix (handles mojibake in L2 header)."""
+    normalized = {str(h).strip(): i for i, h in enumerate(headers) if h}
+    for prefix in prefixes:
+        if prefix in normalized:
+            return normalized[prefix]
+    for header, idx in normalized.items():
+        for prefix in prefixes:
+            if header.startswith(prefix):
+                return idx
+    return None
+
+
+def _cell(excel_row: tuple, col: dict[str, int], *header_candidates: str) -> str:
+    for candidate in header_candidates:
+        for name, idx in col.items():
+            if name == candidate or name.startswith(candidate):
+                if idx < len(excel_row):
+                    val = excel_row[idx]
+                    return (val or "").strip() if val is not None else ""
+    return ""
+
+
+def _detect_internal_only(*texts: str) -> bool:
+    marker = INTERNAL_SCIENCE_MARKER.lower()
+    return any(marker in (t or "").lower() for t in texts)
 
 
 def _parse_user_filter(raw: object) -> list[dict[str, str]]:
@@ -152,7 +186,7 @@ def read_factor_sheet(ws, factor: str) -> list[dict]:
                 "season": _parse_band_list(excel_row[col["Trigger_Season"]]),
                 "uvi": _parse_band_list(excel_row[col["Trigger_UVI_Band"]]),
                 "aqi": _parse_band_list(excel_row[col["Trigger_AQI_Band"]]),
-                "rh": _parse_band_list(excel_row[col["Trigger_RH_Band"]]),
+                "rh": _parse_band_list(excel_row[col["Trigger_RH_Band"]], dimension="rh"),
                 "temp": _parse_band_list(excel_row[col["Trigger_Temp_Band"]]),
                 "user_filter": user_tokens,
             },
@@ -160,9 +194,29 @@ def read_factor_sheet(ws, factor: str) -> list[dict]:
                 excel_row[col["Alert_L1_Personalised (rewritten)"]] or ""
             ).strip(),
             "alert_l1_guest": (excel_row[col["Alert_L1_Guest (no profile)"]] or "").strip(),
+            "alert_l1_evening_personalised": _cell(
+                excel_row, col, "Alert_L1_Evening_Personalised"
+            ),
+            "alert_l1_evening_guest": _cell(excel_row, col, "Alert_L1_Evening_Guest"),
+            "alert_l2_explainer": _cell(excel_row, col, "Alert_L2_Explainer"),
+            "time_of_day_phase": _cell(excel_row, col, "Time_of_Day_Phase") or "any_time",
+            "mood_verdict_tag": _cell(excel_row, col, "Mood_Verdict_Tag"),
+            "combination_stack": _cell(excel_row, col, "Combination_Stack"),
+            "engagement_archetype": _cell(excel_row, col, "Engagement_Archetype"),
+            "physical_analogy": _cell(excel_row, col, "Physical_Analogy"),
+            "body_sensation_decode": _cell(excel_row, col, "Body_Sensation_Decode"),
+            "symptom_keyword": _cell(excel_row, col, "Symptom_Keyword"),
+            "routine_action": _cell(excel_row, col, "Routine_Action"),
+            "visual_icon_hint": _cell(excel_row, col, "Visual_Icon_Hint"),
             "never_fire": never_fire,
             "science_citation": "",
         }
+        row["internal_only"] = _detect_internal_only(
+            row["alert_l1_personalised"],
+            row["alert_l1_guest"],
+            row["alert_l1_evening_personalised"],
+            row["alert_l1_evening_guest"],
+        )
         row["science_citation"] = _source_citation(row)
         rows.append(row)
     return rows
@@ -341,9 +395,10 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
         findings.extend(read_factor_sheet(wb[sheet], sheet))
 
     snapshot = {
-        "version": 1,
+        "version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_workbook": xlsx_path.name,
+        "trigger_bands": trigger_bands_snapshot(),
         "readme": read_readme(wb["README"]),
         "book_inventory": read_book_inventory(wb["Book Inventory"]),
         "finding_count": len(findings),
@@ -369,8 +424,14 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
     autofixes: list[str] = [f"{f['row_id']}: {f['detail']}" for f in coverage_fixes]
     warnings: list[str] = []
     glossary = snapshot["glossary"]
+    l1_fields = (
+        "alert_l1_guest",
+        "alert_l1_personalised",
+        "alert_l1_evening_guest",
+        "alert_l1_evening_personalised",
+    )
     for row in findings:
-        for field in ("alert_l1_guest", "alert_l1_personalised"):
+        for field in l1_fields:
             text = row.get(field) or ""
             if not text:
                 continue
@@ -379,6 +440,9 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
             if cleaned != text:
                 row[field] = cleaned
                 autofixes.append(f"{row['id']}: sanitised {field}")
+        row["internal_only"] = _detect_internal_only(
+            *(row.get(f) or "" for f in l1_fields)
+        )
         autofix_night_gate_uvi(row, autofixes)
         for band_key, values in row["triggers"].items():
             if band_key == "user_filter":
@@ -398,8 +462,13 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
         if not row.get("source_title") or not row.get("pages_doi_pmid"):
             warnings.append(f"{row['id']}: incomplete citation")
 
+    from app.hlhp.evidence.validation_gates import validate_snapshot_v2
+
     voice_issues = validate_l1_voice(findings, glossary)
     citation_issues = validate_citations(findings, snapshot["book_inventory"])
+    gate_failures = validate_snapshot_v2(
+        findings, glossary, snapshot["book_inventory"]
+    )
     coverage_report = build_coverage_report(findings)
     snapshot["inverted_index"] = build_inverted_index(findings)
 
@@ -408,6 +477,8 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
     snapshot["build_report"] = {
         "voice_violations": voice_issues,
         "citation_issues": citation_issues,
+        "gate_failures": gate_failures,
+        "gate_failure_count": len(gate_failures),
         "coverage_report": coverage_report,
         "gaps_conflicts_count": len(snapshot["gaps_conflicts"]),
         "glossary_entries": len(snapshot["glossary"]),

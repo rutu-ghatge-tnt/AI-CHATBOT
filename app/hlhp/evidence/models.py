@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+INTERNAL_SCIENCE_MARKER = "(internal science only)"
+
+DayPhase = Literal["morning", "evening"]
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,20 @@ class EvidenceFinding:
     alert_l1_guest: str
     never_fire: bool
     science_citation: str
+    # v2 engagement + alert hierarchy
+    alert_l1_evening_personalised: str = ""
+    alert_l1_evening_guest: str = ""
+    alert_l2_explainer: str = ""
+    time_of_day_phase: str = "any_time"
+    mood_verdict_tag: str = ""
+    combination_stack: str = ""
+    engagement_archetype: str = ""
+    physical_analogy: str = ""
+    body_sensation_decode: str = ""
+    symptom_keyword: str = ""
+    routine_action: str = ""
+    visual_icon_hint: str = ""
+    internal_only: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> EvidenceFinding:
@@ -46,6 +64,7 @@ class EvidenceFinding:
         tokens = tuple(
             UserFilterToken(t["class"], t["value"]) for t in triggers.get("user_filter", [])
         )
+        internal_only = bool(data.get("internal_only"))
         return cls(
             id=data["id"],
             factor=data["factor"],
@@ -74,7 +93,57 @@ class EvidenceFinding:
             alert_l1_guest=data.get("alert_l1_guest", ""),
             never_fire=bool(data.get("never_fire")),
             science_citation=data.get("science_citation", ""),
+            alert_l1_evening_personalised=data.get("alert_l1_evening_personalised", ""),
+            alert_l1_evening_guest=data.get("alert_l1_evening_guest", ""),
+            alert_l2_explainer=data.get("alert_l2_explainer", ""),
+            time_of_day_phase=data.get("time_of_day_phase", "any_time") or "any_time",
+            mood_verdict_tag=data.get("mood_verdict_tag", ""),
+            combination_stack=data.get("combination_stack", ""),
+            engagement_archetype=data.get("engagement_archetype", ""),
+            physical_analogy=data.get("physical_analogy", ""),
+            body_sensation_decode=data.get("body_sensation_decode", ""),
+            symptom_keyword=data.get("symptom_keyword", ""),
+            routine_action=data.get("routine_action", ""),
+            visual_icon_hint=data.get("visual_icon_hint", ""),
+            internal_only=internal_only,
         )
+
+    def is_surfaced_to_client(self) -> bool:
+        if self.never_fire or self.internal_only:
+            return False
+        for text in (
+            self.alert_l1_personalised,
+            self.alert_l1_guest,
+            self.alert_l1_evening_personalised,
+            self.alert_l1_evening_guest,
+        ):
+            if INTERNAL_SCIENCE_MARKER.lower() in (text or "").lower():
+                return False
+        return True
+
+    def pick_l1(self, *, guest_mode: bool, day_phase: DayPhase) -> str:
+        if day_phase == "evening":
+            if guest_mode:
+                return (
+                    self.alert_l1_evening_guest
+                    or self.alert_l1_guest
+                    or self.alert_l1_personalised
+                    or self.alert_short
+                )
+            return (
+                self.alert_l1_evening_personalised
+                or self.alert_l1_personalised
+                or self.alert_l1_guest
+                or self.alert_short
+            )
+        if guest_mode:
+            return self.alert_l1_guest or self.alert_l1_personalised or self.alert_short
+        return self.alert_l1_personalised or self.alert_l1_guest or self.alert_short
+
+    def pick_l2(self) -> str:
+        if self.alert_l2_explainer:
+            return self.alert_l2_explainer
+        return self.product_implication or self.mechanism
 
 
 @dataclass(frozen=True)
@@ -100,11 +169,13 @@ class ScienceNugget:
 class EvidenceSelection:
     finding: EvidenceFinding
     l1_text: str
+    l2_text: str
     science_fact: str
     science_source: str
     matched_filter_count: int
     rank_score: float
     guest_mode: bool
+    phase_used: str = "morning_prep"
     carousel: list[EvidenceFinding] = field(default_factory=list)
 
 
@@ -113,8 +184,15 @@ class EvidenceAlertSummary:
     id: str
     factor: str
     l1_text: str
-    priority: str
-    india_relevant: bool
+    l2_text: str = ""
+    priority: str = "P2"
+    india_relevant: bool = False
+    mood_verdict_tag: str = ""
+    engagement_archetype: str = ""
+    symptom_keyword: str = ""
+    routine_action: str = ""
+    visual_icon_hint: str = ""
+    phase_used: str = "morning_prep"
 
 
 @dataclass
@@ -142,3 +220,4 @@ class EvidenceBundle:
     gaps_conflicts: list[GapConflictView] = field(default_factory=list)
     evidence_version: int = 1
     coverage_thin_cells: list[dict] = field(default_factory=list)
+    day_phase: str = "morning"

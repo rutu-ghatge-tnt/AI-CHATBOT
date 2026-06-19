@@ -1,7 +1,8 @@
-"""Formal trigger bands per HLHP Engine Implementation Spec §5."""
+"""Formal trigger bands per HLHP Engine Implementation Spec v2 §3."""
 
 from dataclasses import dataclass
 
+from app.hlhp.core.trigger_bands import normalize_rh_band
 from app.hlhp.models.environmental import EnvironmentalData
 
 
@@ -30,25 +31,25 @@ def bucketize_uvi(uvi: float) -> str:
 def bucketize_temperature(temp_c: float) -> str:
     if temp_c < 10:
         return "very_cold"
-    if temp_c < 20:
+    if temp_c < 18:
         return "cold"
     if temp_c < 28:
         return "comfortable"
-    if temp_c < 35:
+    if temp_c < 32:
         return "warm"
-    if temp_c < 40:
+    if temp_c < 38:
         return "hot"
     return "very_hot"
 
 
 def bucketize_humidity(rh: float) -> str:
-    if rh < 30:
+    if rh < 25:
         return "very_low"
-    if rh < 50:
+    if rh < 40:
         return "low"
-    if rh < 70:
-        return "moderate"
-    if rh < 85:
+    if rh <= 60:
+        return "comfortable"
+    if rh <= 75:
         return "high"
     return "very_high"
 
@@ -71,7 +72,7 @@ def bucketize_environment(env: EnvironmentalData) -> EnvironmentBands:
     return EnvironmentBands(
         uvi=bucketize_uvi(env.uv_index),
         temperature=bucketize_temperature(env.temperature_c),
-        humidity=bucketize_humidity(env.humidity_pct),
+        humidity=normalize_rh_band(bucketize_humidity(env.humidity_pct)),
         aqi=bucketize_aqi(env.aqi),
     )
 
@@ -85,8 +86,9 @@ def science_condition_tags(bands: EnvironmentBands) -> list[str]:
         tags.append("temp_high")
     if bands.aqi in {"moderate", "poor", "very_poor", "severe"}:
         tags.append("aqi_high")
-    if bands.humidity in {"very_low", "low"}:
+    rh = bands.humidity
+    if rh in {"very_low", "low"}:
         tags.append("humidity_low")
-    elif bands.humidity in {"high", "very_high"}:
+    elif rh in {"high", "very_high"}:
         tags.append("humidity_high")
     return tags
