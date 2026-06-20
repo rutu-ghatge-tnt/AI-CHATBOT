@@ -1408,67 +1408,85 @@ async def _ingredient_analysis_from_text_impl(
     )
     if existing_user_product:
         existing_analytic = dict(existing_user_product.get("analyticDetail") or {})
-        existing_ingredients = existing_user_product.get("ingredients")
-        if not isinstance(existing_ingredients, list):
-            existing_ingredients = []
-        ingredients_out = ing_list if ing_list else existing_ingredients
-        profile_validation = None
-        if user_id is not None:
-            mode = _resolve_analysis_mode(
-                body=body,
-                product=product,
-                specific_type=body.get("specificType"),
-                main_benefit=body.get("mainBenefit"),
-            )
-            mode_state = await _upsert_validation_state(
-                user_details_coll=user_details_coll,
-                user_id=user_id,
-                mode=mode,
-                bump_scan_count=False,
-                details_doc=details,
-            )
-            profile_validation = _build_prompt_payload(
-                mode=mode,
-                mode_state=mode_state,
-                details=details or {},
-                force_prompt_if_missing=False,
-            )
-        return {
-            "scanId": str(existing_user_product.get("_id")),
-            "analyticDetail": existing_analytic,
-            "ingredients": ingredients_out,
-            "profileValidation": profile_validation,
-            "cacheHit": True,
-            "cacheType": "user_product",
-        }
+        if existing_analytic:
+            existing_ingredients = existing_user_product.get("ingredients")
+            if not isinstance(existing_ingredients, list):
+                existing_ingredients = []
+            ingredients_out = ing_list if ing_list else existing_ingredients
+            profile_validation = None
+            if user_id is not None and not body.get("_orchestration"):
+                mode = _resolve_analysis_mode(
+                    body=body,
+                    product=product,
+                    specific_type=body.get("specificType"),
+                    main_benefit=body.get("mainBenefit"),
+                )
+                mode_state = await _upsert_validation_state(
+                    user_details_coll=user_details_coll,
+                    user_id=user_id,
+                    mode=mode,
+                    bump_scan_count=False,
+                    details_doc=details,
+                )
+                profile_validation = _build_prompt_payload(
+                    mode=mode,
+                    mode_state=mode_state,
+                    details=details or {},
+                    force_prompt_if_missing=False,
+                )
+            return {
+                "scanId": str(existing_user_product.get("_id")),
+                "analyticDetail": existing_analytic,
+                "ingredients": ingredients_out,
+                "profileValidation": profile_validation,
+                "cacheHit": True,
+                "cacheType": "user_product",
+            }
+
+    from app.label_looker.services.label_looker_scan_store import find_user_product_scan
+
+    orchestration = bool(body.get("_orchestration"))
+    reuse_row = None
+    if orchestration and product_id_ref is not None and user_id is not None:
+        reuse_row = await find_user_product_scan(
+            scan_coll=scan_coll,
+            user=user,
+            user_id=user_id,
+            product_ref=product_id_ref,
+            require_match=False,
+        )
 
     now = datetime.now()
-    scan_doc = {
-        "userId": user_id,
-        "firstName": (user or {}).get("firstName"),
-        "lastName": (user or {}).get("lastName"),
-        "userProfileUrl": (user or {}).get("profileUrl"),
-        "extractedIngredients": ing_list,
-        "scansLeft": None,
-        "scanImageError": None,
-        "ingredientAnalysisError": None,
-        "sourceType": "text",
-        "productId": product_id_ref,
-        "scanPhase": "analysis",
-        "createdAt": now,
-        "updatedAt": now,
-    }
-    ins = await scan_coll.insert_one(scan_doc)
-    scan_id = ins.inserted_id
-    await scan_detail_coll.insert_one(
-        {
-            "scanAnalysisId": scan_id,
-            "sourceType": "text",
+    if reuse_row is not None:
+        scan_id = reuse_row["_id"]
+    else:
+        scan_doc = {
+            "userId": user_id,
+            "firstName": (user or {}).get("firstName"),
+            "lastName": (user or {}).get("lastName"),
+            "userProfileUrl": (user or {}).get("profileUrl"),
             "extractedIngredients": ing_list,
+            "scansLeft": None,
+            "scanImageError": None,
+            "ingredientAnalysisError": None,
+            "sourceType": "text",
+            "productId": product_id_ref,
+            "scanPhase": "analysis",
+            "labelLookerUnified": orchestration,
             "createdAt": now,
             "updatedAt": now,
         }
-    )
+        ins = await scan_coll.insert_one(scan_doc)
+        scan_id = ins.inserted_id
+        await scan_detail_coll.insert_one(
+            {
+                "scanAnalysisId": scan_id,
+                "sourceType": "text",
+                "extractedIngredients": ing_list,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        )
 
     prefetched = await _resolve_prefetched_product_analysis(
         product_ref=product_id_ref,

@@ -296,7 +296,22 @@ Re-fetch `GET …/profile?productId=` when opening modal on each product.
 
 ## 8. API quick reference
 
-### Scanner (`/api/v1/scanner`)
+### Label Looker orchestration (`/api/v1/scanner`) — **preferred PDP flow**
+
+| Method | Path | Quota | Purpose |
+|--------|------|-------|---------|
+| POST | `/match-my-profile` | Yes | Way 1 insert / Way 2B update — analysis + match in one call |
+| GET | `/labellooker/scan?productId=` | No | Way 2A lookup → `{ hasMatch, userScanId, scanId }` |
+| GET | `/match-my-profile/{userScanId}` | No | Way 2A — saved match payload |
+| GET | `/text/{scanId}` | No | Ingredient `analyticDetail` for accordion |
+
+Response from `POST /match-my-profile` includes `userScanId`, `scanId`, `isRescan`, full match payload, and `analyticDetail`.
+
+**One Mongo row per `(userId, productId)`** in `scan_analyses` — rescan updates the same `_id` (`userScanId`).
+
+Daily quota tracked on `user_details.labelLookerQuota` `{ date, used }` (limit 5).
+
+### Scanner (`/api/v1/scanner`) — legacy steps
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|

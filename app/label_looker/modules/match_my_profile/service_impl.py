@@ -432,6 +432,8 @@ async def get_profile(*, user: dict[str, Any], product_id: str | None = None) ->
     )
     from app.label_looker.services.profile_form import assess_profile_completeness, build_profile_form_values
 
+    from app.label_looker.services.label_looker_quota import get_daily_quota_snapshot
+
     db = get_scanner_db()
     user_details_coll = db[s.coll_user_details]
     scan_coll = db[s.coll_scan_analysis]
@@ -440,7 +442,7 @@ async def get_profile(*, user: dict[str, Any], product_id: str | None = None) ->
         raise ScannerApiError(401, "Unauthorized")
     details_raw = await load_full_user_profile(user_id=user_id, user=user)
     details = details_raw
-    scans_used = await _count_scans_today(scan_coll, user.get("profileUrl"))
+    quota_snap = await get_daily_quota_snapshot(user_details_coll=user_details_coll, user_id=user_id)
 
     mode = "skincare"
     if product_id and str(product_id).strip():
@@ -474,7 +476,11 @@ async def get_profile(*, user: dict[str, Any], product_id: str | None = None) ->
             "conditions": _safe_list(details.get("conditions")),
             "medications": _safe_list(details.get("medications")),
         },
-        "credits": {"free_used": scans_used, "free_limit": totalScanIngedientPerDay, "paid_remaining": 0},
+        "credits": {
+            "free_used": quota_snap["used"],
+            "free_limit": quota_snap["limit"],
+            "paid_remaining": 0,
+        },
         "form": form_values,
         "fieldStatus": completeness["fieldStatus"],
         "missingFields": completeness["missingFields"],
@@ -573,10 +579,15 @@ async def score_product(*, user: dict[str, Any], body: dict[str, Any]) -> dict[s
     requested_scan_id = body.get("scan_id") or body.get("scanId")
     if isinstance(requested_scan_id, str) and requested_scan_id.strip() and not _has_score_request_body(body):
         return await get_scan_result(user=user, scan_id=requested_scan_id.strip())
-    return await _score_product_impl(user=user, body=body)
+    return await _score_product_impl(user=user, body=body, quota_already_checked=False)
 
 
-async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+async def _score_product_impl(
+    *,
+    user: dict[str, Any],
+    body: dict[str, Any],
+    quota_already_checked: bool = False,
+) -> dict[str, Any]:
     product_id = body.get("product_id") or body.get("productId")
     if not product_id:
         raise ScannerApiError(400, "product_id is required")
@@ -602,9 +613,15 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
             user_id=user_id,
             product_ref=product_ref,
         )
-    scans_used_before = await _count_scans_today(scan_coll, user.get("profileUrl"))
-    if linked_analysis is None and scans_used_before >= totalScanIngedientPerDay:
-        raise ScannerApiError(402, "insufficient_credits")
+    from app.label_looker.services.label_looker_quota import (
+        assert_daily_quota_available,
+        get_daily_quota_snapshot,
+        record_daily_quota_use,
+    )
+    from app.label_looker.services.label_looker_scan_store import find_user_product_scan
+
+    if not quota_already_checked:
+        await assert_daily_quota_available(user_details_coll=user_details_coll, user_id=user_id)
     details_raw = await load_full_user_profile(user_id=user_id, user=user)
     details = details_raw
     product = await products_coll.find_one({"_id": product_ref})
@@ -748,6 +765,18 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         tiles, tiles_meta = await generate_tiles_with_fallback(inputs=tile_inputs, client=client, model=s.anthropic_model, context="profile_match")
 
     now = datetime.now()
+    existing_user_product = await find_user_product_scan(
+        scan_coll=scan_coll,
+        user=user,
+        user_id=user_id,
+        product_ref=product_ref,
+        require_match=False,
+    )
+    existing_feedback = (
+        existing_user_product.get("feedback")
+        if isinstance(existing_user_product, dict) and isinstance(existing_user_product.get("feedback"), dict)
+        else None
+    )
     doc = {
         "userId": user_id,
         "userProfileUrl": user.get("profileUrl"),
@@ -761,24 +790,51 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "generation_meta": tiles_meta,
         "profile_context": profile_context,
         "tile_content": tiles,
-        "post_scan_action": None,
-        "feedback": {"sentiment": None, "category": None, "note": None, "submittedAt": None},
         "triggered_obs": [str(x.get("id")) for x in observations if x.get("id")],
         "triggered_observations": observations,
         "scanImageError": None,
         "ingredientAnalysisError": None,
         "scanPhase": "complete",
+        "labelLookerUnified": True,
         "updatedAt": now,
     }
+    if existing_feedback is not None:
+        doc["feedback"] = existing_feedback
+        doc["post_scan_action"] = existing_user_product.get("post_scan_action")
+    else:
+        doc["feedback"] = {"sentiment": None, "category": None, "note": None, "submittedAt": None}
+        doc["post_scan_action"] = None
+
     if linked_analysis is not None:
-        scan_id = linked_analysis["_id"]
+        if linked_analysis.get("analyticDetail"):
+            doc["analyticDetail"] = linked_analysis.get("analyticDetail")
+        if linked_analysis.get("ingredients"):
+            doc["ingredients"] = linked_analysis.get("ingredients")
+        doc["analysisScanId"] = str(linked_analysis["_id"])
+
+    if existing_user_product and linked_analysis:
+        if str(existing_user_product["_id"]) == str(linked_analysis["_id"]):
+            target_row = existing_user_product
+        elif existing_user_product.get("band"):
+            target_row = existing_user_product
+        else:
+            target_row = linked_analysis
+    else:
+        target_row = existing_user_product or linked_analysis
+    if target_row is not None:
+        scan_id = target_row["_id"]
         await scan_coll.update_one({"_id": scan_id}, {"$set": doc})
     else:
         doc["createdAt"] = now
-        doc["scanPhase"] = "match_only"
         ins = await scan_coll.insert_one(doc)
         scan_id = ins.inserted_id
-    scans_used = await _count_scans_today(scan_coll, user.get("profileUrl"))
+
+    if not quota_already_checked:
+        quota = await record_daily_quota_use(user_details_coll=user_details_coll, user_id=user_id)
+        credits_remaining = {"free": quota["remaining"], "paid": 0}
+    else:
+        quota_snap = await get_daily_quota_snapshot(user_details_coll=user_details_coll, user_id=user_id)
+        credits_remaining = {"free": quota_snap["remaining"], "paid": 0}
     cta = _build_cta(state=state or "low", product_price=product.get("price"))
     if linked_analysis and isinstance(linked_analysis.get("analyticDetail"), dict):
         legacy_analytic_detail = linked_analysis["analyticDetail"]
@@ -820,7 +876,7 @@ async def _score_product_impl(*, user: dict[str, Any], body: dict[str, Any]) -> 
         "overrides_applied": scoring.get("overrides_applied", []),
         "cta": cta,
         "full_analysis": {"ingredients": analysis_ingredients, "key_ingredients": tile_product.get("key_ingredients", []), "claims_checked": tile_product.get("claims", []), "legacy_analytic_detail": legacy_analytic_detail},
-        "credits_remaining": {"free": max(0, totalScanIngedientPerDay - scans_used), "paid": 0},
+        "credits_remaining": credits_remaining,
         "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
         "expected_benefit_options": benefit_options.get("expectedBenefitOptions"),
         "selection_rules": benefit_options.get("selectionRules"),
@@ -891,7 +947,9 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
         raise ScannerApiError(403, "Forbidden")
     suitability = doc.get("engine_breakdown", {}).get("suitability", {})
     safety = doc.get("engine_breakdown", {}).get("safety", {}) if isinstance(doc.get("engine_breakdown"), dict) else {}
-    scans_used = await _count_scans_today(scan_coll, user.get("profileUrl") or doc.get("userProfileUrl"))
+    from app.label_looker.services.label_looker_quota import get_daily_quota_snapshot
+
+    quota_snap = await get_daily_quota_snapshot(user_details_coll=db[s.coll_user_details], user_id=user_id)
     band_label_map = {
         "great": "Great Match",
         "good": "Good Match",
@@ -923,7 +981,7 @@ async def get_scan_result(*, user: dict[str, Any], scan_id: str) -> dict[str, An
         "overrides_applied": suitability.get("overrides_applied", []),
         "feedback": doc.get("feedback") if isinstance(doc.get("feedback"), dict) else None,
         "post_scan_action": doc.get("post_scan_action"),
-        "credits_remaining": {"free": max(0, totalScanIngedientPerDay - scans_used), "paid": 0},
+        "credits_remaining": {"free": quota_snap["remaining"], "paid": 0},
         "position_reference": "Ingredient positions refer to INCI order in the formula list (lower number = higher concentration zone).",
     }
     from app.label_looker.services.match_response import build_match_api_payload

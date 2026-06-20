@@ -1,10 +1,13 @@
 from datetime import datetime, timezone
 
 import httpx
+import logging
 
 from app.hlhp.config import hl_settings
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.utils.cache import get_cached, set_cached
+
+logger = logging.getLogger(__name__)
 
 CACHE_KEY_PREFIX = "hl:weather"
 
@@ -79,7 +82,14 @@ async def fetch_environmental_data(lat: float, lng: float) -> EnvironmentalData:
 
     try:
         source_data = await _fetch_skintruth_weather(lat, lng)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "HLHP weather API failed for lat=%s lng=%s (%s): %s",
+            lat,
+            lng,
+            hl_settings.WEATHER_API_URL,
+            exc,
+        )
         source_data = {
             "temperature_c": 25.0,
             "humidity_pct": 50.0,
@@ -90,6 +100,8 @@ async def fetch_environmental_data(lat: float, lng: float) -> EnvironmentalData:
             "weather_api_url": hl_settings.WEATHER_API_URL,
         }
 
+    from_api = source_data["location_name"] not in ("Unknown", "")
+
     env_data = EnvironmentalData(
         uv_index=source_data["uv_index"],
         temperature_c=source_data["temperature_c"],
@@ -98,14 +110,15 @@ async def fetch_environmental_data(lat: float, lng: float) -> EnvironmentalData:
         location_name=source_data["location_name"],
         fetched_at=datetime.now(timezone.utc),
         data_sources={
-            "weather": "skintruth" if source_data["location_name"] != "Unknown" else "default",
-            "aqi": "skintruth" if source_data["location_name"] != "Unknown" else "default",
-            "uv": "skintruth" if source_data["location_name"] != "Unknown" else "default",
+            "weather": "skintruth" if from_api else "default",
+            "aqi": "skintruth" if from_api else "default",
+            "uv": "skintruth" if from_api else "default",
         },
         raw_weather_payload=source_data["raw_weather_payload"],
         weather_api_url=source_data["weather_api_url"],
     )
 
-    await set_cached(cache_key, env_data.model_dump(mode="json"), hl_settings.WEATHER_CACHE_TTL)
+    if from_api:
+        await set_cached(cache_key, env_data.model_dump(mode="json"), hl_settings.WEATHER_CACHE_TTL)
     return env_data
 
