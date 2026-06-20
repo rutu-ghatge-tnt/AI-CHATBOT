@@ -120,6 +120,45 @@ def _map_skin_type(raw_value: str | None) -> SkinType:
         return SkinType.NORMAL
 
 
+_SKIN_TONE_TO_FITZ: dict[str, int] = {
+    "type1": 1,
+    "type2": 2,
+    "type3": 3,
+    "type4": 4,
+    "type5": 5,
+    "type6": 6,
+    "i": 1,
+    "ii": 2,
+    "iii": 3,
+    "iv": 4,
+    "v": 5,
+    "vi": 6,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+}
+
+
+def _map_skin_tone_fitzpatrick(doc: dict) -> int | None:
+    raw = doc.get("skinTone") or doc.get("skin_tone") or doc.get("fitzpatrickType")
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        n = int(raw)
+        return n if 1 <= n <= 6 else None
+    if isinstance(raw, str):
+        key = raw.strip().lower().replace(" ", "").replace("-", "")
+        if key in _SKIN_TONE_TO_FITZ:
+            return _SKIN_TONE_TO_FITZ[key]
+        if key.isdigit():
+            n = int(key)
+            return n if 1 <= n <= 6 else None
+    return None
+
+
 def _default_user_profile(user_id: str) -> UserProfile:
     return UserProfile(
         user_id=user_id,
@@ -180,4 +219,5 @@ async def load_user_profile(user_id: str) -> UserProfile:
         sleep_time=_map_optional_enum(doc.get("sleepTime") or doc.get("sleep_time"), _SLEEP_MAP),
         hair_type=None,
         hair_concerns=[],
+        skin_tone_fitzpatrick=_map_skin_tone_fitzpatrick(doc),
     )

@@ -442,3 +442,26 @@ class TestAPIHealthEndpoint:
                 assert body.get("snapshot_version") == "1.0"
 
         asyncio.run(_call())
+
+    def test_history_and_catchup_routes_via_asgi(self):
+        try:
+            from httpx import ASGITransport, AsyncClient
+        except ImportError:
+            pytest.skip("httpx ASGITransport not available")
+
+        async def _call():
+            from app.main import app
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.get("/api/hlhp/history", params={"user_id": "guest-history-test"})
+                assert r.status_code == 200
+                body = r.json()
+                assert body["user_id"] == "guest-history-test"
+                assert "scan_count" in body
+
+                c = await client.get("/api/hlhp/catchup", params={"user_id": "guest-history-test"})
+                assert c.status_code == 200
+                assert c.json().get("paragraphs")
+
+        asyncio.run(_call())

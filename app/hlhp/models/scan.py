@@ -35,6 +35,19 @@ class ScanRequest(BaseModel):
         return self
 
 
+class WeatherScreenVariant(BaseModel):
+    screen: Optional[str] = None
+    weather_type: Optional[str] = None
+    background_image: Optional[str] = None
+    animal_image: Optional[str] = None
+
+
+class WeatherVisuals(BaseModel):
+    weather_type: Optional[str] = None
+    skin_care_tip: Optional[str] = None
+    screen_variants: list[WeatherScreenVariant] = Field(default_factory=list)
+
+
 class EnvSnapshot(BaseModel):
     user_id: Optional[str] = None
     city: str
@@ -108,6 +121,8 @@ class ScanResponse(BaseModel):
     candidate_alerts: list[AlertTile] = Field(default_factory=list)
     science_nugget: Optional[ScienceNuggetOut] = None
     profile_nudge: Optional[str] = None
+    weather_visuals: Optional[WeatherVisuals] = None
+    skin_care_tip: Optional[str] = None
 
 
 class SymptomTapRequest(BaseModel):

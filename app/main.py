@@ -64,6 +64,7 @@ from app.hlhp.api.alerts import router as hl_alerts_router
 from app.hlhp.api.personalized_alerts import router as hl_personalized_alerts_router
 from app.hlhp.api.scan import router as hlhp_scan_router
 from app.hlhp.api.composition import router as hlhp_composition_router
+from app.hlhp.api.weather import router as hlhp_weather_router
 
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
@@ -345,6 +346,7 @@ app.include_router(hl_alerts_router, prefix="/api")
 app.include_router(hl_personalized_alerts_router, prefix="/api")
 app.include_router(hlhp_scan_router, prefix="/api")
 app.include_router(hlhp_composition_router, prefix="/api")
+app.include_router(hlhp_weather_router, prefix="/api")
 
 # ✅ Add trend insights API
 if trend_insights_router is not None:

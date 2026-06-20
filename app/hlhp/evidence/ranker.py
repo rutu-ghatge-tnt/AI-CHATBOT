@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+from app.hlhp.core.bands import EnvironmentBands
+from app.hlhp.core.phase import DayPhase
+from app.hlhp.evidence.alert_quality import (
+    headline_slot_penalty,
+    is_publishable_finding,
+)
 from app.hlhp.evidence.matcher import count_matched_tokens
 from app.hlhp.evidence.models import EvidenceFinding
+from app.hlhp.models.profile import UserProfile
 
 _PRIORITY_BONUS = {"P0": 100.0, "P1": 50.0, "P2": 20.0}
 _INDIA_BONUS = 30.0
@@ -99,15 +106,27 @@ def rank_score(
 def rank_findings(
     candidates: list[EvidenceFinding],
     *,
-    profile,
+    profile: UserProfile | None,
     partial_personalised: bool = False,
-    day_phase="morning",
+    day_phase: DayPhase = "morning",
     guest_mode: bool = False,
+    bands: EnvironmentBands | None = None,
 ) -> list[tuple[EvidenceFinding, float, int]]:
     ranked: list[tuple[EvidenceFinding, float, int]] = []
     for finding in candidates:
+        if not is_publishable_finding(
+            finding, guest_mode=guest_mode, day_phase=day_phase
+        ):
+            continue
         matched = count_matched_tokens(finding, profile, partial_personalised)
         score = rank_score(finding, matched_filter_count=matched, profile=profile)
+        score += headline_slot_penalty(
+            finding,
+            profile,
+            bands,
+            guest_mode=guest_mode,
+            day_phase=day_phase,
+        )
         ranked.append((finding, score, matched))
     ranked.sort(
         key=lambda item: (
@@ -134,9 +153,18 @@ def select_fire_budget(
     *,
     headline_slots: int = 3,
     candidate_slots: int = 5,
+    guest_mode: bool = False,
+    day_phase: DayPhase = "morning",
 ) -> tuple[list[EvidenceFinding], list[EvidenceFinding]]:
     """v2 §13: 3 surfaced headlines + up to 5 swipe candidates."""
-    candidates = _select_diverse(ranked, max_slots=candidate_slots)
+    publishable = [
+        item
+        for item in ranked
+        if is_publishable_finding(
+            item[0], guest_mode=guest_mode, day_phase=day_phase
+        )
+    ]
+    candidates = _select_diverse(publishable, max_slots=candidate_slots)
     headlines = candidates[:headline_slots]
     return headlines, candidates
 

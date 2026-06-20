@@ -9,6 +9,7 @@ from app.hlhp.core.bands import bucketize_environment
 from app.hlhp.core.phase import DayPhase, phase_used_label, resolve_day_phase
 from app.hlhp.core.profile_mode import resolve_mode
 from app.hlhp.core.season import indian_season
+from app.hlhp.evidence.alert_quality import pick_display_l2, pick_did_you_know
 from app.hlhp.evidence.loader import get_evidence_store
 from app.hlhp.evidence.matcher import match_findings
 from app.hlhp.evidence.nuggets import rotate_nuggets
@@ -24,6 +25,7 @@ from app.hlhp.coach.state_store import (
     record_nugget_shown,
     record_surfaced_rules,
     record_symptom_tap,
+    _load_user_name,
 )
 from app.hlhp.coach.models import CoachWrap
 from app.hlhp.models.environmental import EnvironmentalData
@@ -38,16 +40,20 @@ from app.hlhp.models.scan import (
     SymptomChip,
     SymptomTapRequest,
     SymptomTapResponse,
+    WeatherVisuals,
 )
 from app.hlhp.services.outdoor_ok import compute_outdoor_ok, pick_mood_verdict
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.severity import severity_for_finding
 from app.hlhp.services.weather_fetcher import fetch_environmental_data
+from app.hlhp.services.weather_visuals import extract_weather_visuals
 from app.hlhp.composition.vocabulary import mood_headline, symptom_chips
 from app.hlhp.composition.forecast import forecast_oneliner
 from app.hlhp.composition.lane_state import resolve_lane_states
 from app.hlhp.composition.feeds import seasonal_tags_for_city
 from app.hlhp.composition.delta import compute_env_delta, match_sudden_breakout_alerts
+from app.hlhp.services.consent_store import env_logging_allowed
+from app.hlhp.services.scan_log_store import env_baseline_7d, record_scan_log
 
 _ROUTINE_LABELS = {
     "apply_sunscreen": "Broad-spectrum sunscreen as a daily habit",
@@ -131,7 +137,19 @@ def _concern_slug(profile: UserProfile | None) -> str | None:
     return mapping.get(c, c)
 
 
-def _scan_ui_enrichment(
+def _personalize_forecast(oneliner: str | None, first_name: str | None, guest_mode: bool) -> str | None:
+    if not oneliner:
+        return None
+    text = oneliner.strip()
+    if guest_mode or not first_name:
+        return text
+    lower = text.lower()
+    if lower.startswith(first_name.lower()):
+        return text
+    return f"{first_name}, {text[0].lower()}{text[1:]}" if text else text
+
+
+async def _scan_ui_enrichment(
     *,
     store,
     bands,
@@ -142,9 +160,15 @@ def _scan_ui_enrichment(
     profile: UserProfile | None,
     guest_mode: bool,
     alert_count: int,
+    user_id: Optional[str] = None,
 ) -> dict:
     concern = _concern_slug(profile)
-    delta = compute_env_delta(env.uv_index, env.temperature_c, env.aqi, env.humidity_pct)
+    baseline = None
+    if user_id:
+        baseline = await env_baseline_7d(user_id, before=local_time)
+    delta = compute_env_delta(
+        env.uv_index, env.temperature_c, env.aqi, env.humidity_pct, baseline=baseline
+    )
     sudden = list(seasonal_tags_for_city(city, local_time))
     sudden.extend(delta.sudden_tags)
     for row in match_sudden_breakout_alerts(
@@ -155,6 +179,13 @@ def _scan_ui_enrichment(
             sudden.append(ext.replace("_", " "))
 
     oneliner = forecast_oneliner(bands=bands, concern_id=concern, mood=mood)
+    first_name = ""
+    if user_id and profile and not guest_mode:
+        try:
+            first_name = await _load_user_name(user_id)
+        except Exception:
+            first_name = ""
+    oneliner = _personalize_forecast(oneliner, first_name or None, guest_mode)
 
     label = None
     if alert_count and concern:
@@ -174,6 +205,49 @@ def _scan_ui_enrichment(
         ),
         "sfi_factor_cards": _sfi_factor_cards(bands),
     }
+
+
+def _weather_fields(env: EnvironmentalData) -> dict:
+    visuals = extract_weather_visuals(env.raw_weather_payload)
+    return {
+        "weather_visuals": WeatherVisuals(**visuals),
+        "skin_care_tip": visuals.get("skin_care_tip"),
+    }
+
+
+async def _maybe_record_scan(
+    *,
+    req: ScanRequest,
+    response: ScanResponse,
+    env: EnvironmentalData,
+    profile: UserProfile | None,
+    guest_mode: bool,
+) -> None:
+    if not req.user_id or guest_mode:
+        return
+    if not await env_logging_allowed(req.user_id):
+        return
+    try:
+        await record_scan_log(
+            user_id=req.user_id,
+            scanned_at=req.local_time,
+            city=req.city,
+            mode=response.mode,
+            outdoor_ok_score=response.outdoor_ok_score,
+            mood_verdict=response.mood_verdict_today,
+            sudden_event_tags=response.sudden_event_tags,
+            uvi=env.uv_index,
+            temp_c=env.temperature_c,
+            aqi=env.aqi,
+            rh_pct=env.humidity_pct,
+            alert_rule_ids=[a.rule_id for a in response.alerts],
+            concern_id=_concern_slug(profile),
+            snapshot_version=response.snapshot_version,
+            latitude=req.latitude,
+            longitude=req.longitude,
+        )
+    except Exception:
+        pass
 
 
 async def resolve_environment(req) -> EnvironmentalData:
@@ -238,12 +312,13 @@ def _finding_to_tile(
     phase_label = phase_used_label(finding.time_of_day_phase, day_phase)
     action = finding.routine_action or ""
     how = _ROUTINE_LABELS.get(action, action.replace("_", " ").strip()) if action else None
-    did_you_know = finding.pick_l2() or None
+    l2 = pick_display_l2(finding)
+    did_you_know = pick_did_you_know(finding, l2=l2)
     return AlertTile(
         rule_id=finding.id,
         severity=severity_for_finding(finding, bands),
         l1=l1,
-        l2=finding.pick_l2(),
+        l2=l2,
         phase_used=phase_label,  # type: ignore[arg-type]
         mood_verdict_tag=finding.mood_verdict_tag or "",
         engagement_archetype=finding.engagement_archetype or "",
@@ -290,7 +365,7 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
 
     if not candidates:
         mood = pick_mood_verdict(bands)
-        ui = _scan_ui_enrichment(
+        ui = await _scan_ui_enrichment(
             store=store,
             bands=bands,
             mood=mood,
@@ -300,8 +375,9 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             profile=profile,
             guest_mode=guest_mode,
             alert_count=0,
+            user_id=req.user_id,
         )
-        return ScanResponse(
+        resp = ScanResponse(
             snapshot_version=str(store.version),
             workbook_version=ui.pop("workbook_version"),
             mode="guest" if guest_mode else "personalised",
@@ -311,8 +387,11 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             mood_verdict_today=mood,
             alerts=[],
             profile_nudge=_GUEST_NUDGE if guest_mode else None,
+            **_weather_fields(env),
             **ui,
         )
+        await _maybe_record_scan(req=req, response=resp, env=env, profile=profile, guest_mode=guest_mode)
+        return resp
 
     ranked = rank_findings(
         candidates,
@@ -320,6 +399,7 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         partial_personalised=partial,
         day_phase=day_phase,
         guest_mode=guest_mode,
+        bands=bands,
     )
 
     coach_ctx = None
@@ -336,17 +416,22 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         )
         candidates = filter_by_recency(candidates, coach_ctx.suppressed_rule_ids)
         ranked = rank_findings(
-        candidates,
-        profile=profile,
-        partial_personalised=partial,
-        day_phase=day_phase,
-        guest_mode=guest_mode,
-    )
+            candidates,
+            profile=profile,
+            partial_personalised=partial,
+            day_phase=day_phase,
+            guest_mode=guest_mode,
+            bands=bands,
+        )
         ranked = prefer_fresh_archetypes(ranked, coach_ctx.recent_archetypes)
         if req.latitude is not None and req.longitude is not None:
             forecast = await get_forecast(req.latitude, req.longitude)
 
-    headlines, swipe_candidates = select_fire_budget(ranked)
+    headlines, swipe_candidates = select_fire_budget(
+        ranked,
+        guest_mode=guest_mode,
+        day_phase=day_phase,
+    )
 
     primary_tag = headlines[0].mood_verdict_tag if headlines else ""
     mood = pick_mood_verdict(bands, primary_tag)
@@ -415,7 +500,7 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             n = rotated[0]
             nugget_out = ScienceNuggetOut(id=n.id, text=n.text, factor=n.factor, source=n.source)
 
-    ui = _scan_ui_enrichment(
+    ui = await _scan_ui_enrichment(
         store=store,
         bands=bands,
         mood=mood,
@@ -425,9 +510,10 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         profile=profile,
         guest_mode=guest_mode,
         alert_count=len(alerts),
+        user_id=req.user_id,
     )
 
-    return ScanResponse(
+    resp = ScanResponse(
         snapshot_version=str(store.version),
         workbook_version=ui.pop("workbook_version"),
         mode="guest" if guest_mode else "personalised",
@@ -439,8 +525,11 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         candidate_alerts=candidate_tiles,
         science_nugget=nugget_out,
         profile_nudge=_GUEST_NUDGE if guest_mode else None,
+        **_weather_fields(env),
         **ui,
     )
+    await _maybe_record_scan(req=req, response=resp, env=env, profile=profile, guest_mode=guest_mode)
+    return resp
 
 
 async def run_symptom_tap(req: SymptomTapRequest) -> SymptomTapResponse:

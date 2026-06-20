@@ -11,7 +11,10 @@ from app.hlhp.composition.explore import assemble_event_guides, assemble_explore
 from app.hlhp.composition.forecast import assemble_week_ahead
 from app.hlhp.composition.symptom import assemble_symptom_explainer
 from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.models.history import ConsentRequest, ConsentResponse, ConsentStatusResponse
 from app.hlhp.models.scan import ScanRequest
+from app.hlhp.services.consent_store import get_consent, upsert_consent
+from app.hlhp.services.history_service import assemble_catchup, assemble_history
 from app.hlhp.services.scan_service import resolve_environment
 
 router = APIRouter(prefix="/hlhp", tags=["HLHP v2 — Composition"])
@@ -76,12 +79,19 @@ async def week_ahead(
 
 @router.get("/history")
 async def history_lane(user_id: str = Query(...), days: int = Query(30, ge=1, le=90)):
-    """Placeholder — requires scan_log collection (Phase 1.5)."""
-    return {
-        "user_id": user_id,
-        "days": days,
-        "sfi_average": None,
-        "sudden_events": [],
-        "message": "History builds after scan_log is wired.",
-        "workbook_version": get_evidence_store().workbook_version,
-    }
+    return await assemble_history(user_id, days=days)
+
+
+@router.get("/catchup")
+async def catchup_lane(user_id: str = Query(...), days: int = Query(30, ge=1, le=90)):
+    return await assemble_catchup(user_id, days=days)
+
+
+@router.post("/consent", response_model=ConsentResponse)
+async def record_consent(body: ConsentRequest):
+    return await upsert_consent(body)
+
+
+@router.get("/consent", response_model=ConsentStatusResponse)
+async def read_consent(user_id: str = Query(...)):
+    return await get_consent(user_id)

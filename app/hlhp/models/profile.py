@@ -109,9 +109,12 @@ class UserProfile(BaseModel):
     sleep_time: Optional[SleepTime] = None
     hair_type: Optional[HairType] = None
     hair_concerns: list[HairConcern] = Field(default_factory=list, max_length=3)
+    skin_tone_fitzpatrick: Optional[int] = Field(None, ge=1, le=6)
 
     @property
     def fitzpatrick_type(self) -> int:
+        if self.skin_tone_fitzpatrick is not None:
+            return self.skin_tone_fitzpatrick
         return _SKIN_TYPE_TO_FITZPATRICK.get(self.skin_type, 4)
 
     @property
