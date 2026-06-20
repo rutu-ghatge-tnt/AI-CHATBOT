@@ -770,9 +770,27 @@ async def _find_cached_non_personalized_analysis(
     return doc
 
 
+def _user_product_scan_filter(
+    *,
+    user: dict[str, Any],
+    user_id: Any,
+    product_ref: Any,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Owner filter plus product id — matches userId and legacy userProfileUrl rows."""
+    owner = user_owned_scans_filter(user=user, user_id=user_id)
+    product_clause: dict[str, Any] = {"productId": product_ref}
+    if extra:
+        product_clause.update(extra)
+    if "$or" in owner:
+        return {"$and": [owner, product_clause]}
+    return {**owner, **product_clause}
+
+
 async def _find_user_product_existing_analysis(
     *,
     scan_coll: AsyncIOMotorCollection,
+    user: dict[str, Any] | None,
     user_id: Any | None,
     product_ref: Any | None,
 ) -> dict[str, Any] | None:
@@ -781,15 +799,18 @@ async def _find_user_product_existing_analysis(
     Used to reuse analysis on public PDP when user is logged in, without
     forcing authenticated-only endpoints.
     """
-    if user_id is None or product_ref is None:
+    if user_id is None or product_ref is None or user is None:
         return None
     doc = await scan_coll.find_one(
-        {
-            "userId": user_id,
-            "productId": product_ref,
-            "analyticDetail": {"$exists": True, "$ne": None},
-            "ingredientAnalysisError": None,
-        },
+        _user_product_scan_filter(
+            user=user,
+            user_id=user_id,
+            product_ref=product_ref,
+            extra={
+                "analyticDetail": {"$exists": True, "$ne": None},
+                "ingredientAnalysisError": None,
+            },
+        ),
         sort=[("updatedAt", -1)],
     )
     if not doc:
@@ -1377,33 +1398,95 @@ async def _ingredient_analysis_from_text_impl(
             raise ScannerApiError(401, "Please login to use personalized matching")
         personalization_context = _build_personalization_context(details or {})
 
+    # Prefer latest successful analysis for same user+product when available.
+    # Enables PDP reuse without creating a new scan row or consuming daily quota.
+    existing_user_product = await _find_user_product_existing_analysis(
+        scan_coll=scan_coll,
+        user=user,
+        user_id=user_id,
+        product_ref=product_id_ref,
+    )
+    if existing_user_product:
+        existing_analytic = dict(existing_user_product.get("analyticDetail") or {})
+        if existing_analytic:
+            existing_ingredients = existing_user_product.get("ingredients")
+            if not isinstance(existing_ingredients, list):
+                existing_ingredients = []
+            ingredients_out = ing_list if ing_list else existing_ingredients
+            profile_validation = None
+            if user_id is not None and not body.get("_orchestration"):
+                mode = _resolve_analysis_mode(
+                    body=body,
+                    product=product,
+                    specific_type=body.get("specificType"),
+                    main_benefit=body.get("mainBenefit"),
+                )
+                mode_state = await _upsert_validation_state(
+                    user_details_coll=user_details_coll,
+                    user_id=user_id,
+                    mode=mode,
+                    bump_scan_count=False,
+                    details_doc=details,
+                )
+                profile_validation = _build_prompt_payload(
+                    mode=mode,
+                    mode_state=mode_state,
+                    details=details or {},
+                    force_prompt_if_missing=False,
+                )
+            return {
+                "scanId": str(existing_user_product.get("_id")),
+                "analyticDetail": existing_analytic,
+                "ingredients": ingredients_out,
+                "profileValidation": profile_validation,
+                "cacheHit": True,
+                "cacheType": "user_product",
+            }
+
+    from app.label_looker.services.label_looker_scan_store import find_user_product_scan
+
+    orchestration = bool(body.get("_orchestration"))
+    reuse_row = None
+    if orchestration and product_id_ref is not None and user_id is not None:
+        reuse_row = await find_user_product_scan(
+            scan_coll=scan_coll,
+            user=user,
+            user_id=user_id,
+            product_ref=product_id_ref,
+            require_match=False,
+        )
+
     now = datetime.now()
-    scan_doc = {
-        "userId": user_id,
-        "firstName": (user or {}).get("firstName"),
-        "lastName": (user or {}).get("lastName"),
-        "userProfileUrl": (user or {}).get("profileUrl"),
-        "extractedIngredients": ing_list,
-        "scansLeft": None,
-        "scanImageError": None,
-        "ingredientAnalysisError": None,
-        "sourceType": "text",
-        "productId": product_id_ref,
-        "scanPhase": "analysis",
-        "createdAt": now,
-        "updatedAt": now,
-    }
-    ins = await scan_coll.insert_one(scan_doc)
-    scan_id = ins.inserted_id
-    await scan_detail_coll.insert_one(
-        {
-            "scanAnalysisId": scan_id,
-            "sourceType": "text",
+    if reuse_row is not None:
+        scan_id = reuse_row["_id"]
+    else:
+        scan_doc = {
+            "userId": user_id,
+            "firstName": (user or {}).get("firstName"),
+            "lastName": (user or {}).get("lastName"),
+            "userProfileUrl": (user or {}).get("profileUrl"),
             "extractedIngredients": ing_list,
+            "scansLeft": None,
+            "scanImageError": None,
+            "ingredientAnalysisError": None,
+            "sourceType": "text",
+            "productId": product_id_ref,
+            "scanPhase": "analysis",
+            "labelLookerUnified": orchestration,
             "createdAt": now,
             "updatedAt": now,
         }
-    )
+        ins = await scan_coll.insert_one(scan_doc)
+        scan_id = ins.inserted_id
+        await scan_detail_coll.insert_one(
+            {
+                "scanAnalysisId": scan_id,
+                "sourceType": "text",
+                "extractedIngredients": ing_list,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        )
 
     prefetched = await _resolve_prefetched_product_analysis(
         product_ref=product_id_ref,
@@ -1799,10 +1882,17 @@ async def user_scan_by_id(*, scan_id: str, user: dict[str, Any] | None) -> dict[
     return out
 
 
-async def user_scan_list(*, user: dict[str, Any] | None, skip: int = 0, limit: int = 20) -> list[dict[str, Any]]:
+async def user_scan_list(
+    *,
+    user: dict[str, Any] | None,
+    skip: int = 0,
+    limit: int = 20,
+    product_id: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Fetch authenticated user's scans for history/refresh flows.
     When no auth, return an empty list so PDP prefetch does not trip global 401 → login redirects.
+    Optional product_id narrows to scans for one catalog product (PDP reload).
     """
     if user is None:
         return []
@@ -1816,8 +1906,13 @@ async def user_scan_list(*, user: dict[str, Any] | None, skip: int = 0, limit: i
     db = get_scanner_db()
     scan_coll: AsyncIOMotorCollection = db[s.coll_scan_analysis]
     products_coll: AsyncIOMotorCollection = db[s.coll_products]
+    product_ref = _normalize_product_ref(product_id) if product_id and str(product_id).strip() else None
+    if product_ref is not None:
+        query = _user_product_scan_filter(user=user, user_id=user_id, product_ref=product_ref)
+    else:
+        query = user_owned_scans_filter(user=user, user_id=user_id)
     cursor = (
-        scan_coll.find(user_owned_scans_filter(user=user, user_id=user_id))
+        scan_coll.find(query)
         .sort("createdAt", -1)
         .skip(max(0, int(skip)))
         .limit(max(1, min(int(limit), 100)))

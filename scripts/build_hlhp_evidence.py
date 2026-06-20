@@ -82,6 +82,7 @@ def main() -> int:
         print(
             f"Validation: voice={len(br.get('voice_violations', []))}, "
             f"citations={len(br.get('citation_issues', []))}, "
+            f"gates={br.get('gate_failure_count', 0)}, "
             f"coverage_gaps={cov.get('true_gap_count', 0)}"
         )
     if filter_updates:
@@ -90,6 +91,18 @@ def main() -> int:
         print(f"Auto-fixes ({len(snapshot['build_autofixes'])}):")
         for fix in snapshot["build_autofixes"][:5]:
             print(f"  + {fix}")
+    gate_failures = br.get("gate_failures", [])
+    if gate_failures:
+        gates_path = args.report.parent / "gates_failed.tsv"
+        lines = ["row_id\trule\tdetail"]
+        for g in gate_failures[:500]:
+            lines.append(f"{g.get('row_id', '')}\t{g.get('rule', '')}\t{g.get('detail', '')}")
+        gates_path.write_text("\n".join(lines), encoding="utf-8")
+        print(f"Gate failures ({len(gate_failures)}) -> {gates_path}")
+        for g in gate_failures[:10]:
+            print(f"  ! {g.get('row_id')}: {g.get('rule')} — {g.get('detail')}")
+        if args.strict:
+            return 1
     if snapshot["build_warnings"]:
         print(f"Warnings ({len(snapshot['build_warnings'])}):")
         for w in snapshot["build_warnings"][:10]:

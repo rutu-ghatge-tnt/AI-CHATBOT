@@ -73,9 +73,13 @@ def build_public_text_router(
     async def user_analysis_list(
         skip: int = Query(0, ge=0),
         limit: int = Query(20, ge=1, le=100),
+        productId: str | None = Query(None, alias="productId"),
         user: dict[str, Any] = Depends(auth_user),
     ):
-        return api_success(await service.user_scan_list(user=user, skip=skip, limit=limit), message="Success")
+        return api_success(
+            await service.user_scan_list(user=user, skip=skip, limit=limit, product_id=productId),
+            message="Success",
+        )
 
     return r
 

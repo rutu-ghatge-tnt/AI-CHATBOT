@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import re
 from typing import Optional
 
+from app.hlhp.core.phase import DayPhase, matches_time_of_day
+from app.hlhp.core.trigger_bands import normalize_rh_band, season_match_tags
 from app.hlhp.core.bands import EnvironmentBands
 from app.hlhp.evidence.index import EvidenceIndex
-from app.hlhp.evidence.gates import guest_gate_blocks, night_gate_blocks
+from app.hlhp.evidence.gates import (
+    guest_gate_blocks,
+    internal_gate_blocks,
+    night_gate_blocks,
+)
 from app.hlhp.evidence.models import EvidenceFinding, UserFilterToken
 from app.hlhp.models.profile import (
     AgeBracket,
@@ -39,6 +46,15 @@ _AGE_BRACKET_RANGES: dict[AgeBracket, tuple[int, int]] = {
     AgeBracket.AGE_50_PLUS: (50, 120),
 }
 
+# v2 captured-profile age bands (spec §2)
+_V2_AGE_BAND_RANGES: dict[str, tuple[int, int]] = {
+    "adolescent_15_19": (13, 19),
+    "young_adult_20_24": (20, 24),
+    "adult_25_44": (25, 44),
+    "mature_45_49": (45, 49),
+    "mature_50_plus": (50, 120),
+}
+
 _SLEEP_BANDS: dict[SleepTime, str] = {
     SleepTime.LESS_THAN_5H: "severely_deprived",
     SleepTime.H5_6H: "deprived",
@@ -51,28 +67,56 @@ _SLEEP_BANDS: dict[SleepTime, str] = {
 def _band_matches(allowed: tuple[str, ...], current: str) -> bool:
     if not allowed or allowed == ("any",):
         return True
-    return current in allowed
+    if current in allowed:
+        return True
+    # RH v1/v2 alias: moderate ↔ comfortable
+    if normalize_rh_band(current) in {normalize_rh_band(a) for a in allowed}:
+        return True
+    return False
+
+
+def _season_matches(allowed: tuple[str, ...], current: str) -> bool:
+    if not allowed or allowed == ("any",):
+        return True
+    current_tags = season_match_tags(current)
+    for band in allowed:
+        if band in current_tags or current in season_match_tags(band):
+            return True
+    return False
 
 
 def _parse_age_range(value: str) -> tuple[int, int] | None:
     value = value.strip().lower()
     if value in {"all", "any"}:
         return None
+    if value in _V2_AGE_BAND_RANGES:
+        return _V2_AGE_BAND_RANGES[value]
     if value.endswith("+"):
         return int(value[:-1]), 120
-    if "-" in value:
+    if "-" in value and value[0].isdigit():
         lo, hi = value.split("-", 1)
         return int(lo), int(hi)
-    return int(value), int(value)
+    if value.isdigit():
+        n = int(value)
+        return n, n
+    return None
 
 
 def _age_overlaps(profile: UserProfile, filter_value: str) -> bool:
-    parsed = _parse_age_range(filter_value)
-    if parsed is None:
-        return True
-    p_lo, p_hi = _AGE_BRACKET_RANGES[profile.age_bracket]
-    f_lo, f_hi = parsed
-    return p_lo <= f_hi and f_lo <= p_hi
+    # Workbook may list multiple bands separated by ; or ,
+    parts = re.split(r"[;,]", filter_value)
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        parsed = _parse_age_range(part)
+        if parsed is None:
+            continue
+        p_lo, p_hi = _AGE_BRACKET_RANGES[profile.age_bracket]
+        f_lo, f_hi = parsed
+        if p_lo <= f_hi and f_lo <= p_hi:
+            return True
+    return False
 
 
 def _concern_values(profile: UserProfile) -> set[str]:
@@ -181,14 +225,17 @@ def matches_finding(
     profile: Optional[UserProfile],
     guest_mode: bool,
     partial_personalised: bool = False,
+    day_phase: DayPhase = "morning",
 ) -> bool:
-    if finding.never_fire:
+    if finding.never_fire or internal_gate_blocks(finding):
+        return False
+    if not matches_time_of_day(finding.time_of_day_phase, day_phase):
         return False
     if night_gate_blocks(finding, bands.uvi):
         return False
     if guest_gate_blocks(finding, guest_mode):
         return False
-    if not _band_matches(finding.season_bands, season):
+    if not _season_matches(finding.season_bands, season):
         return False
     if not _band_matches(finding.uvi_bands, bands.uvi):
         return False
@@ -215,6 +262,7 @@ def match_findings(
     guest_mode: bool = True,
     partial_personalised: bool = False,
     index: EvidenceIndex | None = None,
+    day_phase: DayPhase = "morning",
 ) -> list[EvidenceFinding]:
     if index is not None:
         candidate_ids = index.candidate_ids(
@@ -237,5 +285,6 @@ def match_findings(
             profile=profile,
             guest_mode=guest_mode,
             partial_personalised=partial_personalised,
+            day_phase=day_phase,
         )
     ]

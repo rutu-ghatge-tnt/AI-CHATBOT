@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-16T10:59:12.057372+00:00",
+  "generated_at": "2026-06-19T05:58:08.201477+00:00",
   "source_workbook": "HLHP_Evidence_Base.xlsx",
   "sheets_exported": [
     "README",
@@ -16,7 +16,7 @@
     "Coverage_Matrix"
   ],
   "counts": {
-    "findings": 507,
+    "findings": 1831,
     "science_nuggets": 18,
     "book_inventory": 256,
     "glossary": 42,
@@ -28,17 +28,84 @@
     "UV-2: sanitised alert_l1_personalised",
     "UV-37: sanitised alert_l1_personalised",
     "UV-51: sanitised alert_l1_guest",
+    "UV-153: sanitised alert_l1_personalised",
+    "UV-202: sanitised alert_l1_personalised",
+    "UV-206: sanitised alert_l1_personalised",
+    "UV-207: sanitised alert_l1_personalised",
+    "UV-210: sanitised alert_l1_personalised",
+    "UV-211: sanitised alert_l1_personalised",
+    "UV-230: sanitised alert_l1_personalised",
+    "UV-234: sanitised alert_l1_personalised",
+    "UV-238: sanitised alert_l1_personalised",
+    "UV-250: sanitised alert_l1_personalised",
+    "UV-251: sanitised alert_l1_personalised",
+    "UV-262: sanitised alert_l1_personalised",
+    "UV-290: sanitised alert_l1_guest",
+    "UV-290: sanitised alert_l1_personalised",
+    "UV-302: sanitised alert_l1_guest",
+    "UV-302: sanitised alert_l1_personalised",
+    "UV-310: sanitised alert_l1_guest",
+    "UV-310: sanitised alert_l1_personalised",
+    "UV-341: sanitised alert_l1_guest",
+    "UV-341: sanitised alert_l1_personalised",
+    "UV-363: sanitised alert_l1_guest",
+    "UV-363: sanitised alert_l1_personalised",
+    "UV-413: sanitised alert_l1_guest",
+    "UV-415: sanitised alert_l1_guest",
+    "UV-415: sanitised alert_l1_personalised",
+    "UV-445: sanitised alert_l1_personalised",
+    "UV-453: sanitised alert_l1_guest",
+    "UV-453: sanitised alert_l1_personalised",
+    "UV-480: sanitised alert_l1_personalised",
+    "UV-695: sanitised alert_l1_guest",
+    "UV-695: sanitised alert_l1_personalised",
     "TEM-16: sanitised alert_l1_guest",
     "TEM-16: sanitised alert_l1_personalised",
     "TEM-25: sanitised alert_l1_guest",
     "TEM-25: sanitised alert_l1_personalised",
+    "TEM-36: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-49: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-52: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-57: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-62: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-98: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
     "HUM-14: sanitised alert_l1_guest",
     "HUM-14: sanitised alert_l1_personalised",
     "HUM-42: sanitised alert_l1_guest",
     "HUM-42: sanitised alert_l1_personalised",
     "HUM-74: sanitised alert_l1_guest",
+    "HUM-147: sanitised alert_l1_guest",
+    "HUM-147: sanitised alert_l1_personalised",
+    "HUM-148: sanitised alert_l1_guest",
+    "HUM-148: sanitised alert_l1_personalised",
+    "HUM-166: sanitised alert_l1_guest",
+    "HUM-168: sanitised alert_l1_guest",
+    "HUM-168: sanitised alert_l1_personalised",
+    "HUM-173: sanitised alert_l1_guest",
+    "HUM-173: sanitised alert_l1_personalised",
+    "HUM-174: sanitised alert_l1_guest",
+    "HUM-174: sanitised alert_l1_personalised",
+    "HUM-176: sanitised alert_l1_guest",
+    "HUM-176: sanitised alert_l1_personalised",
+    "HUM-178: sanitised alert_l1_guest",
+    "HUM-178: sanitised alert_l1_personalised",
+    "HUM-205: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-4: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
     "POL-45: sanitised alert_l1_guest",
     "POL-45: sanitised alert_l1_personalised",
+    "POL-48: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-61: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-62: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-63: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-72: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-73: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-84: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-86: sanitised alert_l1_personalised",
+    "POL-86: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-89: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-156: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-187: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-188: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
     "NUT-4: sanitised alert_l1_personalised",
     "NUT-8: sanitised alert_l1_personalised",
     "NUT-13: sanitised alert_l1_guest",
@@ -54,18 +121,372 @@
     "NUT-55: sanitised alert_l1_personalised",
     "NUT-56: sanitised alert_l1_guest",
     "NUT-56: sanitised alert_l1_personalised",
+    "NUT-102: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-103: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-106: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-110: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-114: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-122: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-144: sanitised alert_l1_personalised",
+    "NUT-148: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
     "LIF-28: sanitised alert_l1_guest",
     "LIF-28: sanitised alert_l1_personalised",
     "LIF-32: sanitised alert_l1_guest",
     "LIF-32: sanitised alert_l1_personalised",
     "LIF-33: sanitised alert_l1_personalised",
+    "LIF-54: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
     "LIF-57: sanitised alert_l1_guest",
-    "LIF-57: sanitised alert_l1_personalised"
+    "LIF-57: sanitised alert_l1_personalised",
+    "LIF-87: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-97: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-98: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-99: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-121: sanitised alert_l1_guest",
+    "LIF-121: sanitised alert_l1_personalised",
+    "LIF-125: sanitised alert_l1_personalised",
+    "LIF-145: sanitised alert_l1_guest",
+    "LIF-145: sanitised alert_l1_personalised",
+    "LIF-162: sanitised alert_l1_guest",
+    "LIF-162: sanitised alert_l1_personalised",
+    "LIF-178: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-179: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-181: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-192: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-195: sanitised alert_l1_guest",
+    "LIF-195: sanitised alert_l1_personalised",
+    "LIF-195: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-197: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-218: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)"
   ],
   "build_warnings": [],
   "build_report": {
-    "voice_violations": [],
-    "citation_issues": [],
+    "voice_violations": [
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-172",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-175",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'NLRP3 inflammasome'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-194",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-258",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IGF-1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      }
+    ],
+    "citation_issues": [
+      {
+        "row_id": "UV-208",
+        "rule": "book_not_in_inventory",
+        "detail": "source '2022 1st ed' not matched in Book Inventory"
+      }
+    ],
+    "gate_failures": [
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-172",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-175",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'NLRP3 inflammasome'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-194",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-258",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IGF-1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      },
+      {
+        "row_id": "UV-208",
+        "rule": "book_not_in_inventory",
+        "detail": "source '2022 1st ed' not matched in Book Inventory"
+      },
+      {
+        "row_id": "UV-5",
+        "rule": "evening_l1",
+        "detail": "missing alert_l1_evening_personalised"
+      },
+      {
+        "row_id": "UV-5",
+        "rule": "evening_l1",
+        "detail": "missing alert_l1_evening_guest"
+      }
+    ],
+    "gate_failure_count": 28,
     "coverage_report": {
       "methodology": "Rule-based coverage from Trigger_User_Filter tokens and concern aliases.",
       "computed_grids": [
@@ -82,61 +503,61 @@
             {
               "trigger": "UV",
               "counts": [
-                126,
-                124,
-                124,
-                124,
-                136
+                491,
+                484,
+                484,
+                484,
+                676
               ]
             },
             {
               "trigger": "Temperature",
               "counts": [
-                27,
-                26,
-                30,
-                31,
-                29
+                65,
+                58,
+                62,
+                74,
+                93
               ]
             },
             {
               "trigger": "Humidity",
               "counts": [
-                76,
-                53,
-                56,
-                60,
-                61
+                157,
+                102,
+                105,
+                111,
+                186
               ]
             },
             {
               "trigger": "Pollution",
               "counts": [
-                51,
-                52,
-                56,
-                52,
-                57
+                157,
+                145,
+                150,
+                145,
+                209
               ]
             },
             {
               "trigger": "Sleep",
               "counts": [
-                40,
-                36,
-                43,
-                47,
-                69
+                145,
+                127,
+                134,
+                140,
+                270
               ]
             },
             {
               "trigger": "Stress",
               "counts": [
-                40,
-                36,
-                43,
-                47,
-                69
+                145,
+                127,
+                134,
+                140,
+                270
               ]
             }
           ]
@@ -163,115 +584,115 @@
             {
               "trigger": "UV",
               "counts": [
-                1,
-                33,
-                24,
-                1,
-                5,
-                8,
                 6,
-                5,
+                70,
+                43,
                 1,
-                6,
+                7,
+                32,
+                21,
+                34,
                 1,
-                1,
-                1,
-                6
+                7,
+                2,
+                2,
+                3,
+                13
               ]
             },
             {
               "trigger": "Temperature",
               "counts": [
+                18,
                 5,
-                1,
-                1,
-                1,
-                1,
-                1,
-                4,
                 4,
                 1,
+                3,
+                6,
+                24,
+                27,
+                2,
+                2,
+                7,
                 1,
-                4,
-                1,
-                1,
-                3
+                2,
+                18
               ]
             },
             {
               "trigger": "Humidity",
               "counts": [
                 3,
-                1,
-                1,
+                2,
+                5,
                 1,
                 3,
-                3,
-                17,
-                10,
+                7,
+                45,
+                43,
                 1,
                 1,
-                13,
+                19,
                 1,
                 1,
-                1
+                9
               ]
             },
             {
               "trigger": "Pollution",
               "counts": [
-                4,
-                2,
+                8,
+                8,
+                15,
+                1,
+                8,
                 12,
-                1,
-                8,
-                8,
-                2,
-                1,
+                33,
+                34,
                 1,
                 1,
                 2,
                 1,
                 5,
-                1
+                13
               ]
             },
             {
               "trigger": "Sleep",
               "counts": [
-                22,
-                2,
-                2,
+                39,
+                19,
+                6,
                 1,
                 14,
-                15,
-                20,
-                20,
+                16,
+                67,
+                72,
                 1,
-                9,
+                12,
                 1,
                 1,
-                14,
-                15
+                29,
+                42
               ]
             },
             {
               "trigger": "Stress",
               "counts": [
-                22,
-                2,
-                2,
+                39,
+                19,
+                6,
                 1,
                 14,
-                15,
-                20,
-                20,
+                16,
+                67,
+                72,
                 1,
-                9,
+                12,
                 1,
                 1,
-                14,
-                15
+                29,
+                42
               ]
             }
           ]
@@ -286,43 +707,43 @@
             {
               "trigger": "UV",
               "counts": [
-                27,
-                1
+                63,
+                3
               ]
             },
             {
               "trigger": "Temperature",
               "counts": [
-                2,
+                9,
                 1
               ]
             },
             {
               "trigger": "Humidity",
               "counts": [
-                12,
+                19,
                 1
               ]
             },
             {
               "trigger": "Pollution",
               "counts": [
-                6,
+                16,
                 1
               ]
             },
             {
               "trigger": "Sleep",
               "counts": [
-                33,
-                1
+                97,
+                5
               ]
             },
             {
               "trigger": "Stress",
               "counts": [
-                33,
-                1
+                97,
+                5
               ]
             }
           ]
@@ -339,7 +760,7 @@
             {
               "trigger": "UV",
               "counts": [
-                3,
+                36,
                 19,
                 6,
                 1
@@ -348,7 +769,7 @@
             {
               "trigger": "Temperature",
               "counts": [
-                1,
+                4,
                 1,
                 2,
                 3
@@ -357,7 +778,7 @@
             {
               "trigger": "Humidity",
               "counts": [
-                2,
+                11,
                 1,
                 12,
                 4
@@ -366,7 +787,7 @@
             {
               "trigger": "Pollution",
               "counts": [
-                1,
+                15,
                 6,
                 3,
                 1
@@ -375,7 +796,7 @@
             {
               "trigger": "Sleep",
               "counts": [
-                12,
+                25,
                 13,
                 5,
                 2
@@ -384,7 +805,7 @@
             {
               "trigger": "Stress",
               "counts": [
-                12,
+                25,
                 13,
                 5,
                 2
@@ -399,13 +820,6 @@
         {
           "grid": "Trigger × Skin Concern",
           "trigger": "UV",
-          "column": "acne",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "UV",
           "column": "tan",
           "computed_count": 1,
           "status": "thin"
@@ -421,35 +835,14 @@
           "grid": "Trigger × Skin Concern",
           "trigger": "UV",
           "column": "dehydration",
-          "computed_count": 1,
+          "computed_count": 2,
           "status": "thin"
         },
         {
           "grid": "Trigger × Skin Concern",
           "trigger": "UV",
           "column": "large_pores",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "UV",
-          "column": "hair_loss",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Temperature",
-          "column": "melasma",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Temperature",
-          "column": "pigmentation",
-          "computed_count": 1,
+          "computed_count": 2,
           "status": "thin"
         },
         {
@@ -462,29 +855,15 @@
         {
           "grid": "Trigger × Skin Concern",
           "trigger": "Temperature",
-          "column": "aging",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Temperature",
-          "column": "photoaging",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Temperature",
           "column": "dullness",
-          "computed_count": 1,
+          "computed_count": 2,
           "status": "thin"
         },
         {
           "grid": "Trigger × Skin Concern",
           "trigger": "Temperature",
           "column": "dark_circles",
-          "computed_count": 1,
+          "computed_count": 2,
           "status": "thin"
         },
         {
@@ -498,21 +877,14 @@
           "grid": "Trigger × Skin Concern",
           "trigger": "Temperature",
           "column": "hair_loss",
-          "computed_count": 1,
+          "computed_count": 2,
           "status": "thin"
         },
         {
           "grid": "Trigger × Skin Concern",
           "trigger": "Humidity",
           "column": "melasma",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Humidity",
-          "column": "pigmentation",
-          "computed_count": 1,
+          "computed_count": 2,
           "status": "thin"
         },
         {
@@ -552,36 +924,8 @@
         },
         {
           "grid": "Trigger × Skin Concern",
-          "trigger": "Humidity",
-          "column": "rosacea",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Pollution",
-          "column": "melasma",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
           "trigger": "Pollution",
           "column": "tan",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Pollution",
-          "column": "eczema",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Pollution",
-          "column": "psoriasis",
           "computed_count": 1,
           "status": "thin"
         },
@@ -615,27 +959,6 @@
         },
         {
           "grid": "Trigger × Skin Concern",
-          "trigger": "Pollution",
-          "column": "rosacea",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Sleep",
-          "column": "melasma",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Sleep",
-          "column": "pigmentation",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
           "trigger": "Sleep",
           "column": "tan",
           "computed_count": 1,
@@ -665,20 +988,6 @@
         {
           "grid": "Trigger × Skin Concern",
           "trigger": "Stress",
-          "column": "melasma",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Stress",
-          "column": "pigmentation",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Skin Concern",
-          "trigger": "Stress",
           "column": "tan",
           "computed_count": 1,
           "status": "thin"
@@ -702,20 +1011,6 @@
           "trigger": "Stress",
           "column": "large_pores",
           "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Gender",
-          "trigger": "UV",
-          "column": "male",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Gender",
-          "trigger": "Temperature",
-          "column": "female",
-          "computed_count": 2,
           "status": "thin"
         },
         {
@@ -735,20 +1030,6 @@
         {
           "grid": "Trigger × Gender",
           "trigger": "Pollution",
-          "column": "male",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Gender",
-          "trigger": "Sleep",
-          "column": "male",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Gender",
-          "trigger": "Stress",
           "column": "male",
           "computed_count": 1,
           "status": "thin"
@@ -757,13 +1038,6 @@
           "grid": "Trigger × Age band",
           "trigger": "UV",
           "column": "60+",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Age band",
-          "trigger": "Temperature",
-          "column": "18-25",
           "computed_count": 1,
           "status": "thin"
         },
@@ -784,21 +1058,7 @@
         {
           "grid": "Trigger × Age band",
           "trigger": "Humidity",
-          "column": "18-25",
-          "computed_count": 2,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Age band",
-          "trigger": "Humidity",
           "column": "25-40",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Age band",
-          "trigger": "Pollution",
-          "column": "18-25",
           "computed_count": 1,
           "status": "thin"
         },

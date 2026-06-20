@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.label_looker.core.errors import ScannerApiError
+from app.label_looker.modules.label_looker_orchestration.routes import build_label_looker_router
 from app.label_looker.modules.match_my_profile.routes import build_router as profile_match_routes
 from app.label_looker.modules.product_analysis.routes import (
     build_admin_router as admin_router,
@@ -67,6 +68,11 @@ def install_label_looker(app: FastAPI) -> None:
     )
     app.include_router(admin_router(), prefix="/scanner", tags=["Label Looker — panel /scanner"])
     app.include_router(
+        build_label_looker_router(scanner_auth_sso),
+        prefix="/scanner",
+        tags=["Label Looker — orchestration /scanner"],
+    )
+    app.include_router(
         _scanner_routes(authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
@@ -75,6 +81,11 @@ def install_label_looker(app: FastAPI) -> None:
         public_text_routes(authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
+    )
+    app.include_router(
+        build_label_looker_router(authenticate_any_user),
+        prefix="/api/v1/scanner",
+        tags=["Label Looker — orchestration /api/v1/scanner"],
     )
     app.include_router(
         profile_match_routes(authenticate_any_user),

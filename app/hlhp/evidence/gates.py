@@ -14,12 +14,20 @@ def mentions_sunscreen(text: str) -> bool:
 def night_gate_blocks(finding: EvidenceFinding, uvi_band: str) -> bool:
     if uvi_band != "off":
         return False
-    return mentions_sunscreen(finding.alert_l1_guest) or mentions_sunscreen(
-        finding.alert_l1_personalised
+    texts = (
+        finding.alert_l1_guest,
+        finding.alert_l1_personalised,
+        finding.alert_l1_evening_guest,
+        finding.alert_l1_evening_personalised,
     )
+    return any(mentions_sunscreen(t) for t in texts)
 
 
 def guest_gate_blocks(finding: EvidenceFinding, guest_mode: bool) -> bool:
     if not guest_mode:
         return False
     return len(finding.user_filter) > 0
+
+
+def internal_gate_blocks(finding: EvidenceFinding) -> bool:
+    return not finding.is_surfaced_to_client()

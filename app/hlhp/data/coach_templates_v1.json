@@ -1,0 +1,19 @@
+[
+  {"slot": "greeting_morning", "template": "Morning, {name}.", "conditions": {}, "weight": 5, "tone": "informative"},
+  {"slot": "greeting_morning", "template": "Hey, {name}.", "conditions": {}, "weight": 3, "tone": "informative"},
+  {"slot": "greeting_morning", "template": "Good morning, {name}.", "conditions": {}, "weight": 2, "tone": "informative"},
+  {"slot": "greeting_evening", "template": "Evening, {name}.", "conditions": {}, "weight": 5, "tone": "informative"},
+  {"slot": "greeting_evening", "template": "Hi {name} — winding down?", "conditions": {}, "weight": 3, "tone": "informative"},
+  {"slot": "continuity_streak", "template": "Day {n} of {band_label} this week.", "conditions": {"min_streak": 2}, "weight": 5, "tone": "informative"},
+  {"slot": "continuity_streak", "template": "{n} high-UV mornings in a row.", "conditions": {"min_streak": 3, "factor": "UV"}, "weight": 3, "tone": "informative"},
+  {"slot": "continuity_first_visit", "template": "First high-UV day in a while.", "conditions": {"max_streak": 1}, "weight": 4, "tone": "informative"},
+  {"slot": "effort_recognition_positive", "template": "You tapped 'applied' {n} of the last {m} days — that consistency moves marks.", "conditions": {"min_actions_last_7d": 3}, "weight": 4, "tone": "informative"},
+  {"slot": "effort_recognition_positive", "template": "You showed up {n} of the last {m} days. That matters.", "conditions": {"min_actions_last_7d": 2}, "weight": 3, "tone": "informative"},
+  {"slot": "effort_recognition_gentle", "template": "Skipped yesterday — happens. Today is a clean restart.", "conditions": {"missed_yesterday": true}, "weight": 3, "tone": "gentle"},
+  {"slot": "forward_hook", "template": "Tomorrow looks easier — let's get through today clean.", "conditions": {"forecast_easier_next_day": true}, "weight": 3, "tone": "informative"},
+  {"slot": "forward_hook", "template": "Weekend eases up a little.", "conditions": {"forecast_easier_next_day": true}, "weight": 2, "tone": "gentle"},
+  {"slot": "closer", "template": "", "conditions": {}, "weight": 5, "tone": "informative"},
+  {"slot": "closer", "template": "Small things, compounded all week.", "conditions": {}, "weight": 2, "tone": "informative"},
+  {"slot": "closer", "template": "Tonight isn't about doing more — just the basics.", "conditions": {}, "weight": 2, "tone": "gentle"},
+  {"slot": "closer", "template": "One step at a time today.", "conditions": {}, "weight": 2, "tone": "gentle"}
+]

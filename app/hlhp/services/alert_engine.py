@@ -43,7 +43,7 @@ def evaluate(
 
     alert = Alert(
         l1=primary.l1_text,
-        l2=finding.product_implication or finding.mechanism,
+        l2=primary.l2_text or finding.product_implication or finding.mechanism,
         l3=finding.science_citation,
     )
     tip = ScienceTip(fact=primary.science_fact, source=primary.science_source)

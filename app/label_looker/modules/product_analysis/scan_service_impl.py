@@ -57,19 +57,24 @@ async def scan_image_to_text(
     scan_coll: AsyncIOMotorCollection = db[s.coll_scan_analysis]
     scan_detail_coll: AsyncIOMotorCollection = db[s.coll_scan_detail]
 
-    profile_url = user.get("profileUrl")
-    count = await _count_scans_today(scan_coll, profile_url)
-    if count >= totalScanIngedientPerDay:
-        raise ScannerApiError(
-            429,
-            "You've used up your scans for today. Check back later to explore more with Label Looker!",
-        )
+    from app.label_looker.services.label_looker_quota import (
+        assert_daily_quota_available,
+        get_daily_quota_snapshot,
+        record_daily_quota_use,
+    )
+    from app.label_looker.services.common_flow import extract_user_id
 
-    scans_left_after = max(0, totalScanIngedientPerDay - count - 1)
+    user_id = extract_user_id(user)
+    user_details_coll = db[s.coll_user_details]
+    if user_id is None:
+        raise ScannerApiError(401, "Unauthorized")
+    await assert_daily_quota_available(user_details_coll=user_details_coll, user_id=user_id)
+    snap_before = await get_daily_quota_snapshot(user_details_coll=user_details_coll, user_id=user_id)
+    scans_left_after = max(0, snap_before["remaining"] - 1)
     rel_url = public_relative_url(image_basename)
     now = datetime.now()
     base_doc: dict[str, Any] = {
-        "userProfileUrl": profile_url,
+        "userProfileUrl": user.get("profileUrl"),
         "firstName": user.get("firstName"),
         "lastName": user.get("lastName"),
         "userId": _user_id_for_db(user),
@@ -132,6 +137,7 @@ async def scan_image_to_text(
                 "updatedAt": datetime.now(),
             }
         )
+        await record_daily_quota_use(user_details_coll=user_details_coll, user_id=user_id)
         return {"scanDetail": str(scan_id), "ingredientNames": names}
     except Exception as e:
         await scan_coll.update_one(
@@ -153,12 +159,14 @@ async def scan_image_to_text(
 
 async def number_of_scan_left(*, user: dict[str, Any]) -> dict[str, Any]:
     from app.label_looker.core.db import get_scanner_db
+    from app.label_looker.services.common_flow import extract_user_id
+    from app.label_looker.services.label_looker_quota import get_daily_quota_snapshot
 
     s = get_label_looker_settings()
     db = get_scanner_db()
-    scan_coll = db[s.coll_scan_analysis]
-    profile_url = user.get("profileUrl")
-    count = await _count_scans_today(scan_coll, profile_url)
-    scan_left = totalScanIngedientPerDay - count
-    return {"totalScanPerDay": totalScanIngedientPerDay, "scanLeft": scan_left}
+    user_id = extract_user_id(user)
+    if user_id is None:
+        return {"totalScanPerDay": totalScanIngedientPerDay, "scanLeft": totalScanIngedientPerDay}
+    snap = await get_daily_quota_snapshot(user_details_coll=db[s.coll_user_details], user_id=user_id)
+    return {"totalScanPerDay": snap["limit"], "scanLeft": snap["remaining"]}
 
