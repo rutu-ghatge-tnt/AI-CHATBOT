@@ -34,6 +34,8 @@ from app.hlhp.models.scan import (
     ScanRequest,
     ScanResponse,
     ScienceNuggetOut,
+    SfiFactorCard,
+    SymptomChip,
     SymptomTapRequest,
     SymptomTapResponse,
 )
@@ -41,10 +43,137 @@ from app.hlhp.services.outdoor_ok import compute_outdoor_ok, pick_mood_verdict
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.severity import severity_for_finding
 from app.hlhp.services.weather_fetcher import fetch_environmental_data
+from app.hlhp.composition.vocabulary import mood_headline, symptom_chips
+from app.hlhp.composition.forecast import forecast_oneliner
+from app.hlhp.composition.lane_state import resolve_lane_states
+from app.hlhp.composition.feeds import seasonal_tags_for_city
+from app.hlhp.composition.delta import compute_env_delta, match_sudden_breakout_alerts
+
+_ROUTINE_LABELS = {
+    "apply_sunscreen": "Broad-spectrum sunscreen as a daily habit",
+    "reapply_sunscreen": "Reapply sunscreen through outdoor hours",
+    "cleanse_gentle": "Gentle gel cleanser",
+    "cleanse_oil": "Oil cleanse first, then gel cleanser",
+    "double_cleanse": "Double cleanse in the evening",
+    "layer_hydration": "Hydrating serum underneath moisturizer",
+    "layer_barrier": "Barrier-repair moisturizer",
+    "layer_antioxidant": "Antioxidant serum in the morning",
+    "layer_brightening": "Brightening serum on marks",
+    "apply_retinoid_pm": "Retinoid at night, built up slowly",
+    "take_supplement": "Oral supplement per your clinician",
+}
 
 _GUEST_NUDGE = (
     "Create a profile to unlock concern-specific alerts tailored to your skin."
 )
+
+_BAND_SFI = {
+    "uvi": {
+        "off": (5, "Low", "Minimal UV load today."),
+        "low": (15, "Low", "Light UV — basics still help."),
+        "moderate": (40, "Moderate", "UV is active — sunscreen matters."),
+        "high": (60, "Strong", "Post-acne marks darken faster without sunscreen today."),
+        "very_high": (80, "Strong", "High UV — protection really helps."),
+        "extreme": (95, "Extreme", "Extreme UV — head-to-toe protection helps most."),
+    },
+    "temp": {
+        "very_cold": (70, "Cold snap", "Barrier stress from cold air."),
+        "cold": (50, "Cool", "Cooler air can tighten skin."),
+        "comfortable": (10, "Comfortable", "Temperature is skin-friendly."),
+        "warm": (35, "Warm", "Warmth lifts sebum slightly."),
+        "hot": (65, "Hot afternoon", "Sebum runs warmer; jaw and chin shine by mid-day."),
+        "very_hot": (85, "Very hot", "Heat pushes sebum and sweat hard."),
+    },
+    "aqi": {
+        "good": (10, "Clean", "Air is clean for skin."),
+        "satisfactory": (25, "Mostly clean", "Light particulate — background pressure on skin."),
+        "moderate": (45, "Moderate", "Pollution adds oxidative load."),
+        "poor": (65, "Poor", "Particulate stress is meaningful today."),
+        "very_poor": (80, "Very poor", "Heavy pollution day."),
+        "severe": (95, "Severe", "Severe air — limit prolonged outdoor exposure."),
+    },
+    "humidity": {
+        "very_low": (55, "Very dry", "Low humidity pulls water from skin."),
+        "low": (35, "Dry", "Dry air increases transepidermal water loss."),
+        "comfortable": (15, "Comfortable", "Balanced moisture in the air."),
+        "high": (45, "Muggy", "Humidity lifts sebum and stickiness."),
+        "very_high": (70, "Muggy, rising", "Fungal-acne risk on chest and back climbs this week."),
+    },
+}
+
+
+def _sfi_factor_cards(bands) -> list[SfiFactorCard]:
+    cards = []
+    for factor, table_key, attr in (
+        ("Sun strength", "uvi", "uvi"),
+        ("Heat", "temp", "temperature"),
+        ("Air quality", "aqi", "aqi"),
+        ("Air moisture", "humidity", "humidity"),
+    ):
+        band = getattr(bands, attr)
+        table = _BAND_SFI.get(table_key, {})
+        pct, label, impact = table.get(band, (30, band.replace("_", " ").title(), ""))
+        cards.append(
+            SfiFactorCard(factor=factor, label=label, skin_impact=impact, severity_pct=pct)
+        )
+    return cards
+
+
+def _concern_slug(profile: UserProfile | None) -> str | None:
+    if not profile or not profile.skin_concerns:
+        return None
+    c = profile.primary_concern.value
+    mapping = {
+        "pigmentation": "pigmentation_pih",
+        "dullness": "acne",
+        "pores": "acne",
+    }
+    return mapping.get(c, c)
+
+
+def _scan_ui_enrichment(
+    *,
+    store,
+    bands,
+    mood: str,
+    env: EnvironmentalData,
+    city: str,
+    local_time: datetime,
+    profile: UserProfile | None,
+    guest_mode: bool,
+    alert_count: int,
+) -> dict:
+    concern = _concern_slug(profile)
+    delta = compute_env_delta(env.uv_index, env.temperature_c, env.aqi, env.humidity_pct)
+    sudden = list(seasonal_tags_for_city(city, local_time))
+    sudden.extend(delta.sudden_tags)
+    for row in match_sudden_breakout_alerts(
+        city=city, month=local_time.month, delta=delta, composition=store.composition
+    ):
+        ext = str(row.get("mood_verdict_extension") or "")
+        if ext and ext not in sudden:
+            sudden.append(ext.replace("_", " "))
+
+    oneliner = forecast_oneliner(bands=bands, concern_id=concern, mood=mood)
+
+    label = None
+    if alert_count and concern:
+        label = f"{alert_count} {concern.replace('_', ' ')} alerts"
+    elif alert_count:
+        label = f"{alert_count} alerts ready"
+
+    return {
+        "workbook_version": store.workbook_version,
+        "mood_headline": mood_headline(mood),
+        "forecast_oneliner": oneliner or None,
+        "sudden_event_tags": sudden[:5],
+        "alert_count_label": label,
+        "symptom_chips": [SymptomChip(**c) for c in symptom_chips(concern)],
+        "lane_state_ctas": resolve_lane_states(
+            alert_count=alert_count, sudden_event=bool(sudden)
+        ),
+        "sfi_factor_cards": _sfi_factor_cards(bands),
+    }
 
 
 async def resolve_environment(req) -> EnvironmentalData:
@@ -107,6 +236,9 @@ def _finding_to_tile(
 ) -> AlertTile:
     l1 = apply_lay_voice(finding.pick_l1(guest_mode=guest_mode, day_phase=day_phase), glossary)
     phase_label = phase_used_label(finding.time_of_day_phase, day_phase)
+    action = finding.routine_action or ""
+    how = _ROUTINE_LABELS.get(action, action.replace("_", " ").strip()) if action else None
+    did_you_know = finding.pick_l2() or None
     return AlertTile(
         rule_id=finding.id,
         severity=severity_for_finding(finding, bands),
@@ -117,6 +249,8 @@ def _finding_to_tile(
         engagement_archetype=finding.engagement_archetype or "",
         symptom_keyword=finding.symptom_keyword or None,
         routine_action=finding.routine_action or "",
+        how_text=how,
+        did_you_know=did_you_know,
         visual_icon_hint=finding.visual_icon_hint or "",
         physical_analogy=finding.physical_analogy or None,
         body_sensation_decode=finding.body_sensation_decode or None,
@@ -156,8 +290,20 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
 
     if not candidates:
         mood = pick_mood_verdict(bands)
+        ui = _scan_ui_enrichment(
+            store=store,
+            bands=bands,
+            mood=mood,
+            env=env,
+            city=req.city,
+            local_time=req.local_time,
+            profile=profile,
+            guest_mode=guest_mode,
+            alert_count=0,
+        )
         return ScanResponse(
             snapshot_version=str(store.version),
+            workbook_version=ui.pop("workbook_version"),
             mode="guest" if guest_mode else "personalised",
             env_snapshot=env_snapshot,
             outdoor_ok_score=outdoor_ok,
@@ -165,9 +311,16 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             mood_verdict_today=mood,
             alerts=[],
             profile_nudge=_GUEST_NUDGE if guest_mode else None,
+            **ui,
         )
 
-    ranked = rank_findings(candidates, profile=profile, partial_personalised=partial)
+    ranked = rank_findings(
+        candidates,
+        profile=profile,
+        partial_personalised=partial,
+        day_phase=day_phase,
+        guest_mode=guest_mode,
+    )
 
     coach_ctx = None
     forecast: ForecastSnapshot | None = None
@@ -182,7 +335,13 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             req.user_id, profile, local_time=req.local_time, severity="SOFT_ENV"
         )
         candidates = filter_by_recency(candidates, coach_ctx.suppressed_rule_ids)
-        ranked = rank_findings(candidates, profile=profile, partial_personalised=partial)
+        ranked = rank_findings(
+        candidates,
+        profile=profile,
+        partial_personalised=partial,
+        day_phase=day_phase,
+        guest_mode=guest_mode,
+    )
         ranked = prefer_fresh_archetypes(ranked, coach_ctx.recent_archetypes)
         if req.latitude is not None and req.longitude is not None:
             forecast = await get_forecast(req.latitude, req.longitude)
@@ -256,8 +415,21 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             n = rotated[0]
             nugget_out = ScienceNuggetOut(id=n.id, text=n.text, factor=n.factor, source=n.source)
 
+    ui = _scan_ui_enrichment(
+        store=store,
+        bands=bands,
+        mood=mood,
+        env=env,
+        city=req.city,
+        local_time=req.local_time,
+        profile=profile,
+        guest_mode=guest_mode,
+        alert_count=len(alerts),
+    )
+
     return ScanResponse(
         snapshot_version=str(store.version),
+        workbook_version=ui.pop("workbook_version"),
         mode="guest" if guest_mode else "personalised",
         env_snapshot=env_snapshot,
         outdoor_ok_score=outdoor_ok,
@@ -267,6 +439,7 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         candidate_alerts=candidate_tiles,
         science_nugget=nugget_out,
         profile_nudge=_GUEST_NUDGE if guest_mode else None,
+        **ui,
     )
 
 

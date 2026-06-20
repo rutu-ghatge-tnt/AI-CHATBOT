@@ -46,10 +46,12 @@ async def hlhp_health() -> HealthResponse:
     try:
         store = get_evidence_store()
     except FileNotFoundError:
-        return HealthResponse(ok=False, snapshot_version="missing", rule_count=0, generated_at="")
+        return HealthResponse(ok=False, snapshot_version="missing", workbook_version=None, rule_count=0, composition_row_count=0, generated_at="")
     return HealthResponse(
         ok=True,
         snapshot_version=str(store.version),
+        workbook_version=store.workbook_version,
         rule_count=len(store.findings),
+        composition_row_count=store.composition_row_count,
         generated_at=store.generated_at,
     )

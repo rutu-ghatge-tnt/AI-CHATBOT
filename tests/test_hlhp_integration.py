@@ -77,7 +77,8 @@ def _profile(**kwargs) -> UserProfile:
 class TestEvidenceSnapshotIntegrity:
     def test_snapshot_scale_and_version(self):
         store = get_evidence_store()
-        assert store.version >= 2
+        assert store.version >= 3
+        assert len(store.findings) >= 1950
         assert len(store.findings) >= 1800
         assert len(store.nuggets) >= 18
 
@@ -383,7 +384,9 @@ class TestAPIHealthEndpoint:
                 assert r.status_code == 200
                 body = r.json()
                 assert body["ok"] is True
-                assert body["rule_count"] >= 1800
+                assert body["rule_count"] >= 1950
+                assert body.get("workbook_version") == "1.0"
+                assert body.get("composition_row_count", 0) > 0
 
         asyncio.run(_call())
 
@@ -414,6 +417,28 @@ class TestAPIHealthEndpoint:
                 data = r.json()
                 assert data["mode"] == "guest"
                 assert "outdoor_ok_score" in data
-                assert "env_snapshot" in data
+                assert "mood_headline" in data
+                assert "lane_state_ctas" in data
+                assert data.get("workbook_version") == "1.0"
+
+        asyncio.run(_call())
+
+    def test_explore_lane_via_asgi(self):
+        try:
+            from httpx import ASGITransport, AsyncClient
+        except ImportError:
+            pytest.skip("httpx ASGITransport not available")
+
+        async def _call():
+            from app.main import app
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.get("/api/hlhp/explore", params={"city": "Mumbai"})
+                assert r.status_code == 200
+                body = r.json()
+                assert body["city"] == "Mumbai"
+                assert "event_guides" in body
+                assert body.get("snapshot_version") == "1.0"
 
         asyncio.run(_call())

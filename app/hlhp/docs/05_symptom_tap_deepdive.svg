@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 1180" font-family="-apple-system, 'Inter', sans-serif">
+  <defs>
+    <style>
+      .card-bg { fill:#FBF4E8; stroke:#E5D9BD; stroke-width:0.5; }
+      .inner { fill:#FFFFFF; stroke:#E5D9BD; stroke-width:0.5; }
+      .navy { fill:#1A2B47; }
+      .sub { fill:#4A5568; }
+      .muted { fill:#7A6B4C; }
+      .label-tag { fill:#7A6B4C; font-size:10px; font-weight:600; letter-spacing:0.12em; }
+      .lime { stroke:#B7D34E; stroke-width:2; fill:none; }
+      .src { font-size:11px; fill:#7A6B4C; font-style:italic; }
+    </style>
+  </defs>
+
+  <rect x="10" y="10" width="800" height="1160" rx="14" class="card-bg"/>
+  <text x="36" y="42" class="label-tag">SCREEN 5 · SYMPTOM-TAP DEEP-DIVE — "OILY"</text>
+
+  <!-- HERO -->
+  <g transform="translate(36,62)">
+    <rect width="748" height="170" rx="12" class="inner"/>
+
+    <text x="22" y="32" font-size="12" class="muted">← Back to Today</text>
+    <text x="22" y="56" class="label-tag">YOU TAPPED · OILY</text>
+    <text x="22" y="92" font-size="20" font-weight="500" class="navy">Why your skin feels oily right now</text>
+    <text x="22" y="118" font-size="13" class="sub">A 4-section read on what's driving it, what helps in the moment,</text>
+    <text x="22" y="136" font-size="13" class="sub">and when this stops being something a routine alone can fix.</text>
+
+    <!-- Hero icon -->
+    <g transform="translate(640,28)">
+      <rect width="84" height="84" rx="42" fill="#ECF2FA" stroke="#C9D9EE" stroke-width="0.5"/>
+      <text x="42" y="56" text-anchor="middle" font-size="32">💧</text>
+    </g>
+  </g>
+
+  <!-- TODAY ENV STRIP -->
+  <g transform="translate(36,250)">
+    <rect width="748" height="62" rx="10" fill="#ECF2FA" stroke="#C9D9EE" stroke-width="0.5"/>
+    <rect width="4" height="62" fill="#2864B8"/>
+    <text x="22" y="28" font-size="12" font-weight="600" fill="#2864B8">TODAY · MUMBAI · 19 JUN</text>
+    <text x="22" y="48" font-size="12" class="sub">Heat is in the hot band and humidity is rising. The mix is pushing your sebum harder than yesterday.</text>
+  </g>
+
+  <!-- THE 4 SECTIONS HEADER -->
+  <text x="36" y="346" class="label-tag">THE 4 SECTIONS · IN ORDER</text>
+  <line x1="36" y1="356" x2="240" y2="356" class="lime"/>
+
+  <!-- SECTION 1 - WHY THIS HAPPENS - blue -->
+  <g transform="translate(36,370)">
+    <rect width="748" height="124" rx="10" fill="#ECF2FA" stroke="#C9D9EE" stroke-width="0.5"/>
+    <circle cx="32" cy="32" r="14" fill="#2864B8"/>
+    <text x="32" y="36" text-anchor="middle" font-size="13" fill="white" font-weight="700">1</text>
+    <text x="56" y="36" font-size="13" font-weight="600" class="navy">Why this happens</text>
+    <text x="22" y="62" font-size="12" class="sub">Sebaceous glands respond to androgens. Hot humid weather raises skin surface temperature,</text>
+    <text x="22" y="80" font-size="12" class="sub">which speeds sebum flow and lowers its viscosity. Indian skin tends to have larger pore density</text>
+    <text x="22" y="98" font-size="12" class="sub">on the T-zone, so the effect concentrates on forehead, nose, and chin.</text>
+    <text x="22" y="116" class="src">Source · Skin Diseases in Females (Sarkar) Ch.4 · PMID 38605790</text>
+  </g>
+
+  <!-- SECTION 2 - COMMON PATTERNS - mint -->
+  <g transform="translate(36,512)">
+    <rect width="748" height="124" rx="10" fill="#E9F4EC" stroke="#C7E0CE" stroke-width="0.5"/>
+    <circle cx="32" cy="32" r="14" fill="#3F6A1D"/>
+    <text x="32" y="36" text-anchor="middle" font-size="13" fill="white" font-weight="700">2</text>
+    <text x="56" y="36" font-size="13" font-weight="600" class="navy">Common patterns</text>
+    <text x="22" y="62" font-size="12" class="sub">T-zone shine within hours of cleansing. Mid-day shine across cheeks if the air is humid. Makeup</text>
+    <text x="22" y="80" font-size="12" class="sub">sliding by lunchtime. Pores look bigger because they're filled with sebum, not because they've</text>
+    <text x="22" y="98" font-size="12" class="sub">stretched. Acne flare-ups often follow 24-48 hours after a heat-humidity spike.</text>
+    <text x="22" y="116" class="src">Source · Humidity sheet rows 187, 211 · Lifestyle row 171 · Sardana CBS p. 343</text>
+  </g>
+
+  <!-- SECTION 3 - WHAT HELPS NOW - violet -->
+  <g transform="translate(36,654)">
+    <rect width="748" height="148" rx="10" fill="#EFEAF7" stroke="#D6CAEB" stroke-width="0.5"/>
+    <circle cx="32" cy="32" r="14" fill="#5240A6"/>
+    <text x="32" y="36" text-anchor="middle" font-size="13" fill="white" font-weight="700">3</text>
+    <text x="56" y="36" font-size="13" font-weight="600" class="navy">What helps now</text>
+    <text x="22" y="62" font-size="12" class="sub">A gentle gel cleanser twice a day. A niacinamide-class brightening serum that helps regulate sebum</text>
+    <text x="22" y="80" font-size="12" class="sub">while fading marks. An oil-free moisturizer (skipping it makes it worse, not better). Blotting paper</text>
+    <text x="22" y="98" font-size="12" class="sub">mid-day instead of re-washing — over-cleansing rebounds the oil.</text>
+
+    <g transform="translate(22,108)">
+      <rect width="704" height="22" rx="11" fill="#FFFFFF" stroke="#D6CAEB" stroke-width="0.5"/>
+      <text x="12" y="16" font-size="11">⚡  These four steps are already in your routine framework.</text>
+    </g>
+    <text x="22" y="142" class="src">Source · UV sheet rows 558, 582 · Cosmetic Derm SoC (Alam) Ch.2</text>
+  </g>
+
+  <!-- SECTION 4 - WHEN TO ESCALATE - coral -->
+  <g transform="translate(36,820)">
+    <rect width="748" height="130" rx="10" fill="#FCEDED" stroke="#F4CFCF" stroke-width="0.5"/>
+    <circle cx="32" cy="32" r="14" fill="#A2342F"/>
+    <text x="32" y="36" text-anchor="middle" font-size="13" fill="white" font-weight="700">4</text>
+    <text x="56" y="36" font-size="13" font-weight="600" class="navy">When to escalate</text>
+    <text x="22" y="62" font-size="12" class="sub">Oily skin with persistent acne despite three months of consistent routine. Oily skin with irregular</text>
+    <text x="22" y="80" font-size="12" class="sub">cycles, facial hair growth, or hair shedding (the PCOS pattern). Oily skin that came on suddenly</text>
+    <text x="22" y="98" font-size="12" class="sub">after starting or stopping a medication.</text>
+    <text x="22" y="120" class="src">Source · Lifestyle rows 191, 215 · PMID 29156452</text>
+  </g>
+
+  <!-- RELATED + CTA -->
+  <text x="36" y="980" font-size="14" font-weight="600" class="navy">Related symptoms — same family</text>
+  <line x1="36" y1="988" x2="278" y2="988" class="lime"/>
+
+  <g transform="translate(36,1000)">
+    <rect width="748" height="68" rx="10" class="inner"/>
+    <g transform="translate(16,22)">
+      <rect width="68" height="26" rx="13" fill="#FBE0CF"/>
+      <text x="34" y="17" text-anchor="middle" font-size="12" font-weight="600" fill="#9C3E0A">shiny</text>
+    </g>
+    <g transform="translate(94,22)">
+      <rect width="92" height="26" rx="13" fill="#FBE0CF"/>
+      <text x="46" y="17" text-anchor="middle" font-size="12" font-weight="600" fill="#9C3E0A">breakout</text>
+    </g>
+    <g transform="translate(196,22)">
+      <rect width="94" height="26" rx="13" fill="#FFFFFF" stroke="#E5D9BD" stroke-width="0.5"/>
+      <text x="47" y="17" text-anchor="middle" font-size="12" font-weight="500" class="navy">congested</text>
+    </g>
+    <g transform="translate(300,22)">
+      <rect width="96" height="26" rx="13" fill="#FFFFFF" stroke="#E5D9BD" stroke-width="0.5"/>
+      <text x="48" y="17" text-anchor="middle" font-size="12" font-weight="500" class="navy">dark spots</text>
+    </g>
+    <text x="420" y="38" font-size="11" class="muted" font-style="italic">Each tap opens its own 4-section explainer</text>
+  </g>
+
+  <g transform="translate(36,1086)">
+    <rect width="748" height="56" rx="10" fill="#1A2B47"/>
+    <text x="22" y="32" font-size="14" font-weight="600" fill="white">Open your Adult Acne deep-dive  →</text>
+    <text x="22" y="48" font-size="11" fill="#B7D34E">Drivers · routine · week ahead · today's nugget</text>
+  </g>
+</svg>

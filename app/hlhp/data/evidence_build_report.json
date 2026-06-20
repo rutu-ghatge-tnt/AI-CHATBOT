@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-19T05:58:08.201477+00:00",
+  "generated_at": "2026-06-20T11:39:31.020671+00:00",
   "source_workbook": "HLHP_Evidence_Base.xlsx",
   "sheets_exported": [
     "README",
@@ -16,7 +16,7 @@
     "Coverage_Matrix"
   ],
   "counts": {
-    "findings": 1831,
+    "findings": 1953,
     "science_nuggets": 18,
     "book_inventory": 256,
     "glossary": 42,
@@ -24,6 +24,22 @@
     "coverage_grids": 4
   },
   "build_autofixes": [
+    "UV-1: added concern:dullness for UV×dullness",
+    "TEM-1: added concern:tan for Temperature×tan",
+    "HUM-1: added concern:tan for Humidity×tan",
+    "HUM-2: added concern:dullness for Humidity×dullness",
+    "HUM-3: added concern:dark_circles for Humidity×dark_circles",
+    "HUM-4: added concern:large_pores for Humidity×large_pores",
+    "HUM-5: added concern:hair_loss for Humidity×hair_loss",
+    "POL-1: added concern:tan for Pollution×tan",
+    "POL-2: added concern:dullness for Pollution×dullness",
+    "POL-3: added concern:dark_circles for Pollution×dark_circles",
+    "POL-4: added concern:large_pores for Pollution×large_pores",
+    "LIF-2: added concern:tan for Sleep×tan",
+    "LIF-4: added concern:dullness for Sleep×dullness",
+    "LIF-5: added concern:large_pores for Sleep×large_pores",
+    "TEM-2: added age:25-40 for Temperature",
+    "HUM-6: added age:25-40 for Humidity",
     "UV-2: sanitised alert_l1_guest",
     "UV-2: sanitised alert_l1_personalised",
     "UV-37: sanitised alert_l1_personalised",
@@ -476,17 +492,1607 @@
         "detail": "source '2022 1st ed' not matched in Book Inventory"
       },
       {
-        "row_id": "UV-5",
-        "rule": "evening_l1",
-        "detail": "missing alert_l1_evening_personalised"
+        "row_id": "UV-716",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
       },
       {
-        "row_id": "UV-5",
-        "rule": "evening_l1",
-        "detail": "missing alert_l1_evening_guest"
+        "row_id": "UV-716",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "UV-716",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "UV-716",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
       }
     ],
-    "gate_failure_count": 28,
+    "gate_failure_count": 346,
     "coverage_report": {
       "methodology": "Rule-based coverage from Trigger_User_Filter tokens and concern aliases.",
       "computed_grids": [
@@ -503,61 +2109,61 @@
             {
               "trigger": "UV",
               "counts": [
-                491,
-                484,
-                484,
-                484,
-                676
+                492,
+                485,
+                485,
+                485,
+                677
               ]
             },
             {
               "trigger": "Temperature",
               "counts": [
-                65,
-                58,
-                62,
-                74,
-                93
+                75,
+                67,
+                71,
+                83,
+                104
               ]
             },
             {
               "trigger": "Humidity",
               "counts": [
-                157,
-                102,
-                105,
-                111,
-                186
+                173,
+                118,
+                121,
+                129,
+                217
               ]
             },
             {
               "trigger": "Pollution",
               "counts": [
-                157,
-                145,
-                150,
-                145,
-                209
+                171,
+                159,
+                164,
+                159,
+                223
               ]
             },
             {
               "trigger": "Sleep",
               "counts": [
-                145,
-                127,
-                134,
-                140,
-                270
+                184,
+                166,
+                173,
+                182,
+                329
               ]
             },
             {
               "trigger": "Stress",
               "counts": [
-                145,
-                127,
-                134,
-                140,
-                270
+                184,
+                166,
+                173,
+                182,
+                329
               ]
             }
           ]
@@ -609,33 +2215,33 @@
                 1,
                 3,
                 6,
-                24,
-                27,
+                31,
+                34,
                 2,
                 2,
                 7,
                 1,
                 2,
-                18
+                23
               ]
             },
             {
               "trigger": "Humidity",
               "counts": [
-                3,
-                2,
                 5,
+                2,
+                6,
                 1,
                 3,
                 7,
-                45,
-                43,
+                52,
+                50,
                 1,
                 1,
                 19,
                 1,
                 1,
-                9
+                16
               ]
             },
             {
@@ -660,39 +2266,39 @@
             {
               "trigger": "Sleep",
               "counts": [
-                39,
+                57,
                 19,
-                6,
+                13,
                 1,
                 14,
                 16,
-                67,
-                72,
+                70,
+                75,
                 1,
                 12,
                 1,
                 1,
-                29,
-                42
+                39,
+                45
               ]
             },
             {
               "trigger": "Stress",
               "counts": [
-                39,
+                57,
                 19,
-                6,
+                13,
                 1,
                 14,
                 16,
-                67,
-                72,
+                70,
+                75,
                 1,
                 12,
                 1,
                 1,
-                29,
-                42
+                39,
+                45
               ]
             }
           ]
@@ -714,15 +2320,15 @@
             {
               "trigger": "Temperature",
               "counts": [
-                9,
+                10,
                 1
               ]
             },
             {
               "trigger": "Humidity",
               "counts": [
-                19,
-                1
+                21,
+                6
               ]
             },
             {
@@ -735,15 +2341,15 @@
             {
               "trigger": "Sleep",
               "counts": [
-                97,
-                5
+                112,
+                7
               ]
             },
             {
               "trigger": "Stress",
               "counts": [
-                97,
-                5
+                112,
+                7
               ]
             }
           ]
@@ -1016,13 +2622,6 @@
         {
           "grid": "Trigger × Gender",
           "trigger": "Temperature",
-          "column": "male",
-          "computed_count": 1,
-          "status": "thin"
-        },
-        {
-          "grid": "Trigger × Gender",
-          "trigger": "Humidity",
           "column": "male",
           "computed_count": 1,
           "status": "thin"

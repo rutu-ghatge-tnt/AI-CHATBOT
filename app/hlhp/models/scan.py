@@ -60,6 +60,8 @@ class AlertTile(BaseModel):
     engagement_archetype: str
     symptom_keyword: Optional[str] = None
     routine_action: str = ""
+    how_text: Optional[str] = None
+    did_you_know: Optional[str] = None
     visual_icon_hint: str = ""
     physical_analogy: Optional[str] = None
     body_sensation_decode: Optional[str] = None
@@ -75,13 +77,33 @@ class ScienceNuggetOut(BaseModel):
     source: str
 
 
+class SymptomChip(BaseModel):
+    keyword: str
+    highlighted: bool = False
+
+
+class SfiFactorCard(BaseModel):
+    factor: str
+    label: str
+    skin_impact: str
+    severity_pct: int = 0
+
+
 class ScanResponse(BaseModel):
     snapshot_version: str
+    workbook_version: Optional[str] = None
     mode: Literal["personalised", "guest"]
     env_snapshot: EnvSnapshot
     outdoor_ok_score: int
     outdoor_ok_band_text: str
     mood_verdict_today: str
+    mood_headline: Optional[str] = None
+    forecast_oneliner: Optional[str] = None
+    sudden_event_tags: list[str] = Field(default_factory=list)
+    alert_count_label: Optional[str] = None
+    symptom_chips: list[SymptomChip] = Field(default_factory=list)
+    lane_state_ctas: dict[str, str] = Field(default_factory=dict)
+    sfi_factor_cards: list[SfiFactorCard] = Field(default_factory=list)
     alerts: list[AlertTile]
     candidate_alerts: list[AlertTile] = Field(default_factory=list)
     science_nugget: Optional[ScienceNuggetOut] = None
@@ -113,5 +135,7 @@ class SymptomTapResponse(BaseModel):
 class HealthResponse(BaseModel):
     ok: bool
     snapshot_version: str
+    workbook_version: Optional[str] = None
     rule_count: int
+    composition_row_count: int = 0
     generated_at: str

@@ -70,7 +70,7 @@ def test_run_scan_guest_with_raw_env():
 
 def test_hlhp_health_store_loaded():
     store = get_evidence_store()
-    assert store.version >= 2
+    assert store.version >= 3
     assert len(store.findings) >= 1000
 
 
