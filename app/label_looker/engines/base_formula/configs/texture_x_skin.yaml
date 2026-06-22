@@ -1,0 +1,19 @@
+version: "1.0"
+matrix:
+  gel: {oily: excellent, combination: good, normal: ok, dry: poor, very_dry: avoid}
+  gel_cream: {oily: excellent, combination: excellent, normal: good, dry: ok, very_dry: poor}
+  lotion: {oily: good, combination: excellent, normal: excellent, dry: good, very_dry: ok}
+  cream: {oily: ok, combination: good, normal: excellent, dry: excellent, very_dry: good}
+  rich_cream: {oily: poor, combination: ok, normal: good, dry: excellent, very_dry: excellent}
+  balm: {oily: avoid, combination: poor, normal: ok, dry: good, very_dry: excellent}
+  oil: {oily: avoid, combination: poor, normal: ok, dry: good, very_dry: good}
+  foam: {oily: excellent, combination: excellent, normal: good, dry: ok, very_dry: poor}
+  spray: {oily: good, combination: good, normal: good, dry: good, very_dry: ok}
+  stick: {oily: ok, combination: ok, normal: good, dry: good, very_dry: excellent}
+  clay: {oily: excellent, combination: good, normal: ok, dry: poor, very_dry: avoid}
+  powder: {oily: excellent, combination: good, normal: ok, dry: poor, very_dry: avoid}
+climate_modifiers:
+  apr_jun: {cream: -1, rich_cream: -1, gel: 1, gel_cream: 1}
+  jul_sep: {cream: -1, rich_cream: -1, gel: 1, gel_cream: 1}
+  nov_feb: {lotion: 1, cream: 1, balm: 1}
+

@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 1240" font-family="-apple-system, 'Inter', sans-serif">
+  <defs>
+    <style>
+      .card-bg { fill:#FBF4E8; stroke:#E5D9BD; stroke-width:0.5; }
+      .inner { fill:#FFFFFF; stroke:#E5D9BD; stroke-width:0.5; }
+      .navy { fill:#1A2B47; }
+      .sub { fill:#4A5568; }
+      .muted { fill:#7A6B4C; }
+      .label-tag { fill:#7A6B4C; font-size:10px; font-weight:600; letter-spacing:0.12em; }
+      .lime { stroke:#B7D34E; stroke-width:2; fill:none; }
+    </style>
+    <linearGradient id="trend" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="140">
+      <stop offset="0" stop-color="#2864B8" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#2864B8" stop-opacity="0.04"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="10" width="800" height="1220" rx="14" class="card-bg"/>
+  <text x="36" y="42" class="label-tag">SCREEN 7 · HISTORY LANE · RETURNING AFTER 14 DAYS</text>
+
+  <!-- Lane title -->
+  <text x="36" y="78" font-size="22" font-weight="500" class="navy">🕐  History</text>
+  <text x="36" y="100" font-size="13" class="sub">SFI trend · sudden events · what you missed</text>
+
+  <!-- Welcome banner -->
+  <g transform="translate(36,120)">
+    <rect width="748" height="100" rx="12" fill="#FFFFFF" stroke="#E5D9BD" stroke-width="0.5"/>
+    <circle cx="44" cy="50" r="22" fill="#B7D34E"/>
+    <text x="44" y="56" text-anchor="middle" font-size="16" font-weight="700" fill="#1A2B47">P</text>
+    <text x="80" y="38" font-size="16" font-weight="600" class="navy">Welcome back, Priya.</text>
+    <text x="80" y="62" font-size="13" class="sub">While you were away, Mumbai had a heavier-than-usual humidity stretch and</text>
+    <text x="80" y="80" font-size="13" class="sub">your skin probably noticed.</text>
+    <text x="80" y="96" font-size="11" font-style="italic" class="muted">Last opened 14 days ago · catching you up on the last 30 days.</text>
+  </g>
+
+  <!-- STAT GRID -->
+  <g transform="translate(36,238)">
+    <rect width="365" height="100" rx="10" class="inner"/>
+    <text x="16" y="28" class="label-tag">SUDDEN EVENTS</text>
+    <text x="16" y="64" font-size="36" font-weight="600" fill="#A2342F">3</text>
+    <text x="16" y="86" font-size="11" class="muted">Caught by your Δ-detector in the last 30 days.</text>
+  </g>
+
+  <g transform="translate(419,238)">
+    <rect width="365" height="100" rx="10" class="inner"/>
+    <text x="16" y="28" class="label-tag">SFI AVERAGE</text>
+    <text x="16" y="64" font-size="36" font-weight="600" fill="#2864B8">61</text>
+    <text x="80" y="64" font-size="12" font-weight="600" fill="#A2342F">↓ from 68 prior month</text>
+    <text x="16" y="86" font-size="11" class="muted">Last 30 days · acne lens · Mumbai.</text>
+  </g>
+
+  <!-- SFI TREND CHART -->
+  <text x="36" y="376" font-size="14" font-weight="600" class="navy">SFI trend · last 30 days · Mumbai · acne lens</text>
+  <line x1="36" y1="384" x2="370" y2="384" class="lime"/>
+
+  <g transform="translate(36,398)">
+    <rect width="748" height="200" rx="10" class="inner"/>
+    <!-- grid lines -->
+    <line x1="40" y1="40" x2="720" y2="40" stroke="#E5D9BD" stroke-dasharray="2,4"/>
+    <line x1="40" y1="90" x2="720" y2="90" stroke="#E5D9BD" stroke-dasharray="2,4"/>
+    <line x1="40" y1="140" x2="720" y2="140" stroke="#E5D9BD" stroke-dasharray="2,4"/>
+    <text x="30" y="44" text-anchor="end" font-size="10" class="muted">100</text>
+    <text x="30" y="94" text-anchor="end" font-size="10" class="muted">60</text>
+    <text x="30" y="144" text-anchor="end" font-size="10" class="muted">30</text>
+
+    <!-- area + line: simulated 30 data points -->
+    <path d="M 40 50 L 64 56 L 88 62 L 112 70 L 136 78 L 160 86 L 184 80 L 208 70 L 232 62 L 256 60 L 280 72 L 304 82 L 328 96 L 352 102 L 376 90 L 400 88 L 424 80 L 448 92 L 472 108 L 496 122 L 520 132 L 544 142 L 568 132 L 592 124 L 616 116 L 640 110 L 664 104 L 688 100 L 712 96 L 720 96 L 720 160 L 40 160 Z"
+          fill="url(#trend)"/>
+    <path d="M 40 50 L 64 56 L 88 62 L 112 70 L 136 78 L 160 86 L 184 80 L 208 70 L 232 62 L 256 60 L 280 72 L 304 82 L 328 96 L 352 102 L 376 90 L 400 88 L 424 80 L 448 92 L 472 108 L 496 122 L 520 132 L 544 142 L 568 132 L 592 124 L 616 116 L 640 110 L 664 104 L 688 100 L 712 96"
+          fill="none" stroke="#2864B8" stroke-width="2"/>
+
+    <!-- Δ-detector event dots -->
+    <circle cx="304" cy="82" r="6" fill="#A2342F"/>
+    <circle cx="448" cy="92" r="6" fill="#A2342F"/>
+    <circle cx="544" cy="142" r="6" fill="#A2342F"/>
+
+    <!-- legend -->
+    <g transform="translate(40,178)">
+      <circle r="4" fill="#A2342F"/>
+      <text x="12" y="4" font-size="11" class="muted">= sudden events (Δ-detector firings)</text>
+    </g>
+  </g>
+
+  <!-- SUDDEN EVENTS LOG -->
+  <text x="36" y="640" font-size="14" font-weight="600" class="navy">Sudden events while you were away</text>
+  <line x1="36" y1="648" x2="290" y2="648" class="lime"/>
+
+  <g transform="translate(36,662)">
+    <rect width="748" height="180" rx="10" class="inner"/>
+
+    <g transform="translate(20,20)">
+      <text class="label-tag" fill="#7A6B4C">8 JUN · 11 DAYS AGO</text>
+      <rect x="140" y="-12" width="28" height="28" rx="6" fill="#FBE0CF"/>
+      <text x="154" y="8" text-anchor="middle" font-size="14">🔥</text>
+      <text x="180" y="0" font-size="13" font-weight="600" class="navy">Heat wave surge — temp jumped to hot</text>
+      <text x="180" y="18" font-size="11" class="sub">Sebum-rush conditions · acne flare-prone window</text>
+    </g>
+
+    <g transform="translate(20,72)">
+      <text class="label-tag" fill="#7A6B4C">14 JUN · 5 DAYS AGO</text>
+      <rect x="140" y="-12" width="28" height="28" rx="6" fill="#ECF2FA"/>
+      <text x="154" y="8" text-anchor="middle" font-size="14">💧</text>
+      <text x="180" y="0" font-size="13" font-weight="600" class="navy">Humidity surge — RH jumped 25 pts in 48 hrs</text>
+      <text x="180" y="18" font-size="11" class="sub">Pre-monsoon signal · fungal acne window opens</text>
+    </g>
+
+    <g transform="translate(20,124)">
+      <text class="label-tag" fill="#7A6B4C">17 JUN · 2 DAYS AGO</text>
+      <rect x="140" y="-12" width="28" height="28" rx="6" fill="#FCEDED"/>
+      <text x="154" y="8" text-anchor="middle" font-size="14">🌧</text>
+      <text x="180" y="0" font-size="13" font-weight="600" class="navy">First monsoon-pattern day — transition started</text>
+      <text x="180" y="18" font-size="11" class="sub">Routine adjustment recommended</text>
+    </g>
+  </g>
+
+  <!-- MOST-FIRED ALERT -->
+  <text x="36" y="884" font-size="14" font-weight="600" class="navy">Most-fired alert this month</text>
+  <line x1="36" y1="892" x2="252" y2="892" class="lime"/>
+
+  <g transform="translate(36,906)">
+    <rect width="748" height="86" rx="10" fill="#FBE0CF" stroke="#F0BFA0" stroke-width="0.5"/>
+    <text x="22" y="34" font-size="32" font-weight="700" fill="#9C3E0A">12</text>
+    <text x="78" y="32" font-size="11" class="muted" font-weight="600">DAYS OUT OF 30</text>
+    <text x="78" y="50" font-size="14" font-weight="600" fill="#9C3E0A">🔥 Sebum-rush day</text>
+    <text x="22" y="74" font-size="12" class="sub">Your most common mood verdict — pattern worth knowing. Routine adjustments could lift the floor.</text>
+  </g>
+
+  <!-- CATCH-UP CTA -->
+  <g transform="translate(36,1020)">
+    <rect width="748" height="64" rx="12" fill="#1A2B47"/>
+    <text x="22" y="32" font-size="15" font-weight="600" fill="white">Read your 2-minute catch-up  →</text>
+    <text x="22" y="52" font-size="11" fill="#B7D34E">A summary written specifically for someone returning today.</text>
+  </g>
+
+  <text x="36" y="1110" font-size="11" class="muted" font-style="italic">Returner banner fires after 14+ day gap · catch-up composed from sudden_event_log + scan_log + mood distribution</text>
+</svg>

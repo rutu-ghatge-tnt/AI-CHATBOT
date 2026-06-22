@@ -5,7 +5,7 @@ from typing import Any
 
 from anthropic import AsyncAnthropic
 
-from app.label_looker.tile_content_generator import (
+from app.label_looker.generation.tile_content import (
     TileGenerationError,
     build_fallback_tiles,
     generate_tile_content,

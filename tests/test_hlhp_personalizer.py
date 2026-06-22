@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from app.hl_engine.models.environmental import EnvironmentalData
-from app.hl_engine.models.profile import (
+from app.hlhp.models.environmental import EnvironmentalData
+from app.hlhp.models.profile import (
     AgeBracket,
     Gender,
     HairConcern,
@@ -10,9 +10,9 @@ from app.hl_engine.models.profile import (
     SkinType,
     UserProfile,
 )
-from app.hl_engine.services.alert_generator import generate_alert
-from app.hl_engine.services.profile_personalizer import personalize_alert
-from app.hl_engine.services.scoring_engine import calculate_skin_score
+from app.hlhp.services.alert_generator import generate_alert
+from app.hlhp.services.profile_personalizer import personalize_alert
+from app.hlhp.services.scoring_engine import calculate_skin_score
 
 
 def _make_env(**kwargs):

@@ -4,6 +4,10 @@ import sys
 import warnings
 import logging
 
+# Limit BLAS/OpenMP threads before numpy/scipy/torch are imported downstream
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -56,8 +60,11 @@ from app.ai_ingredient_intelligence.api.ingredient_costs import router as ingred
 from app.ai_ingredient_intelligence.api.ingredient_history import router as ingredient_history_router
 from app.ai_ingredient_intelligence.api.product_comparison import router as product_comparison_router
 from app.ai_ingredient_intelligence.api.health_checks import router as health_checks_router
-from app.hl_engine.api.alerts import router as hl_alerts_router
-from app.hl_engine.api.personalized_alerts import router as hl_personalized_alerts_router
+from app.hlhp.api.alerts import router as hl_alerts_router
+from app.hlhp.api.personalized_alerts import router as hl_personalized_alerts_router
+from app.hlhp.api.scan import router as hlhp_scan_router
+from app.hlhp.api.composition import router as hlhp_composition_router
+from app.hlhp.api.weather import router as hlhp_weather_router
 
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
@@ -334,9 +341,12 @@ app.include_router(product_comparison_router, prefix="/api")
 # ✅ Add health checks API
 app.include_router(health_checks_router, prefix="/api")
 
-# ✅ Add HL engine API
+# ✅ Add HLHP engine API
 app.include_router(hl_alerts_router, prefix="/api")
 app.include_router(hl_personalized_alerts_router, prefix="/api")
+app.include_router(hlhp_scan_router, prefix="/api")
+app.include_router(hlhp_composition_router, prefix="/api")
+app.include_router(hlhp_weather_router, prefix="/api")
 
 # ✅ Add trend insights API
 if trend_insights_router is not None:

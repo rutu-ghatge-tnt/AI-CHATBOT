@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 380" font-family="-apple-system, 'Inter', sans-serif">
+  <defs>
+    <style>
+      .card-bg { fill:#FBF4E8; stroke:#E5D9BD; stroke-width:0.5; }
+      .navy { fill:#1A2B47; }
+      .muted { fill:#7A6B4C; }
+      .sub { fill:#4A5568; }
+      .lime { stroke:#B7D34E; stroke-width:2; fill:none; }
+      .pill-warn { fill:#FBE0CF; stroke:#F0BFA0; stroke-width:0.5; }
+      .pill-warn-text { fill:#E58124; }
+      .pill-info { fill:#ECF2FA; stroke:#C9D9EE; stroke-width:0.5; }
+      .pill-info-text { fill:#2864B8; }
+      .pill-mint { fill:#D4ECDB; stroke:#A6D2B0; stroke-width:0.5; }
+      .pill-mint-text { fill:#3F6A1D; }
+      .pill-violet { fill:#E2DCF3; stroke:#C4B7E5; stroke-width:0.5; }
+      .pill-violet-text { fill:#5240A6; }
+      .label-tag { fill:#7A6B4C; font-size:10px; font-weight:600; letter-spacing:0.12em; }
+    </style>
+  </defs>
+
+  <rect x="10" y="10" width="800" height="360" rx="14" class="card-bg"/>
+
+  <!-- Lane tag -->
+  <text x="36" y="42" class="label-tag">SCREEN 1 · TODAY · TOP HEADER</text>
+
+  <!-- Location + date row -->
+  <text x="36" y="78" font-size="13" fill="#7A6B4C">📍 Vikhroli West, Mumbai · 19 Jun 2026</text>
+
+  <!-- Env pills row (right aligned conceptually) -->
+  <g transform="translate(440,62)">
+    <rect width="80" height="26" rx="13" class="pill-warn"/>
+    <text x="40" y="17" text-anchor="middle" font-size="12" font-weight="600" class="pill-warn-text">UV 6.2</text>
+
+    <rect x="90" width="80" height="26" rx="13" class="pill-warn"/>
+    <text x="130" y="17" text-anchor="middle" font-size="12" font-weight="600" class="pill-warn-text">33.4°C</text>
+
+    <rect width="80" height="26" rx="13" y="34" class="pill-violet"/>
+    <text x="40" y="51" text-anchor="middle" font-size="12" font-weight="600" class="pill-violet-text">AQI 73</text>
+
+    <rect x="90" width="80" height="26" rx="13" y="34" class="pill-mint"/>
+    <text x="130" y="51" text-anchor="middle" font-size="12" font-weight="600" class="pill-mint-text">RH 59%</text>
+  </g>
+
+  <!-- Mood headline -->
+  <text x="36" y="158" font-size="22" font-weight="500" class="navy">Today is a sebum-rush day.</text>
+  <line x1="36" y1="166" x2="276" y2="166" class="lime"/>
+
+  <!-- Mood sub -->
+  <text x="36" y="200" font-size="14" class="sub">Priya, heat plus muggy air pushes your jawline harder than yesterday.</text>
+  <text x="36" y="222" font-size="14" class="sub">Mid-day blot helps; tonight's cleanse matters.</text>
+
+  <!-- Status pills -->
+  <g transform="translate(36,260)">
+    <rect width="170" height="36" rx="18" fill="#FFFFFF" stroke="#E5D9BD" stroke-width="0.5"/>
+    <circle cx="22" cy="18" r="8" fill="#A2342F"/>
+    <text x="22" y="22" text-anchor="middle" font-size="10" fill="white" font-weight="700">3</text>
+    <text x="42" y="22" font-size="13" font-weight="600" class="navy">3 acne alerts</text>
+
+    <rect x="186" width="210" height="36" rx="18" fill="#FFFFFF" stroke="#E5D9BD" stroke-width="0.5"/>
+    <text x="208" y="22" font-size="14">💧</text>
+    <text x="232" y="22" font-size="13" font-weight="600" class="navy">Monsoon turning on</text>
+  </g>
+
+  <!-- Footnote -->
+  <text x="36" y="340" font-size="11" fill="#7A6B4C" font-style="italic">Last updated 19 Jun 2026, 15:50 · Snapshot v1.0 · Personalised mode</text>
+</svg>

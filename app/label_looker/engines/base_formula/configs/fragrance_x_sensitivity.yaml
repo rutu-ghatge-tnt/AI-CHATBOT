@@ -1,0 +1,7 @@
+version: "1.0"
+matrix:
+  none: {no_sensitivity: excellent, sensitive_self_report: excellent, eczema_or_rosacea: excellent, barrier_compromised: excellent}
+  low: {no_sensitivity: good, sensitive_self_report: good, eczema_or_rosacea: ok, barrier_compromised: poor}
+  standard: {no_sensitivity: good, sensitive_self_report: ok, eczema_or_rosacea: poor, barrier_compromised: avoid}
+  heavy: {no_sensitivity: ok, sensitive_self_report: poor, eczema_or_rosacea: avoid, barrier_compromised: avoid}
+

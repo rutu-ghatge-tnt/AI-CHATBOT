@@ -7,8 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Final
 
-from app.label_looker.errors import ScannerApiError
-from app.label_looker.settings import get_label_looker_settings
+from app.label_looker.core.errors import ScannerApiError
+from app.label_looker.core.settings import get_label_looker_settings
 
 # Mirrors typical productScanMulter allowlist (README §5).
 _ALLOWED_MIMES: Final[frozenset[str]] = frozenset(

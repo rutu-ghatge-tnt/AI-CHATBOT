@@ -1,0 +1,50 @@
+name: HLHP Tests
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+jobs:
+  hlhp-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run HLHP test suite
+        env:
+          HLHP_CACHE_BACKEND: memory
+          HLHP_COACH_VOICE_ENABLED: "false"
+        run: |
+          python -m pytest \
+            tests/test_hlhp_integration.py \
+            tests/test_hlhp_evidence.py \
+            tests/test_hlhp_v2_fields.py \
+            tests/test_hlhp_scan_api.py \
+            tests/test_hlhp_build_validators.py \
+            tests/test_hlhp_coach.py \
+            tests/test_hlhp_cache.py \
+            tests/test_hlhp_personalizer.py \
+            tests/test_hl_scoring.py \
+            -v --tb=short

@@ -1,0 +1,112 @@
+{
+  "version": "2026",
+  "note": "Skin-relevant Indian festivals only — pollution, diet/sweets, color exposure. Gregorian dates per year.",
+  "festivals": [
+    {
+      "id": "holi",
+      "name": "Holi",
+      "date": "2026-03-04",
+      "skin_relevant": true,
+      "skin_impacts": ["color_exposure"],
+      "tags": ["festival_day", "color_exposure"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — color & skin"
+    },
+    {
+      "id": "eid",
+      "name": "Eid",
+      "date": "2026-03-31",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    {
+      "id": "diwali",
+      "name": "Diwali",
+      "date": "2026-11-08",
+      "skin_relevant": true,
+      "skin_impacts": ["air_quality_spike"],
+      "tags": ["festival_day", "air_quality_spike"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — air quality spike"
+    },
+    {
+      "id": "karva_chauth",
+      "name": "Karva Chauth",
+      "date": "2026-10-28",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    {
+      "id": "navratri",
+      "name": "Navratri",
+      "date": "2026-10-07",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    {
+      "id": "dussehra",
+      "name": "Dussehra",
+      "date": "2026-10-22",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    {
+      "id": "ganesh_chaturthi",
+      "name": "Ganesh Chaturthi",
+      "date": "2026-09-01",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    { "id": "raksha_bandhan",
+      "name": "Raksha Bandhan",
+      "date": "2026-08-11",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    { "id": "mahashivratri",
+      "name": "Maha Shivratri",
+      "date": "2026-03-10",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    { "id": "christmas",
+      "name": "Christmas",
+      "date": "2026-12-25",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    },
+    { "id": "new_year",
+      "name": "New Year",
+      "date": "2026-01-01",
+      "skin_relevant": true,
+      "skin_impacts": ["diet_shift"],
+      "tags": ["festival_day", "diet_shift"],
+      "prep_window_days": 14,
+      "explore_cta": "Festival prep — sweets & skin"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
-from app.hl_engine.models.environmental import EnvironmentalData
-from app.hl_engine.services.scenario_matcher import match_scenario
-from app.hl_engine.services.scoring_engine import calculate_skin_score
+from app.hlhp.models.environmental import EnvironmentalData
+from app.hlhp.services.scenario_matcher import match_scenario
+from app.hlhp.services.scoring_engine import calculate_skin_score
 
 
 def _make_env(**kwargs):

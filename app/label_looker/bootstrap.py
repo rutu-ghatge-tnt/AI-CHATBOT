@@ -8,11 +8,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.label_looker.errors import ScannerApiError
-from app.label_looker.profile_match_router import profile_match_routes
-from app.label_looker.responses import api_error_response
-from app.label_looker.router import _scanner_routes, admin_router, public_text_routes
-from app.label_looker.settings import get_label_looker_settings
+from app.label_looker.core.errors import ScannerApiError
+from app.label_looker.modules.label_looker_orchestration.routes import build_label_looker_router
+from app.label_looker.modules.match_my_profile.routes import build_router as profile_match_routes
+from app.label_looker.modules.product_analysis.routes import (
+    build_admin_router as admin_router,
+    build_public_text_router as public_text_routes,
+    build_scanner_router as _scanner_routes,
+)
+from app.label_looker.core.responses import api_error_response
+from app.label_looker.core.settings import get_label_looker_settings
 
 
 def _scanner_paths(path: str) -> bool:
@@ -46,11 +51,9 @@ def install_label_looker(app: FastAPI) -> None:
         name="label_looker_product_scan_images",
     )
 
-    from app.label_looker.deps_auth import (
+    from app.label_looker.core.deps_auth import (
         authenticate_any_user,
-        authenticate_any_user_optional,
         scanner_auth_sso,
-        scanner_auth_sso_optional,
     )
 
     app.include_router(
@@ -59,20 +62,30 @@ def install_label_looker(app: FastAPI) -> None:
         tags=["Label Looker — legacy /scanner"],
     )
     app.include_router(
-        public_text_routes(scanner_auth_sso_optional, scanner_auth_sso),
+        public_text_routes(scanner_auth_sso),
         prefix="/scanner",
         tags=["Label Looker — legacy /scanner"],
     )
     app.include_router(admin_router(), prefix="/scanner", tags=["Label Looker — panel /scanner"])
+    app.include_router(
+        build_label_looker_router(scanner_auth_sso),
+        prefix="/scanner",
+        tags=["Label Looker — orchestration /scanner"],
+    )
     app.include_router(
         _scanner_routes(authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
     )
     app.include_router(
-        public_text_routes(authenticate_any_user_optional, authenticate_any_user),
+        public_text_routes(authenticate_any_user),
         prefix="/api/v1/scanner",
         tags=["Label Looker — v1 /api/v1/scanner"],
+    )
+    app.include_router(
+        build_label_looker_router(authenticate_any_user),
+        prefix="/api/v1/scanner",
+        tags=["Label Looker — orchestration /api/v1/scanner"],
     )
     app.include_router(
         profile_match_routes(authenticate_any_user),

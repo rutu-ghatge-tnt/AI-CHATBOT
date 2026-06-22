@@ -1,0 +1,9 @@
+version: "1.0"
+default_zone: temperate
+zones:
+  "400": {apr_jun: summer_hot_humid, jul_sep: monsoon, nov_feb: winter_mild, mar_oct_other: temperate}
+  "411": {apr_jun: summer_hot_humid, jul_sep: monsoon, nov_feb: winter_mild, mar_oct_other: temperate}
+  "110": {apr_jun: summer_hot_dry, jul_sep: monsoon, nov_feb: winter_cold_dry, mar_oct_other: temperate}
+  "560": {apr_jun: temperate, jul_sep: monsoon, nov_feb: winter_mild, mar_oct_other: temperate}
+  "600": {apr_jun: summer_hot_humid, jul_sep: monsoon, nov_feb: winter_mild, mar_oct_other: temperate}
+

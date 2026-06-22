@@ -1,0 +1,2691 @@
+{
+  "generated_at": "2026-06-20T11:39:31.020671+00:00",
+  "source_workbook": "HLHP_Evidence_Base.xlsx",
+  "sheets_exported": [
+    "README",
+    "Book Inventory",
+    "UV",
+    "Temperature",
+    "Humidity",
+    "Pollution",
+    "Nutritional Status",
+    "Lifestyle",
+    "Science Nuggets",
+    "Glossary",
+    "Gaps & Conflicts",
+    "Coverage_Matrix"
+  ],
+  "counts": {
+    "findings": 1953,
+    "science_nuggets": 18,
+    "book_inventory": 256,
+    "glossary": 42,
+    "gaps_conflicts": 15,
+    "coverage_grids": 4
+  },
+  "build_autofixes": [
+    "UV-1: added concern:dullness for UV×dullness",
+    "TEM-1: added concern:tan for Temperature×tan",
+    "HUM-1: added concern:tan for Humidity×tan",
+    "HUM-2: added concern:dullness for Humidity×dullness",
+    "HUM-3: added concern:dark_circles for Humidity×dark_circles",
+    "HUM-4: added concern:large_pores for Humidity×large_pores",
+    "HUM-5: added concern:hair_loss for Humidity×hair_loss",
+    "POL-1: added concern:tan for Pollution×tan",
+    "POL-2: added concern:dullness for Pollution×dullness",
+    "POL-3: added concern:dark_circles for Pollution×dark_circles",
+    "POL-4: added concern:large_pores for Pollution×large_pores",
+    "LIF-2: added concern:tan for Sleep×tan",
+    "LIF-4: added concern:dullness for Sleep×dullness",
+    "LIF-5: added concern:large_pores for Sleep×large_pores",
+    "TEM-2: added age:25-40 for Temperature",
+    "HUM-6: added age:25-40 for Humidity",
+    "UV-2: sanitised alert_l1_guest",
+    "UV-2: sanitised alert_l1_personalised",
+    "UV-37: sanitised alert_l1_personalised",
+    "UV-51: sanitised alert_l1_guest",
+    "UV-153: sanitised alert_l1_personalised",
+    "UV-202: sanitised alert_l1_personalised",
+    "UV-206: sanitised alert_l1_personalised",
+    "UV-207: sanitised alert_l1_personalised",
+    "UV-210: sanitised alert_l1_personalised",
+    "UV-211: sanitised alert_l1_personalised",
+    "UV-230: sanitised alert_l1_personalised",
+    "UV-234: sanitised alert_l1_personalised",
+    "UV-238: sanitised alert_l1_personalised",
+    "UV-250: sanitised alert_l1_personalised",
+    "UV-251: sanitised alert_l1_personalised",
+    "UV-262: sanitised alert_l1_personalised",
+    "UV-290: sanitised alert_l1_guest",
+    "UV-290: sanitised alert_l1_personalised",
+    "UV-302: sanitised alert_l1_guest",
+    "UV-302: sanitised alert_l1_personalised",
+    "UV-310: sanitised alert_l1_guest",
+    "UV-310: sanitised alert_l1_personalised",
+    "UV-341: sanitised alert_l1_guest",
+    "UV-341: sanitised alert_l1_personalised",
+    "UV-363: sanitised alert_l1_guest",
+    "UV-363: sanitised alert_l1_personalised",
+    "UV-413: sanitised alert_l1_guest",
+    "UV-415: sanitised alert_l1_guest",
+    "UV-415: sanitised alert_l1_personalised",
+    "UV-445: sanitised alert_l1_personalised",
+    "UV-453: sanitised alert_l1_guest",
+    "UV-453: sanitised alert_l1_personalised",
+    "UV-480: sanitised alert_l1_personalised",
+    "UV-695: sanitised alert_l1_guest",
+    "UV-695: sanitised alert_l1_personalised",
+    "TEM-16: sanitised alert_l1_guest",
+    "TEM-16: sanitised alert_l1_personalised",
+    "TEM-25: sanitised alert_l1_guest",
+    "TEM-25: sanitised alert_l1_personalised",
+    "TEM-36: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-49: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-52: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-57: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-62: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "TEM-98: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "HUM-14: sanitised alert_l1_guest",
+    "HUM-14: sanitised alert_l1_personalised",
+    "HUM-42: sanitised alert_l1_guest",
+    "HUM-42: sanitised alert_l1_personalised",
+    "HUM-74: sanitised alert_l1_guest",
+    "HUM-147: sanitised alert_l1_guest",
+    "HUM-147: sanitised alert_l1_personalised",
+    "HUM-148: sanitised alert_l1_guest",
+    "HUM-148: sanitised alert_l1_personalised",
+    "HUM-166: sanitised alert_l1_guest",
+    "HUM-168: sanitised alert_l1_guest",
+    "HUM-168: sanitised alert_l1_personalised",
+    "HUM-173: sanitised alert_l1_guest",
+    "HUM-173: sanitised alert_l1_personalised",
+    "HUM-174: sanitised alert_l1_guest",
+    "HUM-174: sanitised alert_l1_personalised",
+    "HUM-176: sanitised alert_l1_guest",
+    "HUM-176: sanitised alert_l1_personalised",
+    "HUM-178: sanitised alert_l1_guest",
+    "HUM-178: sanitised alert_l1_personalised",
+    "HUM-205: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-4: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-45: sanitised alert_l1_guest",
+    "POL-45: sanitised alert_l1_personalised",
+    "POL-48: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-61: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-62: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-63: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-72: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-73: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-84: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-86: sanitised alert_l1_personalised",
+    "POL-86: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-89: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-156: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-187: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "POL-188: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-4: sanitised alert_l1_personalised",
+    "NUT-8: sanitised alert_l1_personalised",
+    "NUT-13: sanitised alert_l1_guest",
+    "NUT-22: sanitised alert_l1_guest",
+    "NUT-22: sanitised alert_l1_personalised",
+    "NUT-27: sanitised alert_l1_guest",
+    "NUT-27: sanitised alert_l1_personalised",
+    "NUT-31: sanitised alert_l1_guest",
+    "NUT-31: sanitised alert_l1_personalised",
+    "NUT-49: sanitised alert_l1_guest",
+    "NUT-49: sanitised alert_l1_personalised",
+    "NUT-55: sanitised alert_l1_guest",
+    "NUT-55: sanitised alert_l1_personalised",
+    "NUT-56: sanitised alert_l1_guest",
+    "NUT-56: sanitised alert_l1_personalised",
+    "NUT-102: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-103: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-106: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-110: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-114: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-122: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "NUT-144: sanitised alert_l1_personalised",
+    "NUT-148: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-28: sanitised alert_l1_guest",
+    "LIF-28: sanitised alert_l1_personalised",
+    "LIF-32: sanitised alert_l1_guest",
+    "LIF-32: sanitised alert_l1_personalised",
+    "LIF-33: sanitised alert_l1_personalised",
+    "LIF-54: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-57: sanitised alert_l1_guest",
+    "LIF-57: sanitised alert_l1_personalised",
+    "LIF-87: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-97: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-98: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-99: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-121: sanitised alert_l1_guest",
+    "LIF-121: sanitised alert_l1_personalised",
+    "LIF-125: sanitised alert_l1_personalised",
+    "LIF-145: sanitised alert_l1_guest",
+    "LIF-145: sanitised alert_l1_personalised",
+    "LIF-162: sanitised alert_l1_guest",
+    "LIF-162: sanitised alert_l1_personalised",
+    "LIF-178: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-179: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-181: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-192: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-195: sanitised alert_l1_guest",
+    "LIF-195: sanitised alert_l1_personalised",
+    "LIF-195: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-197: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)",
+    "LIF-218: Trigger_UVI_Band auto-set to low, moderate, high, very_high, extreme (sunscreen in L1; excludes off/night)"
+  ],
+  "build_warnings": [],
+  "build_report": {
+    "voice_violations": [
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-172",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-175",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'NLRP3 inflammasome'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-194",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-258",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IGF-1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      }
+    ],
+    "citation_issues": [
+      {
+        "row_id": "UV-208",
+        "rule": "book_not_in_inventory",
+        "detail": "source '2022 1st ed' not matched in Book Inventory"
+      }
+    ],
+    "gate_failures": [
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "UV-208",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-441",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'singlet oxygen'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "UV-452",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-6'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "TEM-99",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-172",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-175",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'NLRP3 inflammasome'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "POL-184",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-179",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-194",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-195",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'reactive oxygen species'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-205",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-221",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IL-8'"
+      },
+      {
+        "row_id": "NUT-258",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'IGF-1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_guest",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      },
+      {
+        "row_id": "LIF-209",
+        "field": "alert_l1_personalised",
+        "rule": "glossary_chemistry",
+        "detail": "banned jargon 'TRPV1'"
+      },
+      {
+        "row_id": "UV-208",
+        "rule": "book_not_in_inventory",
+        "detail": "source '2022 1st ed' not matched in Book Inventory"
+      },
+      {
+        "row_id": "UV-716",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "UV-716",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "UV-716",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "UV-716",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-123",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-124",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-125",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "TEM-126",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-221",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-222",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-223",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-224",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-225",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-226",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-227",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-228",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-229",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-230",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-231",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-232",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-233",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-239",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-240",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-244",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-245",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-246",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "HUM-247",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-219",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-220",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-221",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-222",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-223",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-224",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-226",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-227",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-228",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-229",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-231",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "POL-232",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-301",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-302",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-303",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-304",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-305",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-306",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-307",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-308",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-309",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-310",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-314",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-318",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-320",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-322",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-323",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-325",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-326",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-327",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-328",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-329",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-330",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-331",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-332",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-333",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-334",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-335",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-338",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-339",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-340",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-345",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-346",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-347",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-348",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-349",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-350",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-351",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-352",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-353",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-354",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-355",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-356",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-357",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-358",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "mood_verdict_tag",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "engagement_archetype",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "routine_action",
+        "detail": "missing on P0"
+      },
+      {
+        "row_id": "LIF-359",
+        "rule": "visual_icon_hint",
+        "detail": "missing on P0"
+      }
+    ],
+    "gate_failure_count": 346,
+    "coverage_report": {
+      "methodology": "Rule-based coverage from Trigger_User_Filter tokens and concern aliases.",
+      "computed_grids": [
+        {
+          "title": "Trigger × Skin Type",
+          "columns": [
+            "dry",
+            "normal",
+            "combination",
+            "oily",
+            "sensitive"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                492,
+                485,
+                485,
+                485,
+                677
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                75,
+                67,
+                71,
+                83,
+                104
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                173,
+                118,
+                121,
+                129,
+                217
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                171,
+                159,
+                164,
+                159,
+                223
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                184,
+                166,
+                173,
+                182,
+                329
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                184,
+                166,
+                173,
+                182,
+                329
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Trigger × Skin Concern",
+          "columns": [
+            "acne",
+            "melasma",
+            "pigmentation",
+            "tan",
+            "aging",
+            "photoaging",
+            "eczema",
+            "psoriasis",
+            "dullness",
+            "dark_circles",
+            "dehydration",
+            "large_pores",
+            "hair_loss",
+            "rosacea"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                6,
+                70,
+                43,
+                1,
+                7,
+                32,
+                21,
+                34,
+                1,
+                7,
+                2,
+                2,
+                3,
+                13
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                18,
+                5,
+                4,
+                1,
+                3,
+                6,
+                31,
+                34,
+                2,
+                2,
+                7,
+                1,
+                2,
+                23
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                5,
+                2,
+                6,
+                1,
+                3,
+                7,
+                52,
+                50,
+                1,
+                1,
+                19,
+                1,
+                1,
+                16
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                8,
+                8,
+                15,
+                1,
+                8,
+                12,
+                33,
+                34,
+                1,
+                1,
+                2,
+                1,
+                5,
+                13
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                57,
+                19,
+                13,
+                1,
+                14,
+                16,
+                70,
+                75,
+                1,
+                12,
+                1,
+                1,
+                39,
+                45
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                57,
+                19,
+                13,
+                1,
+                14,
+                16,
+                70,
+                75,
+                1,
+                12,
+                1,
+                1,
+                39,
+                45
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Trigger × Gender",
+          "columns": [
+            "female",
+            "male"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                63,
+                3
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                10,
+                1
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                21,
+                6
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                16,
+                1
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                112,
+                7
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                112,
+                7
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Trigger × Age band",
+          "columns": [
+            "18-25",
+            "25-40",
+            "40-60",
+            "60+"
+          ],
+          "rows": [
+            {
+              "trigger": "UV",
+              "counts": [
+                36,
+                19,
+                6,
+                1
+              ]
+            },
+            {
+              "trigger": "Temperature",
+              "counts": [
+                4,
+                1,
+                2,
+                3
+              ]
+            },
+            {
+              "trigger": "Humidity",
+              "counts": [
+                11,
+                1,
+                12,
+                4
+              ]
+            },
+            {
+              "trigger": "Pollution",
+              "counts": [
+                15,
+                6,
+                3,
+                1
+              ]
+            },
+            {
+              "trigger": "Sleep",
+              "counts": [
+                25,
+                13,
+                5,
+                2
+              ]
+            },
+            {
+              "trigger": "Stress",
+              "counts": [
+                25,
+                13,
+                5,
+                2
+              ]
+            }
+          ]
+        }
+      ],
+      "true_gap_count": 0,
+      "true_gaps": [],
+      "thin_cells": [
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "dehydration",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "UV",
+          "column": "large_pores",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "dullness",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "dark_circles",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Temperature",
+          "column": "hair_loss",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "melasma",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "dark_circles",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Humidity",
+          "column": "hair_loss",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "dark_circles",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "dehydration",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Pollution",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "dehydration",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Sleep",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "tan",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "dullness",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "dehydration",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Skin Concern",
+          "trigger": "Stress",
+          "column": "large_pores",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Temperature",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Gender",
+          "trigger": "Pollution",
+          "column": "male",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "UV",
+          "column": "60+",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Temperature",
+          "column": "25-40",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Temperature",
+          "column": "40-60",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Humidity",
+          "column": "25-40",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Pollution",
+          "column": "60+",
+          "computed_count": 1,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Sleep",
+          "column": "60+",
+          "computed_count": 2,
+          "status": "thin"
+        },
+        {
+          "grid": "Trigger × Age band",
+          "trigger": "Stress",
+          "column": "60+",
+          "computed_count": 2,
+          "status": "thin"
+        }
+      ]
+    },
+    "gaps_conflicts_count": 15,
+    "glossary_entries": 42,
+    "book_inventory_count": 256
+  }
+}
