@@ -11,7 +11,7 @@ from app.hlhp.coach.streak_engine import compute_streak_after_tap, current_strea
 from app.hlhp.coach.voice_modulator import select_tone
 from app.hlhp.db import hl_db
 from app.hlhp.models.profile import UserProfile
-from app.hlhp.services.profile_loader import _user_details_lookup_filter
+from app.hlhp.services.profile_loader import load_user_first_name
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +31,7 @@ def _parse_dt(value) -> datetime:
 
 
 async def _load_user_name(user_id: str) -> str:
-    doc = await hl_db["user_details"].find_one(_user_details_lookup_filter(user_id))
-    if not doc:
-        return ""
-    for key in ("firstName", "first_name", "name", "displayName", "userName"):
-        val = doc.get(key)
-        if isinstance(val, str) and val.strip():
-            return val.strip()
-    return ""
+    return await load_user_first_name(user_id)
 
 
 async def load_coach_context(
@@ -220,6 +213,100 @@ async def record_action_tap(
 
     today = tapped_at.date()
     return current_streak(updated, today), updated.longest_ever
+
+
+_FEELINGS = "hlhp_symptom_feeling_log"
+
+
+async def _latest_feeling_state(
+    user_id: str,
+    *,
+    since: datetime | None = None,
+) -> dict[str, bool]:
+    """Keyword -> selected as of the most recent toggle (insert-only log)."""
+    if not user_id:
+        return {}
+    query: dict = {"user_id": user_id}
+    if since is not None:
+        query["recorded_at"] = {"$gte": since}
+    try:
+        cursor = hl_db[_FEELINGS].find(query).sort("recorded_at", 1)
+        by_kw: dict[str, bool] = {}
+        async for doc in cursor:
+            kw = str(doc.get("symptom_keyword") or "").strip().lower()
+            if kw:
+                by_kw[kw] = bool(doc.get("selected"))
+        return by_kw
+    except Exception as exc:
+        logger.warning("HLHP symptom_feeling state fetch failed: %s", exc)
+        return {}
+
+
+async def fetch_selected_symptoms(
+    user_id: str,
+    *,
+    days: int = 30,
+) -> set[str]:
+    """Keywords the user actively selected (latest toggle wins per keyword)."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    state = await _latest_feeling_state(user_id, since=since)
+    return {kw for kw, selected in state.items() if selected}
+
+
+async def fetch_daily_feeling_keywords(
+    user_id: str,
+    *,
+    since: datetime,
+) -> dict[str, list[str]]:
+    """ISO date -> symptom keywords selected as of end of that day (latest toggle wins)."""
+    if not user_id:
+        return {}
+    try:
+        cursor = hl_db[_FEELINGS].find(
+            {"user_id": user_id, "recorded_at": {"$gte": since}},
+        ).sort("recorded_at", 1)
+        by_date_kw: dict[str, dict[str, bool]] = {}
+        async for doc in cursor:
+            recorded = doc.get("recorded_at")
+            if isinstance(recorded, datetime):
+                if recorded.tzinfo is None:
+                    recorded = recorded.replace(tzinfo=timezone.utc)
+                else:
+                    recorded = recorded.astimezone(timezone.utc)
+            else:
+                continue
+            day = recorded.date().isoformat()
+            kw = str(doc.get("symptom_keyword") or "").strip().lower()
+            if not kw:
+                continue
+            by_date_kw.setdefault(day, {})[kw] = bool(doc.get("selected"))
+        return {
+            day: sorted(k for k, selected in kws.items() if selected)
+            for day, kws in by_date_kw.items()
+        }
+    except Exception as exc:
+        logger.warning("HLHP symptom_feeling daily fetch failed: %s", exc)
+        return {}
+
+
+async def record_symptom_feeling(
+    user_id: str,
+    symptom_keyword: str,
+    *,
+    selected: bool,
+    recorded_at: datetime,
+) -> None:
+    try:
+        await hl_db[_FEELINGS].insert_one(
+            {
+                "user_id": user_id,
+                "symptom_keyword": symptom_keyword.strip().lower(),
+                "selected": selected,
+                "recorded_at": recorded_at,
+            }
+        )
+    except Exception as exc:
+        logger.warning("HLHP symptom_feeling write failed: %s", exc)
 
 
 async def record_symptom_tap(user_id: str, symptom_keyword: str, tapped_at: datetime) -> None:

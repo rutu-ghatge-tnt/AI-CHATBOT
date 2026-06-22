@@ -34,6 +34,11 @@ async def get_personalized_alert(
         score = calculate_skin_score(env_data)
         generic_alert = generate_alert(env_data, score)
         profile = await load_user_profile(user_id)
+        if profile is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Skin profile incomplete — add age, gender, skin type, and concerns in your account.",
+            )
         return personalize_alert(generic_alert, profile, env_data, score)
     except HTTPException:
         raise

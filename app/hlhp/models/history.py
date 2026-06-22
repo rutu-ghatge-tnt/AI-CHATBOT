@@ -35,14 +35,28 @@ class ReturnerBanner(BaseModel):
     context: str = ""
 
 
+class HistoryDayLog(BaseModel):
+    date: str
+    days_ago: int
+    outdoor_score: Optional[int] = None
+    mood_display: str
+    day_description: str
+    feelings: list[str] = Field(default_factory=list)
+    sudden_event: bool = False
+    is_sample: bool = False
+    logged: bool = True
+
+
 class HistoryResponse(BaseModel):
     user_id: str
     days: int
     scan_count: int = 0
+    is_demo: bool = False
     sfi_average: Optional[float] = None
     sfi_prior_period_average: Optional[float] = None
     sfi_delta_vs_prior: Optional[float] = None
     sudden_events: list[SuddenEventEntry] = Field(default_factory=list)
+    daily_logs: list[HistoryDayLog] = Field(default_factory=list)
     trend: list[SfiTrendPoint] = Field(default_factory=list)
     most_fired_mood: Optional[MostFiredMood] = None
     returner_banner: Optional[ReturnerBanner] = None

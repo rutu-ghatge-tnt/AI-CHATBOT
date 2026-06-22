@@ -8,6 +8,7 @@ from typing import Any, Optional
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
 from app.hlhp.evidence.loader import get_evidence_store
 from app.hlhp.models.environmental import EnvironmentalData
+from app.hlhp.services.outdoor_ok import compute_outdoor_ok, pick_mood_verdict
 
 
 def _match_template(
@@ -99,13 +100,19 @@ def assemble_week_ahead(
         bands = bucketize_environment(env)
         mood = mood_today if offset == 0 else ""
         hit = _match_template(templates, bands=bands, concern_id=concern_id, mood=mood)
-        sfi = max(20, min(95, 100 - offset * 3 - int(uvi * 2)))
+        score, band_text = compute_outdoor_ok(env)
+        mood_verdict = pick_mood_verdict(bands)
+        oneliner = (hit or {}).get("forecast_one_liner") or forecast_oneliner(
+            bands=bands, concern_id=concern_id, mood=mood
+        ) or band_text
         out.append(
             {
                 "date": day.date().isoformat(),
-                "label": "Today" if offset == 0 else day.strftime("%a %d %b"),
-                "sfi_score": sfi,
-                "one_liner": (hit or {}).get("forecast_one_liner") or "Steady routine carries the week.",
+                "day_label": "Today" if offset == 0 else day.strftime("%a %d %b"),
+                "outdoor_ok_score": score,
+                "outdoor_ok_band_text": band_text,
+                "mood_verdict": mood_verdict,
+                "forecast_text": oneliner or "Steady routine carries the week.",
                 "is_today": offset == 0,
             }
         )

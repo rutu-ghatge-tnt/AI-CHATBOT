@@ -6,10 +6,13 @@ from app.hlhp.models.scan import (
     HealthResponse,
     ScanRequest,
     ScanResponse,
+    SymptomFeelingRequest,
+    SymptomFeelingResponse,
     SymptomTapRequest,
     SymptomTapResponse,
 )
 from app.hlhp.services.action_tap_service import run_action_tap
+from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
 from app.hlhp.services.scan_service import run_scan, run_symptom_tap
 
 router = APIRouter(prefix="/hlhp", tags=["HLHP v2 — Flash Alerts"])
@@ -31,6 +34,26 @@ async def hlhp_symptom_tap(req: SymptomTapRequest) -> SymptomTapResponse:
         return await run_symptom_tap(req)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Symptom tap failed: {exc}") from exc
+
+
+@router.post("/symptom_feeling", response_model=SymptomFeelingResponse)
+async def hlhp_symptom_feeling(req: SymptomFeelingRequest) -> SymptomFeelingResponse:
+    """Log how the user feels today — only logged selections are highlighted in UI."""
+    keyword = req.symptom_keyword.strip().lower()
+    if not keyword:
+        raise HTTPException(status_code=400, detail="symptom_keyword required")
+    await record_symptom_feeling(
+        req.user_id,
+        keyword,
+        selected=req.selected,
+        recorded_at=req.local_time,
+    )
+    active = sorted(await fetch_selected_symptoms(req.user_id))
+    return SymptomFeelingResponse(
+        symptom_keyword=keyword,
+        selected=req.selected,
+        selected_keywords=active,
+    )
 
 
 @router.post("/action_tap", response_model=ActionTapResponse)

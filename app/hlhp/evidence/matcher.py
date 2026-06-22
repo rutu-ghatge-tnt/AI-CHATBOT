@@ -209,7 +209,7 @@ def user_filter_matches(
     if guest_mode:
         return len(finding.user_filter) == 0
     if not finding.user_filter:
-        return True
+        return False
     if profile is None:
         return False
     return all(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -106,11 +106,13 @@ class ScanResponse(BaseModel):
     snapshot_version: str
     workbook_version: Optional[str] = None
     mode: Literal["personalised", "guest"]
+    concern_id: Optional[str] = None
     env_snapshot: EnvSnapshot
     outdoor_ok_score: int
     outdoor_ok_band_text: str
     mood_verdict_today: str
     mood_headline: Optional[str] = None
+    strip_headline: Optional[str] = None
     forecast_oneliner: Optional[str] = None
     sudden_event_tags: list[str] = Field(default_factory=list)
     alert_count_label: Optional[str] = None
@@ -123,6 +125,7 @@ class ScanResponse(BaseModel):
     profile_nudge: Optional[str] = None
     weather_visuals: Optional[WeatherVisuals] = None
     skin_care_tip: Optional[str] = None
+    raw_weather_payload: Optional[dict[str, Any]] = None
 
 
 class SymptomTapRequest(BaseModel):
@@ -145,6 +148,19 @@ class SymptomTapResponse(BaseModel):
     source_locator: str
     matched_rules: list[AlertTile] = Field(default_factory=list)
     continuity_acknowledgment: Optional[str] = None
+
+
+class SymptomFeelingRequest(BaseModel):
+    user_id: str
+    symptom_keyword: str
+    local_time: datetime
+    selected: bool = True
+
+
+class SymptomFeelingResponse(BaseModel):
+    symptom_keyword: str
+    selected: bool
+    selected_keywords: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

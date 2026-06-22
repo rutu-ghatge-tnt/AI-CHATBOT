@@ -90,9 +90,14 @@ SYMPTOM_RELATIONS: dict[str, list[str]] = {
 }
 
 
-def symptom_chips(primary_concern: str | None = None) -> list[dict]:
-    highlight = _CONCERN_CHIP_HIGHLIGHTS.get((primary_concern or "").lower(), set())
+def symptom_chips(
+    primary_concern: str | None = None,
+    *,
+    selected: set[str] | frozenset[str] | None = None,
+) -> list[dict]:
+    """20-keyword grid — highlight only user-selected feelings (from logs), not concern defaults."""
+    selected_norm = {k.strip().lower() for k in (selected or set()) if k}
     return [
-        {"keyword": kw, "highlighted": kw in highlight}
+        {"keyword": kw, "highlighted": kw in selected_norm}
         for kw in SYMPTOM_KEYWORDS
     ]

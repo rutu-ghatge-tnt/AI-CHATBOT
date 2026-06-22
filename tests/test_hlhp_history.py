@@ -61,12 +61,15 @@ class FakeCollection:
 
 
 class FakeDb:
-    def __init__(self, scans=None):
+    def __init__(self, scans=None, feelings=None):
         self._scan = FakeCollection(scans)
+        self._feelings = FakeCollection(feelings)
 
     def __getitem__(self, name):
         if name == "hlhp_scan_log":
             return self._scan
+        if name == "hlhp_symptom_feeling_log":
+            return self._feelings
         return FakeCollection()
 
 
@@ -85,14 +88,18 @@ def _scan(user_id: str, days_ago: int, sfi: int, mood: str, tags=None):
     }
 
 
-def test_history_empty_returns_building_message():
+def test_history_empty_returns_demo_logs():
     fake = FakeDb([])
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
         result = asyncio.run(assemble_history("u1", days=30))
     assert result.scan_count == 0
+    assert result.is_demo is True
+    assert len(result.daily_logs) == 7
+    assert all(log.is_sample for log in result.daily_logs)
     assert result.message
-    assert "Building your history" in result.message
+    assert "Sample" in result.message or "sample" in result.message.lower()
+    assert result.sfi_average is not None
 
 
 def test_history_computes_sfi_average_and_trend():
@@ -134,8 +141,65 @@ def test_returner_banner_after_gap():
     fake = FakeDb(scans)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
         mp.setattr("app.hlhp.services.history_service._load_user_name", _fake_name)
         result = asyncio.run(assemble_history("u1", days=30))
     assert result.returner_banner is not None
     assert result.returner_banner.show is True
     assert result.returner_banner.days_away >= 14
+
+
+def test_history_daily_logs_merge_feelings():
+    now = datetime.now(timezone.utc)
+    scans = [_scan("u1", 1, 62, "manageable_day")]
+    feelings = [
+        {
+            "user_id": "u1",
+            "symptom_keyword": "oily",
+            "selected": True,
+            "recorded_at": now - timedelta(days=1),
+        },
+        {
+            "user_id": "u1",
+            "symptom_keyword": "shiny",
+            "selected": True,
+            "recorded_at": now - timedelta(days=1, hours=2),
+        },
+    ]
+    fake = FakeDb(scans, feelings)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=30))
+    real_logs = [log for log in result.daily_logs if log.logged]
+    assert len(real_logs) >= 1
+    feeling_log = next((log for log in real_logs if log.feelings), real_logs[0])
+    assert "Oily" in feeling_log.feelings
+    assert "Shiny" in feeling_log.feelings
+    assert result.is_demo is True
+
+
+def test_history_fully_real_when_enough_scans():
+    scans = [_scan("u1", d, 55 + d, "easy_day") for d in range(7)]
+    fake = FakeDb(scans)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=30))
+    assert result.is_demo is False
+    logged = [log for log in result.daily_logs if log.logged]
+    assert all(not log.is_sample for log in logged)
+    assert len(result.daily_logs) == 7
+
+
+def test_history_fills_missing_calendar_days():
+    scans = [_scan("u1", 0, 35, "easy_day"), _scan("u1", 3, 95, "easy_day")]
+    fake = FakeDb(scans)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=30))
+    assert len(result.daily_logs) == 7
+    gaps = [log for log in result.daily_logs if not log.logged]
+    assert len(gaps) == 5
+    assert any("No scan logged" in log.mood_display for log in gaps)

@@ -4,6 +4,7 @@ from app.hlhp.core.bands import EnvironmentBands
 from app.hlhp.core.phase import DayPhase
 from app.hlhp.evidence.alert_quality import (
     headline_slot_penalty,
+    is_headline_eligible,
     is_publishable_finding,
 )
 from app.hlhp.evidence.matcher import count_matched_tokens
@@ -114,8 +115,12 @@ def rank_findings(
 ) -> list[tuple[EvidenceFinding, float, int]]:
     ranked: list[tuple[EvidenceFinding, float, int]] = []
     for finding in candidates:
-        if not is_publishable_finding(
-            finding, guest_mode=guest_mode, day_phase=day_phase
+        if not is_headline_eligible(
+            finding,
+            profile=profile,
+            bands=bands,
+            guest_mode=guest_mode,
+            day_phase=day_phase,
         ):
             continue
         matched = count_matched_tokens(finding, profile, partial_personalised)
@@ -151,17 +156,23 @@ def select_carousel(
 def select_fire_budget(
     ranked: list[tuple[EvidenceFinding, float, int]],
     *,
-    headline_slots: int = 3,
+    headline_slots: int = 1,
     candidate_slots: int = 5,
     guest_mode: bool = False,
     day_phase: DayPhase = "morning",
+    profile: UserProfile | None = None,
+    bands: EnvironmentBands | None = None,
 ) -> tuple[list[EvidenceFinding], list[EvidenceFinding]]:
-    """v2 §13: 3 surfaced headlines + up to 5 swipe candidates."""
+    """v2 §13: surfaced headlines + swipe candidates."""
     publishable = [
         item
         for item in ranked
-        if is_publishable_finding(
-            item[0], guest_mode=guest_mode, day_phase=day_phase
+        if is_headline_eligible(
+            item[0],
+            profile=profile,
+            bands=bands,
+            guest_mode=guest_mode,
+            day_phase=day_phase,
         )
     ]
     candidates = _select_diverse(publishable, max_slots=candidate_slots)

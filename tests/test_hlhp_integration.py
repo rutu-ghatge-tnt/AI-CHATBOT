@@ -204,8 +204,11 @@ class TestOutdoorOkAndFireBudget:
         from app.hlhp.evidence.ranker import rank_findings
 
         ranked = rank_findings(candidates, profile=None)
-        headlines, swipe = select_fire_budget(ranked, headline_slots=3, candidate_slots=5)
-        assert len(headlines) <= 3
+        headlines, swipe = select_fire_budget(
+            ranked, headline_slots=1, candidate_slots=5,
+            guest_mode=True, profile=None, bands=bands,
+        )
+        assert len(headlines) <= 1
         assert len(swipe) <= 5
         assert len(headlines) <= len(swipe)
 

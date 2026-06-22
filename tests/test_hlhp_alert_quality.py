@@ -85,7 +85,8 @@ def test_acne_warm_evening_headlines_non_empty_and_no_lif340():
         bands=bands,
     )
     headlines, _ = select_fire_budget(
-        ranked, guest_mode=False, day_phase="evening", headline_slots=3
+        ranked, guest_mode=False, day_phase="evening", headline_slots=3,
+        profile=profile, bands=bands,
     )
     assert headlines, "expected at least one headline"
     assert all(
@@ -107,7 +108,10 @@ def test_finding_to_tile_skips_bullet_did_you_know():
         day_phase="evening",
         bands=bands,
         glossary=store.glossary,
+        profile=_acne_profile(),
+        routine_framework=(store.composition or {}).get("concern_routine_framework") or [],
     )
+    assert tile.l2
     assert tile.l1
     assert ";" not in (tile.did_you_know or "")
     if tile.did_you_know:
