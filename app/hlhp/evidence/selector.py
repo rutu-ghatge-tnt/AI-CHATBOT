@@ -129,7 +129,13 @@ def select_evidence_bundle(
             day_phase=phase,
         )
 
-    ranked = rank_findings(candidates, profile=profile, partial_personalised=partial)
+    ranked = rank_findings(
+        candidates,
+        profile=profile,
+        partial_personalised=partial,
+        day_phase=phase,
+        guest_mode=guest_mode,
+    )
     finding, score, matched = ranked[0]
     phase_label = phase_used_label(finding.time_of_day_phase, phase)
     l1_text = _sanitize_l1(finding.pick_l1(guest_mode=guest_mode, day_phase=phase), store.glossary)

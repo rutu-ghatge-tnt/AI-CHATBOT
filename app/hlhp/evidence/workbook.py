@@ -395,7 +395,8 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
         findings.extend(read_factor_sheet(wb[sheet], sheet))
 
     snapshot = {
-        "version": 2,
+        "version": 3,
+        "workbook_version": "1.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_workbook": xlsx_path.name,
         "trigger_bands": trigger_bands_snapshot(),
@@ -409,6 +410,12 @@ def build_snapshot(xlsx_path: Path) -> dict[str, Any]:
         "gaps_conflicts": read_gaps_conflicts(wb["Gaps & Conflicts"]),
         "coverage_matrix": read_coverage_matrix(wb["Coverage_Matrix"]),
     }
+    from app.hlhp.evidence.composition_workbook import read_all_composition
+
+    snapshot["composition"] = read_all_composition(wb)
+    snapshot["composition_row_count"] = sum(
+        v for k, v in snapshot["composition"].get("_counts", {}).items()
+    )
     snapshot["nugget_count"] = len(snapshot["science_nuggets"])
     wb.close()
 

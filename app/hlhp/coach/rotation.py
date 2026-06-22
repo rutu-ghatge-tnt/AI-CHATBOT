@@ -9,9 +9,11 @@ def filter_by_recency(
     candidates: list[EvidenceFinding],
     suppressed_rule_ids: set[str],
 ) -> list[EvidenceFinding]:
+    """Prefer rules not shown in the last few days — never empty the pool."""
     if not suppressed_rule_ids:
         return candidates
-    return [c for c in candidates if c.id not in suppressed_rule_ids]
+    fresh = [c for c in candidates if c.id not in suppressed_rule_ids]
+    return fresh if fresh else candidates
 
 
 def prefer_fresh_archetypes(

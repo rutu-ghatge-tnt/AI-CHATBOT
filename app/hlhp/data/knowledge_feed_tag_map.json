@@ -1,0 +1,50 @@
+{
+  "concern_keywords": {
+    "acne": ["acne", "breakout", "pimple", "comedone", "sebum", "blackhead"],
+    "dullness": ["dull", "glow", "radiance", "brightness", "lacklustre"],
+    "pigmentation_pih": ["pigment", "dark spot", "pih", "melasma", "hyperpigment", "mark"],
+    "melasma": ["melasma", "patch", "hormonal pigment"],
+    "skin_tan": ["tan", "sunburn", "uv", "sun damage"],
+    "dryness": ["dry", "dehydr", "flaky", "barrier", "moistur"],
+    "open_pores": ["pore", "congested", "blackhead"],
+    "sensitivity": ["sensitive", "redness", "sting", "irritat"],
+    "aging": ["aging", "wrinkle", "fine line", "collagen", "retinol"],
+    "dark_circles": ["dark circle", "under eye", "eye bag"]
+  },
+  "situation_keywords": {
+    "uv_high": ["sun", "uv", "spf", "sunscreen", "photoag", "tan"],
+    "temp_high": ["heat", "sweat", "summer", "hot"],
+    "aqi_high": ["pollution", "smog", "particulate", "aqi", "pm2"],
+    "humidity_low": ["dry air", "winter", "dehydr", "humidity"],
+    "humidity_high": ["monsoon", "humid", "muggy", "fungal"],
+    "festival_day": ["festival", "diwali", "holi", "celebration"],
+    "air_quality_spike": ["cracker", "firework", "diwali", "pollution"],
+    "diet_shift": ["sweet", "sugar", "diet", "food", "glycation", "biryani"],
+    "color_exposure": ["holi", "color", "mehndi", "dye"]
+  },
+  "tag_to_concerns": {
+    "acne": ["acne"],
+    "breakouts": ["acne"],
+    "pigmentation": ["pigmentation_pih", "melasma"],
+    "dull-skin": ["dullness"],
+    "dullness": ["dullness"],
+    "dry-skin": ["dryness"],
+    "dryness": ["dryness"],
+    "sensitive-skin": ["sensitivity"],
+    "sensitivity": ["sensitivity"],
+    "anti-aging": ["aging"],
+    "aging": ["aging"],
+    "sun-protection": ["skin_tan", "pigmentation_pih"],
+    "spf": ["skin_tan", "pigmentation_pih"],
+    "pores": ["open_pores"]
+  },
+  "tag_to_situations": {
+    "pollution": ["aqi_high", "air_quality_spike"],
+    "monsoon": ["humidity_high"],
+    "summer": ["uv_high", "temp_high"],
+    "winter": ["humidity_low"],
+    "festival": ["festival_day"],
+    "diwali": ["air_quality_spike", "festival_day"],
+    "holi": ["color_exposure", "festival_day"]
+  }
+}

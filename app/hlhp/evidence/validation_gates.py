@@ -10,17 +10,22 @@ from app.hlhp.evidence.voice import validate_l1_voice
 VALID_MOOD_TAGS = {
     "easy_day",
     "comfortable_day",
-    "manageable_day",
-    "stack_day",
+    "combo_stress_day",
+    "stack_day",  # legacy alias in workbook rows
     "barrier_stress_day",
     "pigment_overdrive_day",
     "sebum_rush_day",
     "oxidative_load_day",
-    "recovery_day",
     "routine_day",
     "transition_day",
-    "cumulative_load_day",
+    "transition_shock_day",
+    "surge_day",
+    "festival_day",
     "habit_anchor_day",
+    # deprecated but may appear until snapshot rebuild completes
+    "manageable_day",
+    "recovery_day",
+    "cumulative_load_day",
 }
 
 VALID_ARCHETYPES = set("ABCDEFGHIJKL")

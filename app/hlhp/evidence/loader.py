@@ -29,6 +29,9 @@ class EvidenceStore:
         self.gaps_conflicts = snapshot.get("gaps_conflicts", [])
         self.coverage_matrix = snapshot.get("coverage_matrix", {})
         self.build_report = snapshot.get("build_report", {})
+        self.composition = snapshot.get("composition", {})
+        self.workbook_version = snapshot.get("workbook_version", str(self.version))
+        self.composition_row_count = int(snapshot.get("composition_row_count", 0))
         self._glossary_by_term = {
             (e.get("term") or "").lower(): e for e in self.glossary if e.get("term")
         }

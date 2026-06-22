@@ -1,0 +1,16 @@
+{
+  "version": "2026",
+  "cities": {
+    "Mumbai": [
+      {"window": "Jun-Jul", "event": "monsoon_onset", "tag": "Monsoon turning on", "mood_extension": "transition_shock_day"},
+      {"window": "Oct-Nov", "event": "post_monsoon_humidity_drop", "tag": "Post-monsoon shift", "mood_extension": "transition_day"}
+    ],
+    "Delhi": [
+      {"window": "Jun-Jul", "event": "monsoon_onset", "tag": "Monsoon turning on", "mood_extension": "transition_shock_day"},
+      {"window": "Nov-Jan", "event": "winter_dry", "tag": "Dry winter air", "mood_extension": "barrier_stress_day"}
+    ],
+    "default": [
+      {"window": "Jun-Sep", "event": "monsoon_season", "tag": "Monsoon season", "mood_extension": "transition_day"}
+    ]
+  }
+}

@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 1240" font-family="-apple-system, 'Inter', sans-serif">
+  <defs>
+    <style>
+      .card-bg { fill:#FBF4E8; stroke:#E5D9BD; stroke-width:0.5; }
+      .inner { fill:#FFFFFF; stroke:#E5D9BD; stroke-width:0.5; }
+      .navy { fill:#1A2B47; }
+      .sub { fill:#4A5568; }
+      .muted { fill:#7A6B4C; }
+      .label-tag { fill:#7A6B4C; font-size:10px; font-weight:600; letter-spacing:0.12em; }
+      .lime { stroke:#B7D34E; stroke-width:2; fill:none; }
+    </style>
+  </defs>
+
+  <rect x="10" y="10" width="800" height="1220" rx="14" class="card-bg"/>
+  <text x="36" y="42" class="label-tag">SCREEN 4 · YOUR SKIN · CONCERN DEEP-DIVE — ACNE</text>
+
+  <!-- HERO -->
+  <g transform="translate(36,68)">
+    <rect width="748" height="118" rx="12" class="inner"/>
+    <text x="22" y="32" font-size="11" class="label-tag">CONCERN · ADULT ACNE</text>
+    <text x="22" y="60" font-size="18" font-weight="500" class="navy">Your adult acne — sebum patterns, food triggers, post-mark fade</text>
+    <text x="22" y="84" font-size="13" class="sub">Adult-onset and adult-female acne specifically. Indian skin patterns including PIH</text>
+    <text x="22" y="100" font-size="13" class="sub">and hormonal cycle.</text>
+
+    <g transform="translate(22,108)">
+      <rect width="110" height="0" fill="none"/>
+    </g>
+  </g>
+
+  <!-- Mood pills -->
+  <g transform="translate(58,200)">
+    <rect width="110" height="24" rx="12" fill="#E2DCF3"/>
+    <text x="55" y="16" text-anchor="middle" font-size="11" font-weight="600" fill="#5240A6">Hormone-linked</text>
+
+    <rect x="120" width="100" height="24" rx="12" fill="#FBE0CF"/>
+    <text x="170" y="16" text-anchor="middle" font-size="11" font-weight="600" fill="#9C3E0A">Diet-sensitive</text>
+
+    <rect x="230" width="90" height="24" rx="12" fill="#FCEDED"/>
+    <text x="275" y="16" text-anchor="middle" font-size="11" font-weight="600" fill="#A2342F">PIH-prone</text>
+
+    <rect x="330" width="90" height="24" rx="12" fill="#D4ECDB"/>
+    <text x="375" y="16" text-anchor="middle" font-size="11" font-weight="600" fill="#3F6A1D">Manageable</text>
+  </g>
+
+  <!-- ROUTINE FRAMEWORK -->
+  <text x="36" y="276" font-size="14" font-weight="600" class="navy">Your routine framework</text>
+  <line x1="36" y1="284" x2="220" y2="284" class="lime"/>
+
+  <g transform="translate(36,298)">
+    <rect width="365" height="220" rx="10" class="inner"/>
+    <text x="16" y="28" font-size="13" font-weight="600" class="navy">☀  Morning</text>
+    <text x="16" y="56" font-size="12" class="sub">1. A gentle gel cleanser.</text>
+    <text x="16" y="78" font-size="12" class="sub">2. A brightening serum to fade marks.</text>
+    <text x="16" y="100" font-size="12" class="sub">3. An oil-free non-comedogenic</text>
+    <text x="16" y="116" font-size="12" class="sub">   moisturizer.</text>
+    <text x="16" y="138" font-size="12" class="sub">4. A non-comedogenic sunscreen.</text>
+    <text x="16" y="180" font-size="11" font-style="italic" class="muted">Source · Acne sheet · Sardana CBS Ch.8</text>
+  </g>
+
+  <g transform="translate(419,298)">
+    <rect width="365" height="220" rx="10" class="inner"/>
+    <text x="16" y="28" font-size="13" font-weight="600" class="navy">🌙  Evening</text>
+    <text x="16" y="56" font-size="12" class="sub">1. An oil cleanse, then gel cleanse.</text>
+    <text x="16" y="78" font-size="12" class="sub">2. A BHA serum 2-3 nights/week.</text>
+    <text x="16" y="100" font-size="12" class="sub">3. A retinoid at night, built up slowly.</text>
+    <text x="16" y="122" font-size="12" class="sub">4. A lightweight hydrating gel.</text>
+    <text x="16" y="180" font-size="11" font-style="italic" class="muted">Source · Acne sheet · PMID 36440737</text>
+  </g>
+
+  <!-- WEEK AHEAD -->
+  <text x="36" y="552" font-size="14" font-weight="600" class="navy">How's your week going to be</text>
+  <line x1="36" y1="560" x2="252" y2="560" class="lime"/>
+
+  <g transform="translate(36,574)">
+    <rect width="748" height="200" rx="10" class="inner"/>
+    <!-- Today row (highlighted) -->
+    <rect x="8" y="8" width="732" height="26" rx="4" fill="#FCEDED" stroke="#F4CFCF" stroke-width="0.5"/>
+    <text x="22" y="26" font-size="12" font-weight="600" fill="#A2342F">Today · Fri</text>
+    <rect x="120" y="14" width="36" height="16" rx="8" fill="#F5E8D2"/>
+    <text x="138" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#1A2B47">60</text>
+    <text x="170" y="26" font-size="12" fill="#1A2B47">Sebum-rush day. Blot + cleanse helps.</text>
+
+    <text x="22" y="56" font-size="12" class="sub">Tomorrow · Sat</text>
+    <text x="138" y="56" text-anchor="middle" font-size="11" font-weight="700" class="navy">62</text>
+    <text x="170" y="56" font-size="12" class="sub">Sebum-rush continuing — keep the rhythm.</text>
+
+    <text x="22" y="80" font-size="12" class="sub">Sun · 21 Jun</text>
+    <text x="138" y="80" text-anchor="middle" font-size="11" font-weight="700" class="navy">55</text>
+    <text x="170" y="80" font-size="12" class="sub">Heat + humidity stacking.</text>
+
+    <text x="22" y="104" font-size="12" class="sub">Mon · 22 Jun</text>
+    <text x="138" y="104" text-anchor="middle" font-size="11" font-weight="700" class="navy">50</text>
+    <text x="170" y="104" font-size="12" class="sub">First monsoon shower likely.</text>
+
+    <text x="22" y="128" font-size="12" class="sub">Tue · 23 Jun</text>
+    <text x="138" y="128" text-anchor="middle" font-size="11" font-weight="700" class="navy">58</text>
+    <text x="170" y="128" font-size="12" class="sub">Monsoon onset. Lighter scalp oil this week.</text>
+
+    <text x="22" y="152" font-size="12" class="sub">Wed · 24 Jun</text>
+    <text x="138" y="152" text-anchor="middle" font-size="11" font-weight="700" class="navy">62</text>
+    <text x="170" y="152" font-size="12" class="sub">Cooler and humid.</text>
+
+    <text x="22" y="176" font-size="12" class="sub">Thu · 25 Jun</text>
+    <text x="138" y="176" text-anchor="middle" font-size="11" font-weight="700" class="navy">65</text>
+    <text x="170" y="176" font-size="12" class="sub">Steady humid week ahead.</text>
+  </g>
+
+  <!-- TRIAGE -->
+  <text x="36" y="810" font-size="14" font-weight="600" class="navy">When to see a dermatologist</text>
+  <line x1="36" y1="818" x2="252" y2="818" class="lime"/>
+
+  <g transform="translate(36,830)">
+    <rect width="748" height="160" rx="10" fill="#FCEDED" stroke="#F4CFCF" stroke-width="0.5"/>
+    <rect width="4" height="160" fill="#A2342F"/>
+    <text x="22" y="32" font-size="13" font-weight="600" fill="#A2342F">Worth a consult if:</text>
+    <text x="22" y="58" font-size="12" class="sub">• Nodular or cystic acne, especially along the jawline.</text>
+    <text x="22" y="80" font-size="12" class="sub">• Acne with irregular menstruation, facial hair, or hair shedding (PCOS pattern).</text>
+    <text x="22" y="102" font-size="12" class="sub">• Considering isotretinoin or hormonal acne management.</text>
+    <text x="22" y="124" font-size="12" class="sub">• Severe post-acne pigmentation or scarring causing distress.</text>
+    <text x="22" y="148" font-size="11" font-style="italic" class="muted">Source · Concern_Dermatologist_Triage rows acne_01 – acne_06</text>
+  </g>
+
+  <!-- DID YOU KNOW NUGGET -->
+  <text x="36" y="1026" font-size="14" font-weight="600" class="navy">Did you know</text>
+  <line x1="36" y1="1034" x2="142" y2="1034" class="lime"/>
+
+  <g transform="translate(36,1046)">
+    <rect width="748" height="158" rx="10" fill="#EFEAF7" stroke="#D6CAEB" stroke-width="0.5"/>
+    <rect width="4" height="158" fill="#5240A6"/>
+    <text x="22" y="32" class="label-tag" fill="#5240A6">TODAY'S FACT · 1 NEW FACT EVERY DAY</text>
+    <text x="22" y="62" font-size="13" class="sub">Adult female acne represents about two-thirds of acne dermatology visits in India.</text>
+    <text x="22" y="82" font-size="13" class="sub">It can continue from teens into menopause — not "left over" from adolescence but driven</text>
+    <text x="22" y="102" font-size="13" class="sub">by hormone cycles, stress patterns, and inflammatory triggers that change with age.</text>
+    <text x="22" y="142" font-size="11" font-style="italic" class="muted">Source · Skin Diseases in Females Ch.4 · Sarkar · Daily_Nuggets_Rotation row 042</text>
+  </g>
+
+  <text x="36" y="1216" font-size="11" class="muted" font-style="italic">Personalised for Priya · Concern Deep-Dive v1.0 · 30-day no-repeat nugget rotation</text>
+</svg>

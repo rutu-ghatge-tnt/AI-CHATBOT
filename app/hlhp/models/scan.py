@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -35,6 +35,19 @@ class ScanRequest(BaseModel):
         return self
 
 
+class WeatherScreenVariant(BaseModel):
+    screen: Optional[str] = None
+    weather_type: Optional[str] = None
+    background_image: Optional[str] = None
+    animal_image: Optional[str] = None
+
+
+class WeatherVisuals(BaseModel):
+    weather_type: Optional[str] = None
+    skin_care_tip: Optional[str] = None
+    screen_variants: list[WeatherScreenVariant] = Field(default_factory=list)
+
+
 class EnvSnapshot(BaseModel):
     user_id: Optional[str] = None
     city: str
@@ -60,6 +73,8 @@ class AlertTile(BaseModel):
     engagement_archetype: str
     symptom_keyword: Optional[str] = None
     routine_action: str = ""
+    how_text: Optional[str] = None
+    did_you_know: Optional[str] = None
     visual_icon_hint: str = ""
     physical_analogy: Optional[str] = None
     body_sensation_decode: Optional[str] = None
@@ -75,17 +90,42 @@ class ScienceNuggetOut(BaseModel):
     source: str
 
 
+class SymptomChip(BaseModel):
+    keyword: str
+    highlighted: bool = False
+
+
+class SfiFactorCard(BaseModel):
+    factor: str
+    label: str
+    skin_impact: str
+    severity_pct: int = 0
+
+
 class ScanResponse(BaseModel):
     snapshot_version: str
+    workbook_version: Optional[str] = None
     mode: Literal["personalised", "guest"]
+    concern_id: Optional[str] = None
     env_snapshot: EnvSnapshot
     outdoor_ok_score: int
     outdoor_ok_band_text: str
     mood_verdict_today: str
+    mood_headline: Optional[str] = None
+    strip_headline: Optional[str] = None
+    forecast_oneliner: Optional[str] = None
+    sudden_event_tags: list[str] = Field(default_factory=list)
+    alert_count_label: Optional[str] = None
+    symptom_chips: list[SymptomChip] = Field(default_factory=list)
+    lane_state_ctas: dict[str, str] = Field(default_factory=dict)
+    sfi_factor_cards: list[SfiFactorCard] = Field(default_factory=list)
     alerts: list[AlertTile]
     candidate_alerts: list[AlertTile] = Field(default_factory=list)
     science_nugget: Optional[ScienceNuggetOut] = None
     profile_nudge: Optional[str] = None
+    weather_visuals: Optional[WeatherVisuals] = None
+    skin_care_tip: Optional[str] = None
+    raw_weather_payload: Optional[dict[str, Any]] = None
 
 
 class SymptomTapRequest(BaseModel):
@@ -110,8 +150,23 @@ class SymptomTapResponse(BaseModel):
     continuity_acknowledgment: Optional[str] = None
 
 
+class SymptomFeelingRequest(BaseModel):
+    user_id: str
+    symptom_keyword: str
+    local_time: datetime
+    selected: bool = True
+
+
+class SymptomFeelingResponse(BaseModel):
+    symptom_keyword: str
+    selected: bool
+    selected_keywords: list[str] = Field(default_factory=list)
+
+
 class HealthResponse(BaseModel):
     ok: bool
     snapshot_version: str
+    workbook_version: Optional[str] = None
     rule_count: int
+    composition_row_count: int = 0
     generated_at: str

@@ -73,7 +73,9 @@ def compute_outdoor_ok(env: EnvironmentalData) -> tuple[int, str]:
         - 1.0 * temperature_penalty(env.temperature_c)
         - 0.6 * humidity_penalty(env.humidity_pct)
     )
-    score = int(_clip(raw, 0, 100))
+    clipped = int(_clip(raw, 0, 100))
+    # UX floor: extreme UV can math to 0 — still show a minimal score on valid readings.
+    score = max(8, clipped) if clipped < 8 else clipped
     band_text = _BAND_TEXT[-1][1]
     for threshold, text in _BAND_TEXT:
         if score >= threshold:

@@ -28,7 +28,7 @@ def _env(**kwargs):
 
 def test_snapshot_v2_has_engagement_fields():
     store = get_evidence_store()
-    assert store.version >= 2
+    assert store.version >= 3
     sample = store.findings[0]
     assert hasattr(sample, "alert_l2_explainer")
     assert hasattr(sample, "time_of_day_phase")

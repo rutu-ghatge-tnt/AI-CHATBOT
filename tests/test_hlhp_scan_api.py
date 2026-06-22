@@ -8,7 +8,7 @@ from app.hlhp.evidence.loader import get_evidence_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.scan import ScanRequest, SymptomTapRequest
 from app.hlhp.services.outdoor_ok import compute_outdoor_ok, uv_penalty
-from app.hlhp.services.scan_service import run_scan, run_symptom_tap
+from app.hlhp.services.scan_service import _snapshot_city_label, run_scan, run_symptom_tap
 
 
 def _env_data(**kwargs):
@@ -45,6 +45,26 @@ def test_uv_penalty_monotonic():
     assert uv_penalty(5) < uv_penalty(9)
 
 
+def test_snapshot_city_prefers_api_location_over_client_city():
+    env = _env_data(location_name="Kothrud, Pune, Maharashtra")
+    assert _snapshot_city_label(env, "Pune") == "Kothrud, Pune, Maharashtra"
+    assert _snapshot_city_label(_env_data(location_name="Unknown"), "Pune") == "Pune"
+
+
+def test_baseline_alert_tile_valid_phase():
+    from app.hlhp.services.scan_service import _baseline_alert_tile
+
+    tile = _baseline_alert_tile(
+        mood="easy_day",
+        mood_headline_text="Today is an easy day for skin.",
+        forecast_oneliner="Rutu, comfortable warm day.",
+        outdoor_band="Easy day to be outside",
+        day_phase="morning",
+    )
+    assert tile.phase_used in {"morning_prep", "evening_recovery"}
+    assert tile.l1
+
+
 def test_run_scan_guest_with_raw_env():
     req = ScanRequest(
         user_id=None,
@@ -60,7 +80,7 @@ def test_run_scan_guest_with_raw_env():
     assert resp.profile_nudge
     assert resp.outdoor_ok_score >= 0
     assert resp.env_snapshot.uvi_band == "very_high"
-    assert len(resp.alerts) <= 3
+    assert len(resp.alerts) <= 1
     assert len(resp.candidate_alerts) <= 5
     if resp.alerts:
         assert resp.alerts[0].l1
@@ -70,7 +90,7 @@ def test_run_scan_guest_with_raw_env():
 
 def test_hlhp_health_store_loaded():
     store = get_evidence_store()
-    assert store.version >= 2
+    assert store.version >= 3
     assert len(store.findings) >= 1000
 
 
