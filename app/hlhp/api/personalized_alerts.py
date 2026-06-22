@@ -1,7 +1,9 @@
 import logging
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.hlhp.api.deps_auth import hlhp_authenticated_user, user_id_from_auth
 from app.hlhp.models.personalized_alert import PersonalizedAlertResponse
 from app.hlhp.models.profile import (
     AgeBracket,
@@ -27,13 +29,14 @@ router = APIRouter(prefix="/hl/v2", tags=["HLHP — Hyperlocal Health Profile"])
 async def get_personalized_alert(
     lat: float = Query(..., ge=-90, le=90),
     lng: float = Query(..., ge=-180, le=180),
-    user_id: str = Query(...),
+    user: dict[str, Any] = Depends(hlhp_authenticated_user),
 ):
     try:
         env_data = await fetch_environmental_data(lat, lng)
         score = calculate_skin_score(env_data)
         generic_alert = generate_alert(env_data, score)
-        profile = await load_user_profile(user_id)
+        user_id = user_id_from_auth(user)
+        profile = await load_user_profile(user_id, auth_user=user)
         if profile is None:
             raise HTTPException(
                 status_code=400,
