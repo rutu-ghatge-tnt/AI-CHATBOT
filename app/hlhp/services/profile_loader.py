@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from typing import Any
 
 from app.hlhp.db import get_hlhp_db
 from app.hlhp.models.profile import (
@@ -276,17 +277,130 @@ def _map_skin_goal(doc: dict) -> SkinGoal | None:
     return _map_optional_enum(doc.get("skinGoal") or doc.get("skin_goal"), _SKIN_GOAL_MAP)
 
 
+_SKIN_TYPE_VALUES = [t.value for t in SkinType]
+
+
 def _has_minimum_skin_profile(doc: dict) -> bool:
     """Same core fields Label Looker requires for a skincare scan."""
+    return diagnose_skin_profile(doc).get("ready") is True
+
+
+def diagnose_skin_profile(doc: dict | None) -> dict[str, Any]:
+    """
+    Explain why a merged profile document cannot be used for personalised HLHP alerts.
+    Returns { ready, missing_fields, invalid_fields, message }.
+    """
+    missing: list[str] = []
+    invalid: list[dict[str, Any]] = []
+
     if not doc:
-        return False
+        missing.extend(["age", "gender", "skin type", "skin concerns"])
+        return _profile_diagnosis_result(missing=missing, invalid=invalid)
+
     age = _parse_age(doc.get("age"))
-    age_bracket = doc.get("ageBracket") or doc.get("age_bracket")
-    gender = _scalar(doc.get("gender"))
-    skin_type = _scalar(doc.get("skinType") or doc.get("skin_type"))
-    concerns = _list_values(doc.get("skinConcerns") or doc.get("skin_concerns"))
-    has_age = age is not None or bool(age_bracket)
-    return bool(has_age and gender and skin_type and concerns)
+    age_bracket_raw = doc.get("ageBracket") or doc.get("age_bracket")
+    has_age = age is not None or bool(age_bracket_raw)
+    if not has_age:
+        missing.append("age")
+    elif _map_age_bracket(doc) is None:
+        invalid.append(
+            {
+                "field": "age",
+                "label": "age",
+                "reason": "unrecognized_value",
+                "value": doc.get("age") or age_bracket_raw,
+                "hint": "Use a numeric age or a supported age bracket.",
+            }
+        )
+
+    gender_raw = doc.get("gender")
+    if not _scalar(gender_raw):
+        missing.append("gender")
+    elif _map_gender(gender_raw) is None:
+        invalid.append(
+            {
+                "field": "gender",
+                "label": "gender",
+                "reason": "unrecognized_value",
+                "value": _scalar(gender_raw),
+                "accepted": [g.value for g in Gender],
+            }
+        )
+
+    skin_type_raw = doc.get("skinType") or doc.get("skin_type")
+    if not _scalar(skin_type_raw):
+        missing.append("skin type")
+    elif _map_skin_type(skin_type_raw) is None:
+        invalid.append(
+            {
+                "field": "skinType",
+                "label": "skin type",
+                "reason": "unrecognized_value",
+                "value": _scalar(skin_type_raw),
+                "accepted": _SKIN_TYPE_VALUES,
+            }
+        )
+
+    concerns_raw = _list_values(doc.get("skinConcerns") or doc.get("skin_concerns"))
+    if not concerns_raw:
+        missing.append("skin concerns")
+    else:
+        mapped = _map_skin_concerns(concerns_raw)
+        if not mapped:
+            invalid.append(
+                {
+                    "field": "skinConcerns",
+                    "label": "skin concerns",
+                    "reason": "unrecognized_values",
+                    "value": concerns_raw,
+                    "hint": (
+                        "Choose at least one supported concern, for example acne, pigmentation, "
+                        "dullness, sensitivity, or dark circles."
+                    ),
+                }
+            )
+
+    return _profile_diagnosis_result(missing=missing, invalid=invalid)
+
+
+def _profile_diagnosis_result(
+    *,
+    missing: list[str],
+    invalid: list[dict[str, Any]],
+) -> dict[str, Any]:
+    ready = not missing and not invalid
+    if ready:
+        return {
+            "ready": True,
+            "missing_fields": [],
+            "invalid_fields": [],
+            "message": "",
+        }
+
+    invalid_labels = [str(item.get("label") or item.get("field") or "field") for item in invalid]
+
+    if not missing and invalid:
+        message = (
+            "Your skin profile has values we could not use for personalised alerts. "
+            f"Please update: {', '.join(invalid_labels)}."
+        )
+    elif missing and not invalid:
+        message = (
+            "Your skin profile is incomplete for personalised alerts. "
+            f"Please add: {', '.join(missing)}."
+        )
+    else:
+        message = (
+            "Your skin profile is incomplete for personalised alerts. "
+            f"Please add {', '.join(missing)} and fix {', '.join(invalid_labels)}."
+        )
+
+    return {
+        "ready": False,
+        "missing_fields": missing,
+        "invalid_fields": invalid,
+        "message": message,
+    }
 
 
 async def load_merged_profile_doc(

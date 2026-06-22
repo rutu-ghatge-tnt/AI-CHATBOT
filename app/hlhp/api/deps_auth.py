@@ -6,7 +6,11 @@ from typing import Any, Optional
 
 from fastapi import Header, HTTPException
 
-from app.label_looker.core.deps_auth import authenticate_any_user
+from app.hlhp.api.errors import auth_failed_detail, auth_missing_token_detail
+from app.label_looker.core.deps_auth import (
+    _merged_authorization_header,
+    authenticate_any_user,
+)
 from app.label_looker.core.errors import ScannerApiError
 from app.label_looker.services.common_flow import extract_user_id
 
@@ -16,6 +20,8 @@ async def hlhp_authenticated_user(
     access_token: Optional[str] = Header(None, alias="access-token"),
     x_access_token: Optional[str] = Header(None, alias="x-access-token"),
 ) -> dict[str, Any]:
+    if not _merged_authorization_header(authorization, access_token, x_access_token):
+        raise HTTPException(status_code=401, detail=auth_missing_token_detail())
     try:
         return await authenticate_any_user(
             authorization=authorization,
@@ -23,7 +29,10 @@ async def hlhp_authenticated_user(
             x_access_token=x_access_token,
         )
     except ScannerApiError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=auth_failed_detail(exc.message),
+        ) from exc
 
 
 def user_id_from_auth(user: dict[str, Any]) -> str:
@@ -34,4 +43,11 @@ def user_id_from_auth(user: dict[str, Any]) -> str:
         val = user.get(key)
         if isinstance(val, str) and val.strip():
             return val.strip()
-    raise HTTPException(status_code=401, detail="Authenticated user has no resolvable id")
+    raise HTTPException(
+        status_code=401,
+        detail={
+            "code": "auth_invalid",
+            "message": "Your account was authenticated but has no user id we can load a profile for.",
+            "action": "Sign out and sign in again, or contact support if this keeps happening.",
+        },
+    )
