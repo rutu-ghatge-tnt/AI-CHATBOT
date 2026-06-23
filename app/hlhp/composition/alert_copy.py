@@ -101,6 +101,20 @@ _ROUTINE_LABELS: dict[str, str] = {
 }
 
 
+def label_routine_action(action: str | None) -> str | None:
+    """Map workbook routine_action slugs to consumer-facing labels."""
+    key = (action or "").strip()
+    if not key:
+        return None
+    if key in _ROUTINE_LABELS:
+        return _ROUTINE_LABELS[key]
+    if key in _ACTION_SUFFIX:
+        return _ACTION_SUFFIX[key]
+    if " " in key:
+        return key
+    return key.replace("_", " ").strip().capitalize()
+
+
 def resolve_concern_id(
     finding: EvidenceFinding,
     profile: UserProfile | None,
