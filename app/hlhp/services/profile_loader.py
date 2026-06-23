@@ -25,6 +25,7 @@ from app.hlhp.models.profile import (
     StressLevel,
     UserProfile,
 )
+from app.hlhp.services.user_display import extract_first_name_from_doc
 from app.label_looker.services.profile_form import _list_values, _parse_age, _scalar
 from app.label_looker.services.profile_taxonomy_resolver import resolve_profile_taxonomy_refs
 from app.label_looker.services.user_profile_flow import (
@@ -496,10 +497,11 @@ async def load_user_first_name(user_id: str, *, auth_user: dict | None = None) -
         doc = await load_merged_profile_doc(user_id, auth_user=auth_user)
     except Exception:
         return ""
-    for key in ("firstName", "first_name", "name", "displayName", "userName", "username"):
-        val = doc.get(key)
-        if isinstance(val, str) and val.strip():
-            return val.strip().split()[0]
+    name = extract_first_name_from_doc(doc)
+    if name:
+        return name
+    if auth_user:
+        return extract_first_name_from_doc(auth_user)
     return ""
 
 

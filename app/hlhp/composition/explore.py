@@ -45,6 +45,74 @@ def _city_matches(city_scope: str, city: str) -> bool:
     return any(part.strip().lower() in city_l for part in scope.split(",") if part.strip())
 
 
+# Regions for matching user location strings like "Baner, Pune, Maharashtra".
+_CITY_REGION_ALIASES: dict[str, frozenset[str]] = {
+    "mumbai": frozenset({"mumbai", "thane", "navi mumbai", "vikhroli"}),
+    "pune": frozenset({"pune", "baner", "hinjewadi", "kothrud", "wakad"}),
+    "delhi": frozenset(
+        {"delhi", "ncr", "new delhi", "gurgaon", "gurugram", "noida", "faridabad", "ghaziabad"}
+    ),
+    "bangalore": frozenset({"bangalore", "bengaluru", "blr"}),
+    "hyderabad": frozenset({"hyderabad", "secunderabad"}),
+    "chennai": frozenset({"chennai", "madras"}),
+    "kolkata": frozenset({"kolkata", "calcutta"}),
+    "goa": frozenset({"goa", "panaji"}),
+    "coastal": frozenset(
+        {"goa", "mumbai", "chennai", "kochi", "kerala", "mangalore", "visakhapatnam", "puducherry"}
+    ),
+}
+
+
+def _user_city_regions(city: str) -> set[str]:
+    blob = (city or "").lower().replace("·", ",")
+    tokens = {p.strip() for p in blob.split(",") if p.strip()}
+    regions: set[str] = set()
+    for region, aliases in _CITY_REGION_ALIASES.items():
+        if region in blob or region in tokens:
+            regions.add(region)
+            continue
+        if any(alias in blob or alias in tokens for alias in aliases):
+            regions.add(region)
+    return regions
+
+
+def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
+    """City-locked nuggets — from workbook city_scope or explicit city names in copy."""
+    scope = str(row.get("city_scope") or "").strip()
+    if scope and "pan-india" not in scope.lower() and scope.lower() != "any":
+        regions: set[str] = set()
+        for part in scope.lower().replace(";", ",").split(","):
+            key = part.strip()
+            if key in _CITY_REGION_ALIASES:
+                regions.add(key)
+            elif key:
+                regions.add(key)
+        return regions or None
+
+    text = str(row.get("nugget_text") or "").lower()
+    if text.startswith("mumbai ") or "mumbai monsoon" in text:
+        return {"mumbai"}
+    if text.startswith("delhi ") or "skin in ncr" in text:
+        return {"delhi"}
+    if "goa, mumbai, chennai" in text or "coastal karnataka" in text:
+        return {"coastal", "mumbai", "chennai", "goa"}
+    return None
+
+
+def _nugget_matches_city(row: dict[str, Any], city: str) -> bool:
+    required = _nugget_required_regions(row)
+    if not required:
+        return True
+    user_regions = _user_city_regions(city)
+    if user_regions & required:
+        return True
+    # Workbook city_scope may list cities not in alias table — substring match.
+    scope = str(row.get("city_scope") or "")
+    if scope:
+        return _city_matches(scope, city)
+    return False
+
+
 def _month_matches(month_window: str, when: datetime) -> bool:
     if not month_window or month_window.lower() == "any":
         return True
@@ -138,6 +206,7 @@ def _situation_relevance_score(row: dict[str, Any], situation_tags: list[str]) -
 def _pick_daily_nugget(
     rows: list[dict[str, Any]],
     *,
+    city: str,
     concern_id: str | None,
     profile: UserProfile | None,
     user_id: str | None,
@@ -151,6 +220,9 @@ def _pick_daily_nugget(
     ]
     if not pool:
         return None
+    city_pool = [r for r in pool if _nugget_matches_city(r, city)]
+    if city_pool:
+        pool = city_pool
     if concern_id:
         matched = [r for r in pool if _concern_matches_nugget(r, concern_id)]
         if matched:
@@ -201,6 +273,7 @@ def assemble_explore(
     nugget_rows = store.composition.get("daily_nuggets_rotation") or []
     row = _pick_daily_nugget(
         nugget_rows,
+        city=city,
         concern_id=resolved_concern,
         profile=profile,
         user_id=user_id,

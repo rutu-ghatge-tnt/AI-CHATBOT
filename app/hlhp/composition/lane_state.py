@@ -11,7 +11,7 @@ _DEFAULT_CTAS = {
     "today": "Check today's alerts",
     "your_skin": "7-day forecast",
     "explore": "12 guides + nuggets",
-    "history": "Last 30 days",
+    "history": "Last 15 days",
     "plan_week": "Plan ahead",
 }
 

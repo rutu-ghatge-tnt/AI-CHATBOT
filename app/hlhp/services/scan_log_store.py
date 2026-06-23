@@ -77,6 +77,20 @@ async def record_scan_log(
     }
     try:
         await hl_db[_SCAN_LOG].insert_one(doc)
+        from app.hlhp.services.daily_log_store import upsert_from_scan
+
+        await upsert_from_scan(
+            user_id=user_id,
+            scanned_at=doc["scanned_at"],
+            outdoor_ok_score=doc["outdoor_ok_score"],
+            mood_verdict=doc["mood_verdict"],
+            sudden_event_tags=doc["sudden_event_tags"],
+            uvi=doc["uvi"],
+            temp_c=doc["temp_c"],
+            aqi=doc["aqi"],
+            rh_pct=doc["rh_pct"],
+            city=doc["city"],
+        )
     except Exception as exc:
         logger.warning("HLHP scan_log insert failed for user=%s: %s", user_id, exc)
 

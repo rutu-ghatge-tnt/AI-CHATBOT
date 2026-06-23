@@ -35,6 +35,24 @@ async def hlhp_authenticated_user(
         ) from exc
 
 
+async def hlhp_optional_authenticated_user(
+    authorization: Optional[str] = Header(None),
+    access_token: Optional[str] = Header(None, alias="access-token"),
+    x_access_token: Optional[str] = Header(None, alias="x-access-token"),
+) -> dict[str, Any] | None:
+    """Return auth user when a token is present; otherwise None (guest scan)."""
+    if not _merged_authorization_header(authorization, access_token, x_access_token):
+        return None
+    try:
+        return await authenticate_any_user(
+            authorization=authorization,
+            access_token=access_token,
+            x_access_token=x_access_token,
+        )
+    except ScannerApiError:
+        return None
+
+
 def user_id_from_auth(user: dict[str, Any]) -> str:
     uid = extract_user_id(user)
     if uid is not None:

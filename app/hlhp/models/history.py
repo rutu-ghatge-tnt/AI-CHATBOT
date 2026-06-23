@@ -61,6 +61,8 @@ class HistoryResponse(BaseModel):
     most_fired_mood: Optional[MostFiredMood] = None
     returner_banner: Optional[ReturnerBanner] = None
     message: Optional[str] = None
+    tracking_prompt: Optional[str] = None
+    show_tracking_prompt: bool = False
     workbook_version: Optional[str] = None
 
 

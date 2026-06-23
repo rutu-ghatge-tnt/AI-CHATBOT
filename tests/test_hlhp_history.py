@@ -1,10 +1,11 @@
-"""History, catch-up, and consent logic tests (no live Mongo required)."""
+"""History, catch-up, and daily log tests (no live Mongo required)."""
 
 import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.hlhp.services.daily_log_store import RETENTION_DAYS, upsert_from_scan
 from app.hlhp.services.history_service import assemble_catchup, assemble_history
 
 
@@ -17,15 +18,13 @@ class FakeCursor:
         self._docs = list(docs)
 
     def sort(self, key, direction=1):
-        reverse = direction == -1
-        field = key if isinstance(key, str) else key[0][0]
-        asc = key[0][1] if isinstance(key, list) else direction
-        reverse = asc == -1
-        self._docs = sorted(
-            self._docs,
-            key=lambda d: d.get(field),
-            reverse=reverse,
-        )
+        if isinstance(key, list):
+            field, asc = key[0]
+            reverse = asc == -1
+        else:
+            field = key
+            reverse = direction == -1
+        self._docs = sorted(self._docs, key=lambda d: d.get(field), reverse=reverse)
         return self
 
     def limit(self, n):
@@ -42,16 +41,27 @@ class FakeCollection:
         self.docs = list(docs or [])
 
     def find(self, query, projection=None):
+        filtered = list(self.docs)
         user_id = query.get("user_id")
+        if user_id is not None:
+            filtered = [d for d in filtered if d.get("user_id") == user_id]
         since = query.get("scanned_at", {}).get("$gte")
-        filtered = [d for d in self.docs if d.get("user_id") == user_id]
         if since is not None:
-            filtered = [d for d in filtered if d["scanned_at"] >= since]
+            filtered = [d for d in filtered if d.get("scanned_at") >= since]
+        date_gte = query.get("date", {}).get("$gte")
+        if date_gte is not None:
+            filtered = [d for d in filtered if d.get("date") >= date_gte]
+        date_lt = query.get("date", {}).get("$lt")
+        if date_lt is not None:
+            filtered = [d for d in filtered if d.get("date") < date_lt]
         return FakeCursor(filtered)
 
     async def find_one(self, query, sort=None, projection=None):
         user_id = query.get("user_id")
+        date_key = query.get("date")
         matches = [d for d in self.docs if d.get("user_id") == user_id]
+        if date_key is not None:
+            matches = [d for d in matches if d.get("date") == date_key]
         if not matches:
             return None
         if sort and sort[0][0] == "scanned_at":
@@ -59,17 +69,52 @@ class FakeCollection:
             matches = sorted(matches, key=lambda d: d["scanned_at"], reverse=reverse)
         return matches[0]
 
+    async def update_one(self, query, update, upsert=False):
+        user_id = query.get("user_id")
+        date_key = query.get("date")
+        existing = next(
+            (d for d in self.docs if d.get("user_id") == user_id and d.get("date") == date_key),
+            None,
+        )
+        payload = update.get("$set", {})
+        if existing:
+            existing.update(payload)
+        elif upsert:
+            self.docs.append({**query, **payload})
+
+    async def insert_one(self, doc):
+        self.docs.append(doc)
+
+    async def delete_many(self, query):
+        user_id = query.get("user_id")
+        date_lt = query.get("date", {}).get("$lt")
+        keep = []
+        for doc in self.docs:
+            if doc.get("user_id") != user_id:
+                keep.append(doc)
+                continue
+            if date_lt is not None and doc.get("date", "") < date_lt:
+                continue
+            keep.append(doc)
+        self.docs = keep
+
+    async def create_index(self, *args, **kwargs):
+        return None
+
 
 class FakeDb:
-    def __init__(self, scans=None, feelings=None):
+    def __init__(self, scans=None, feelings=None, daily_logs=None):
         self._scan = FakeCollection(scans)
         self._feelings = FakeCollection(feelings)
+        self._daily = FakeCollection(daily_logs)
 
     def __getitem__(self, name):
         if name == "hlhp_scan_log":
             return self._scan
         if name == "hlhp_symptom_feeling_log":
             return self._feelings
+        if name == "hlhp_daily_log":
+            return self._daily
         return FakeCollection()
 
 
@@ -88,70 +133,72 @@ def _scan(user_id: str, days_ago: int, sfi: int, mood: str, tags=None):
     }
 
 
-def test_history_empty_returns_demo_logs():
-    fake = FakeDb([])
+def _daily(user_id: str, days_ago: int, avg: float, mood: str, tags=None, scan_count=1):
+    day = (datetime.now(timezone.utc) - timedelta(days=days_ago)).date().isoformat()
+    return {
+        "user_id": user_id,
+        "date": day,
+        "outdoor_score_avg": avg,
+        "scan_count": scan_count,
+        "mood_verdict": mood,
+        "sudden_event_tags": tags or [],
+        "sudden_event": bool(tags),
+        "uvi": 6.0,
+        "temp_c": 32.0,
+        "aqi": 80,
+        "rh_pct": 60.0,
+        "city": "Mumbai",
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+
+def test_history_empty_returns_no_demo():
+    fake = FakeDb([], [], [])
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
-        result = asyncio.run(assemble_history("u1", days=30))
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=15))
     assert result.scan_count == 0
-    assert result.is_demo is True
-    assert len(result.daily_logs) == 7
-    assert all(log.is_sample for log in result.daily_logs)
-    assert result.message
-    assert "Sample" in result.message or "sample" in result.message.lower()
-    assert result.sfi_average is not None
+    assert result.is_demo is False
+    assert result.daily_logs == []
+    assert result.sfi_average is None
+    assert result.show_tracking_prompt is True
+    assert result.tracking_prompt
 
 
-def test_history_computes_sfi_average_and_trend():
-    scans = [
-        _scan("u1", 10, 60, "sebum_rush_day"),
-        _scan("u1", 5, 70, "easy_day", tags=["heat_surge"]),
-        _scan("u1", 1, 55, "sebum_rush_day"),
+def test_history_reads_saved_daily_logs_only():
+    daily = [
+        _daily("u1", 2, 62.0, "manageable_day"),
+        _daily("u1", 0, 55.0, "easy_day"),
     ]
-    fake = FakeDb(scans)
+    fake = FakeDb([], [], daily)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
-        mp.setattr("app.hlhp.services.history_service._load_user_name", _fake_name)
-        result = asyncio.run(assemble_history("u1", days=30))
-    assert result.scan_count == 3
-    assert result.sfi_average == pytest.approx(61.7, abs=0.2)
-    assert len(result.trend) == 3
-    assert result.most_fired_mood is not None
-    assert result.most_fired_mood.mood == "sebum_rush_day"
-    assert result.most_fired_mood.days_count == 2
-    assert len(result.sudden_events) >= 1
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=15))
+    assert len(result.daily_logs) == 2
+    assert all(not log.is_sample for log in result.daily_logs)
+    assert result.sfi_average == pytest.approx(58.5, abs=0.1)
+    assert result.is_demo is False
 
 
-def test_catchup_returns_paragraphs():
-    scans = [_scan("u1", 2, 62, "manageable_day")]
-    fake = FakeDb(scans)
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
-        mp.setattr("app.hlhp.services.history_service._load_user_name", _fake_name)
-        result = asyncio.run(assemble_catchup("u1", days=30))
-    assert len(result.paragraphs) >= 2
-    assert "catch-up" in result.paragraphs[0].lower() or "Priya" in result.paragraphs[0]
-
-
-def test_returner_banner_after_gap():
+def test_history_backfills_daily_logs_from_scans_when_missing():
     scans = [
-        _scan("u1", 20, 60, "easy_day"),
-        _scan("u1", 1, 55, "sebum_rush_day"),
+        _scan("u1", 1, 62, "manageable_day"),
+        _scan("u1", 3, 70, "easy_day", tags=["heat_surge"]),
     ]
-    fake = FakeDb(scans)
+    fake = FakeDb(scans, [], [])
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
-        mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
-        mp.setattr("app.hlhp.services.history_service._load_user_name", _fake_name)
-        result = asyncio.run(assemble_history("u1", days=30))
-    assert result.returner_banner is not None
-    assert result.returner_banner.show is True
-    assert result.returner_banner.days_away >= 14
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=15))
+    assert len(result.daily_logs) == 2
+    assert len(fake._daily.docs) == 2
 
 
 def test_history_daily_logs_merge_feelings():
     now = datetime.now(timezone.utc)
-    scans = [_scan("u1", 1, 62, "manageable_day")]
+    daily = [_daily("u1", 1, 62.0, "manageable_day")]
     feelings = [
         {
             "user_id": "u1",
@@ -159,47 +206,97 @@ def test_history_daily_logs_merge_feelings():
             "selected": True,
             "recorded_at": now - timedelta(days=1),
         },
-        {
-            "user_id": "u1",
-            "symptom_keyword": "shiny",
-            "selected": True,
-            "recorded_at": now - timedelta(days=1, hours=2),
-        },
     ]
-    fake = FakeDb(scans, feelings)
+    fake = FakeDb([], feelings, daily)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
         mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
-        result = asyncio.run(assemble_history("u1", days=30))
-    real_logs = [log for log in result.daily_logs if log.logged]
-    assert len(real_logs) >= 1
-    feeling_log = next((log for log in real_logs if log.feelings), real_logs[0])
-    assert "Oily" in feeling_log.feelings
-    assert "Shiny" in feeling_log.feelings
-    assert result.is_demo is True
+        result = asyncio.run(assemble_history("u1", days=15))
+    assert result.daily_logs[0].feelings == ["Oily"]
 
 
-def test_history_fully_real_when_enough_scans():
-    scans = [_scan("u1", d, 55 + d, "easy_day") for d in range(7)]
-    fake = FakeDb(scans)
+def test_history_daily_average_when_multiple_scans_same_day():
+    noon = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0, microsecond=0)
+    scans = [
+        {**_scan("u1", 0, 40, "easy_day"), "scanned_at": noon - timedelta(hours=4)},
+        {**_scan("u1", 0, 60, "easy_day"), "scanned_at": noon + timedelta(hours=2)},
+    ]
+    fake = FakeDb(scans, [], [])
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
-        mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
-        result = asyncio.run(assemble_history("u1", days=30))
-    assert result.is_demo is False
-    logged = [log for log in result.daily_logs if log.logged]
-    assert all(not log.is_sample for log in logged)
-    assert len(result.daily_logs) == 7
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=15))
+    assert len(result.daily_logs) == 1
+    assert result.daily_logs[0].outdoor_score == 50
+    assert result.sfi_average == 50.0
 
 
-def test_history_fills_missing_calendar_days():
-    scans = [_scan("u1", 0, 35, "easy_day"), _scan("u1", 3, 95, "easy_day")]
-    fake = FakeDb(scans)
+def test_daily_log_upsert_averages_multiple_scans():
+    fake = FakeDb()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        when = datetime.now(timezone.utc)
+        asyncio.run(
+            upsert_from_scan(
+                user_id="u1",
+                scanned_at=when,
+                outdoor_ok_score=40,
+                mood_verdict="easy_day",
+                sudden_event_tags=[],
+                uvi=3.0,
+                temp_c=28.0,
+                aqi=50,
+                rh_pct=60.0,
+                city="Pune",
+            )
+        )
+        asyncio.run(
+            upsert_from_scan(
+                user_id="u1",
+                scanned_at=when + timedelta(hours=3),
+                outdoor_ok_score=60,
+                mood_verdict="easy_day",
+                sudden_event_tags=[],
+                uvi=5.0,
+                temp_c=30.0,
+                aqi=50,
+                rh_pct=55.0,
+                city="Pune",
+            )
+        )
+    assert len(fake._daily.docs) == 1
+    assert fake._daily.docs[0]["outdoor_score_avg"] == 50.0
+    assert fake._daily.docs[0]["scan_count"] == 2
+
+
+def test_catchup_returns_paragraphs():
+    daily = [_daily("u1", 2, 62.0, "manageable_day")]
+    fake = FakeDb([], [], daily)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.services.history_service._load_user_name", _fake_name)
+        result = asyncio.run(assemble_catchup("u1", days=15))
+    assert len(result.paragraphs) >= 2
+
+
+def test_returner_banner_after_gap():
+    scans = [
+        _scan("u1", 20, 60, "easy_day"),
+        _scan("u1", 1, 55, "sebum_rush_day"),
+    ]
+    daily = [_daily("u1", 1, 55.0, "sebum_rush_day")]
+    fake = FakeDb(scans, [], daily)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
         mp.setattr("app.hlhp.coach.state_store.hl_db", fake)
-        result = asyncio.run(assemble_history("u1", days=30))
-    assert len(result.daily_logs) == 7
-    gaps = [log for log in result.daily_logs if not log.logged]
-    assert len(gaps) == 5
-    assert any("No scan logged" in log.mood_display for log in gaps)
+        mp.setattr("app.hlhp.services.history_service._load_user_name", _fake_name)
+        result = asyncio.run(assemble_history("u1", days=15))
+    assert result.returner_banner is not None
+    assert result.returner_banner.show is True
+
+
+def test_history_caps_at_15_days():
+    assert RETENTION_DAYS == 15

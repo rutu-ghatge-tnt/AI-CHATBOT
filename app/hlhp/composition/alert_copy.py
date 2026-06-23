@@ -6,7 +6,7 @@ import re
 
 from app.hlhp.composition.vocabulary import mood_headline
 from app.hlhp.core.phase import DayPhase
-from app.hlhp.evidence.alert_quality import is_consumer_copy, pick_did_you_know
+from app.hlhp.evidence.alert_quality import is_consumer_copy, pick_did_you_know, texts_overlap
 from app.hlhp.evidence.models import EvidenceFinding
 from app.hlhp.models.profile import UserProfile
 
@@ -52,6 +52,12 @@ _GUEST_FACTOR_ROUTINE: dict[str, str] = {
 
 _OILY_LIKE_SKIN = frozenset({"oily", "combination"})
 _HABIT_SUFFIX_ACTIONS = frozenset({"blot", "reapply_sunscreen", "cool_compress"})
+_BARRIER_ROUTINE_ACTIONS = frozenset({"layer_barrier", "layer_hydration"})
+
+# Concerns with no dedicated routine sheet — try related routines before a single label.
+_ROUTINE_CONCERN_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "dullness": ("pigmentation_pih", "dryness", "aging"),
+}
 
 _MOOD_SHORT_TITLE: dict[str, str] = {
     "sebum_rush_day": "Sebum-rush day",
@@ -314,9 +320,13 @@ def compose_strip_headline(
 
 def pick_did_you_know_for_tile(finding: EvidenceFinding, *, body: str) -> str | None:
     explainer = (finding.alert_l2_explainer or "").strip()
-    if explainer and is_consumer_copy(explainer) and explainer.lower() != body.strip().lower():
-        return explainer
-    return pick_did_you_know(finding, l2=body)
+    if explainer and is_consumer_copy(explainer):
+        if explainer.lower() != body.strip().lower() and not texts_overlap(explainer, body):
+            return explainer
+    dyk = pick_did_you_know(finding, l2=body)
+    if dyk and texts_overlap(dyk, body):
+        return None
+    return dyk
 
 
 def _skin_type_matches(row: dict, skin_type: str | None) -> bool:
@@ -383,12 +393,66 @@ def _framework_steps(
         and str(r.get("phase", "")).strip().lower() == phase
     ]
     picked = _pick_routine_rows(rows, skin_type)
+    if not picked:
+        picked = _pick_routine_rows(rows, None)
     steps: list[str] = []
     for row in picked:
         text = str(row.get("step_text") or "").strip()
         if text:
             steps.append(_clean_step_text(text))
     return steps
+
+
+def _routine_concern_candidates(
+    finding: EvidenceFinding,
+    profile: UserProfile | None,
+) -> list[str]:
+    """Routine concern ids to try — primary profile concern, siblings, action hints, fallbacks."""
+    candidates: list[str] = []
+
+    def add(raw: str | None) -> None:
+        if not raw:
+            return
+        cid = raw.strip().lower()
+        if cid and cid not in candidates:
+            candidates.append(cid)
+
+    if profile is not None:
+        add(resolve_concern_id(finding, profile))
+        for concern in profile.skin_concerns:
+            add(_PROFILE_TO_ROUTINE_CONCERN.get(concern.value, concern.value))
+    else:
+        add(resolve_concern_id(finding, None))
+
+    action = (finding.routine_action or "").strip()
+    if action in _BARRIER_ROUTINE_ACTIONS:
+        add("dryness")
+
+    primary = candidates[0] if candidates else ""
+    for fallback in _ROUTINE_CONCERN_FALLBACKS.get(primary, ()):
+        add(fallback)
+
+    return candidates
+
+
+def _framework_steps_for_finding(
+    routine_framework: list[dict],
+    *,
+    finding: EvidenceFinding,
+    profile: UserProfile | None,
+    phase: str,
+    skin_type: str | None,
+) -> list[str]:
+    for concern_id in _routine_concern_candidates(finding, profile):
+        steps = _framework_steps(
+            routine_framework,
+            concern_id=concern_id,
+            phase=phase,
+            skin_type=skin_type,
+        )
+        if steps:
+            return steps
+    return []
 
 
 def compose_how_routine(
@@ -398,20 +462,21 @@ def compose_how_routine(
     profile: UserProfile | None,
     day_phase: DayPhase,
 ) -> str | None:
-    concern_id = resolve_concern_id(finding, profile)
     phase = _phase_key(day_phase)
     skin_type = profile.skin_type.value if profile else None
 
-    steps = _framework_steps(
+    steps = _framework_steps_for_finding(
         routine_framework,
-        concern_id=concern_id,
+        finding=finding,
+        profile=profile,
         phase=phase,
         skin_type=skin_type,
     )
     if not steps and phase == "morning":
-        steps = _framework_steps(
+        steps = _framework_steps_for_finding(
             routine_framework,
-            concern_id=concern_id,
+            finding=finding,
+            profile=profile,
             phase="evening",
             skin_type=skin_type,
         )
