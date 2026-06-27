@@ -32,6 +32,7 @@ class SfiScanOverlayPoint(BaseModel):
 
 
 class SfiTimelineResponse(BaseModel):
+    profile_curve_active: bool = False
     mode: SfiTimelineMode
     timezone: str
     slot_hours: list[int] = Field(default_factory=lambda: [6, 9, 12, 15, 18, 21])

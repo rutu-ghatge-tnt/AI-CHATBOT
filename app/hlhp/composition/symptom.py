@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from app.hlhp.composition.alert_copy import label_routine_action
 from app.hlhp.composition.vocabulary import SYMPTOM_RELATIONS
 from app.hlhp.evidence.loader import get_evidence_store
 
@@ -29,6 +30,7 @@ def assemble_symptom_explainer(symptom_keyword: str) -> Optional[dict[str, Any]]
                 "order": int(r.get("section_order") or 0),
                 "body": r.get("section_body"),
                 "routine_action": r.get("routine_action"),
+                "routine_action_label": label_routine_action(str(r.get("routine_action") or "")),
                 "source_workbook_rows": r.get("source_workbook_rows"),
             }
             for r in sections

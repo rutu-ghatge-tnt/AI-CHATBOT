@@ -25,7 +25,6 @@ from app.hlhp.coach.state_store import (
     record_nugget_shown,
     record_surfaced_rules,
     record_symptom_tap,
-    _load_user_name,
 )
 from app.hlhp.coach.models import CoachWrap
 from app.hlhp.models.environmental import EnvironmentalData
@@ -42,8 +41,16 @@ from app.hlhp.models.scan import (
     SymptomTapResponse,
     WeatherVisuals,
 )
+from app.hlhp.services.alert_generator import generate_alert
 from app.hlhp.services.outdoor_ok import compute_outdoor_ok, pick_mood_verdict
-from app.hlhp.services.profile_loader import load_user_profile
+from app.hlhp.services.profile_personalizer import personalize_alert
+from app.hlhp.services.scoring_engine import calculate_skin_score
+from app.hlhp.services.profile_loader import (
+    diagnose_skin_profile,
+    load_merged_profile_doc,
+    load_user_first_name,
+    load_user_profile,
+)
 from app.hlhp.services.concern_resolver import concern_slug_from_profile
 from app.hlhp.services.severity import severity_for_finding
 from app.hlhp.services.weather_fetcher import fetch_environmental_data
@@ -83,6 +90,27 @@ _ROUTINE_LABELS = {
 _GUEST_NUDGE = (
     "Create a profile to unlock concern-specific alerts tailored to your skin."
 )
+_INCOMPLETE_PROFILE_NUDGE = "Complete your skin profile to get personalised alerts."
+
+
+async def _resolve_profile_nudge(
+    *,
+    guest_mode: bool,
+    user_id: Optional[str],
+    auth_user: dict | None = None,
+) -> str | None:
+    if not guest_mode:
+        return None
+    if not user_id:
+        return _GUEST_NUDGE
+    try:
+        doc = await load_merged_profile_doc(user_id, auth_user=auth_user)
+        diagnosis = diagnose_skin_profile(doc)
+        if not diagnosis.get("ready"):
+            return str(diagnosis.get("message") or _INCOMPLETE_PROFILE_NUDGE)
+    except Exception:
+        pass
+    return _GUEST_NUDGE
 
 _BAND_SFI = {
     "uvi": {
@@ -179,9 +207,9 @@ async def _scan_ui_enrichment(
 
     oneliner = forecast_oneliner(bands=bands, concern_id=concern, mood=mood)
     first_name = ""
-    if user_id and profile and not guest_mode:
+    if user_id:
         try:
-            first_name = await _load_user_name(user_id)
+            first_name = await load_user_first_name(user_id)
         except Exception:
             first_name = ""
     oneliner = _personalize_forecast(oneliner, first_name or None, guest_mode)
@@ -202,6 +230,7 @@ async def _scan_ui_enrichment(
 
     return {
         "workbook_version": store.workbook_version,
+        "user_first_name": first_name or None,
         "mood_headline": mood_headline(mood),
         "forecast_oneliner": oneliner or None,
         "sudden_event_tags": sudden[:5],
@@ -365,6 +394,26 @@ def _finding_to_tile(
     )
 
 
+def _build_legacy_alert(
+    env: EnvironmentalData,
+    profile: UserProfile | None,
+    *,
+    guest_mode: bool,
+):
+    """Same alert shape as GET /api/hl/v1/alert and /api/hl/v2/alert."""
+    score = calculate_skin_score(env)
+    generic = generate_alert(env, score)
+    if profile is None or guest_mode:
+        return generic
+    mode = resolve_mode(profile).value
+    if mode in ("personalised", "partial_personalised"):
+        try:
+            return personalize_alert(generic, profile, env, score)
+        except Exception:
+            pass
+    return generic
+
+
 def _baseline_alert_tile(
     *,
     mood: str,
@@ -392,17 +441,22 @@ def _baseline_alert_tile(
     )
 
 
-async def run_scan(req: ScanRequest) -> ScanResponse:
+async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanResponse:
     store = get_evidence_store()
     env = await resolve_environment(req)
     guest_mode = req.user_id is None
     profile: UserProfile | None = None
     if req.user_id:
-        profile = await load_user_profile(req.user_id)
+        profile = await load_user_profile(req.user_id, auth_user=auth_user)
         guest_mode = resolve_mode(profile).value == "guest"
 
     day_phase = resolve_day_phase(req.local_time)
     partial = bool(profile and not guest_mode and resolve_mode(profile).value == "partial_personalised")
+    profile_nudge = await _resolve_profile_nudge(
+        guest_mode=guest_mode,
+        user_id=req.user_id,
+        auth_user=auth_user,
+    )
     bands = bucketize_environment(env)
     season = indian_season()
 
@@ -434,6 +488,7 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             alert_count=0,
             user_id=req.user_id,
         )
+        legacy_alert = _build_legacy_alert(env, profile, guest_mode=guest_mode)
         strip_line = compose_strip_headline(
             None,
             mood_headline_text=ui.get("mood_headline"),
@@ -452,8 +507,9 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
             outdoor_ok_band_text=band_text,
             mood_verdict_today=mood,
             alerts=[],
+            legacy_alert=legacy_alert,
             strip_headline=strip_line,
-            profile_nudge=_GUEST_NUDGE if guest_mode else None,
+            profile_nudge=profile_nudge,
             raw_weather_payload=env.raw_weather_payload or None,
             **_weather_fields(env),
             **ui,
@@ -634,6 +690,8 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         )
         if enriched:
             ui["forecast_oneliner"] = enriched
+            forecast_for_strip = enriched
+    legacy_alert = _build_legacy_alert(env, profile, guest_mode=guest_mode)
     strip_line = compose_strip_headline(
         headlines[0] if headlines else None,
         mood_headline_text=ui.get("mood_headline"),
@@ -655,9 +713,10 @@ async def run_scan(req: ScanRequest) -> ScanResponse:
         mood_verdict_today=mood,
         alerts=alerts,
         candidate_alerts=candidate_tiles,
+        legacy_alert=legacy_alert,
         science_nugget=nugget_out,
         strip_headline=strip_line,
-        profile_nudge=_GUEST_NUDGE if guest_mode else None,
+        profile_nudge=profile_nudge,
         raw_weather_payload=env.raw_weather_payload or None,
         **_weather_fields(env),
         **ui,

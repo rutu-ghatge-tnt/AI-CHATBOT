@@ -30,10 +30,12 @@ from app.hlhp.services.weatherapi_timeline import (
 def _profile_to_engine(profile: UserProfile | None) -> EngineProfile | None:
     if profile is None:
         return None
-    try:
-        skin_type = EngineSkinType(profile.skin_type.value)
-    except ValueError:
-        skin_type = None
+    skin_type = None
+    if profile.skin_type is not None:
+        try:
+            skin_type = EngineSkinType(profile.skin_type.value)
+        except ValueError:
+            skin_type = None
     concerns: list[EngineConcern] = []
     for item in profile.skin_concerns:
         try:
@@ -43,6 +45,10 @@ def _profile_to_engine(profile: UserProfile | None) -> EngineProfile | None:
     if skin_type is None and not concerns:
         return None
     return EngineProfile(skin_type=skin_type, concerns=concerns)
+
+
+def profile_adjusts_sfi(profile: UserProfile | None) -> bool:
+    return _profile_to_engine(profile) is not None
 
 
 def _sfi_scores(
@@ -172,10 +178,17 @@ async def assemble_sfi_timeline(
         days_ahead=days_ahead,
     )
     location_label = city or location_name
-    personalised = profile is not None and user_id is not None
+    engine_profile = _profile_to_engine(profile) if user_id and profile else None
+    profile_curve_active = engine_profile is not None
+    signed_in = bool(user_id and profile)
 
     points = [
-        _reading_to_point(r, tz_id=tz_id, location_name=location_label, profile=profile if personalised else None)
+        _reading_to_point(
+            r,
+            tz_id=tz_id,
+            location_name=location_label,
+            profile=profile if engine_profile else None,
+        )
         for r in readings
     ]
 
@@ -190,13 +203,14 @@ async def assemble_sfi_timeline(
 
     source = "weatherapi" if points else "unavailable"
     return SfiTimelineResponse(
-        mode="personalised" if personalised else "guest",
+        mode="personalised" if signed_in else "guest",
+        profile_curve_active=profile_curve_active,
         timezone=tz_id,
         days_back=days_back,
         days_ahead=days_ahead,
         location_name=location_label,
         points=points,
-        scan_overlays=scan_overlays if personalised else [],
+        scan_overlays=scan_overlays,
         forecast_source=source,
         workbook_version=store.workbook_version,
     )

@@ -27,8 +27,8 @@ def test_pick_daily_nugget_stable_per_day():
     ]
     when = datetime(2026, 6, 18, 12, 0, 0)
     profile = _profile()
-    first = _pick_daily_nugget(rows, concern_id="acne", profile=profile, user_id="u1", when=when)
-    again = _pick_daily_nugget(rows, concern_id="acne", profile=profile, user_id="u1", when=when)
+    first = _pick_daily_nugget(rows, city="Mumbai", concern_id="acne", profile=profile, user_id="u1", when=when)
+    again = _pick_daily_nugget(rows, city="Mumbai", concern_id="acne", profile=profile, user_id="u1", when=when)
     assert first is not None
     assert first["nugget_text"] == again["nugget_text"]
     assert first["nugget_text"] in {"A", "B"}
@@ -50,6 +50,7 @@ def test_pregnancy_nugget_excluded_without_life_stage():
     when = datetime(2026, 6, 18)
     picked = _pick_daily_nugget(
         rows,
+        city="Mumbai",
         concern_id="acne",
         profile=_profile(),
         user_id="u1",
@@ -104,6 +105,7 @@ def test_pick_daily_nugget_dullness_skips_acne_only():
     profile = _profile(skin_concerns=[SkinConcern.DULLNESS])
     picked = _pick_daily_nugget(
         rows,
+        city="Mumbai",
         concern_id="dullness",
         profile=profile,
         user_id="u1",
@@ -132,6 +134,7 @@ def test_pick_daily_nugget_prefers_uv_match_when_bands_high():
     bands = EnvironmentBands(uvi="very_high", temperature="hot", humidity="low", aqi="moderate")
     picked = _pick_daily_nugget(
         rows,
+        city="Mumbai",
         concern_id="acne",
         profile=_profile(),
         user_id="u1",
@@ -140,3 +143,62 @@ def test_pick_daily_nugget_prefers_uv_match_when_bands_high():
     )
     assert picked is not None
     assert picked["nugget_id"] == "nug_uv"
+
+
+def test_mumbai_monsoon_nugget_not_shown_for_pune_user():
+    rows = [
+        {
+            "nugget_id": "nug_140",
+            "nugget_text": "Mumbai monsoon humidity reaches 90 percent for weeks at a time. Heat plus humidity drives fungal acne.",
+            "concern_audience": "universal",
+            "priority": 1,
+        },
+        {
+            "nugget_id": "nug_pan",
+            "nugget_text": "Oily skin still needs moisturizer. Without it, the skin compensates by producing even more oil.",
+            "concern_audience": "universal",
+            "priority": 1,
+        },
+    ]
+    when = datetime(2026, 6, 23)
+    profile = _profile(skin_concerns=[SkinConcern.DULLNESS])
+    picked = _pick_daily_nugget(
+        rows,
+        city="Baner, Pune, Maharashtra",
+        concern_id="dullness",
+        profile=profile,
+        user_id="u1",
+        when=when,
+        bands=EnvironmentBands(uvi="moderate", temperature="warm", humidity="very_high", aqi="moderate"),
+    )
+    assert picked is not None
+    assert picked["nugget_id"] == "nug_pan"
+
+
+def test_mumbai_monsoon_nugget_shown_for_mumbai_user():
+    rows = [
+        {
+            "nugget_id": "nug_140",
+            "nugget_text": "Mumbai monsoon humidity reaches 90 percent for weeks at a time. Heat plus humidity drives fungal acne.",
+            "concern_audience": "universal",
+            "priority": 1,
+        },
+        {
+            "nugget_id": "nug_pan",
+            "nugget_text": "Oily skin still needs moisturizer.",
+            "concern_audience": "universal",
+            "priority": 1,
+        },
+    ]
+    when = datetime(2026, 6, 23)
+    picked = _pick_daily_nugget(
+        rows,
+        city="Vikhroli West, Mumbai",
+        concern_id="dullness",
+        profile=_profile(skin_concerns=[SkinConcern.DULLNESS]),
+        user_id="u1",
+        when=when,
+        bands=EnvironmentBands(uvi="moderate", temperature="warm", humidity="very_high", aqi="moderate"),
+    )
+    assert picked is not None
+    assert picked["nugget_id"] == "nug_140"

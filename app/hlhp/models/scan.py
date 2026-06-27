@@ -8,6 +8,8 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 from app.hlhp.coach.models import CoachWrap
+from app.hlhp.models.alert import AlertResponse
+from app.hlhp.models.personalized_alert import PersonalizedAlertResponse
 
 Severity = Literal["BLOCK_ENV", "HARD_ENV", "SOFT_ENV"]
 PhaseUsed = Literal["morning_prep", "evening_recovery"]
@@ -121,6 +123,8 @@ class ScanResponse(BaseModel):
     sfi_factor_cards: list[SfiFactorCard] = Field(default_factory=list)
     alerts: list[AlertTile]
     candidate_alerts: list[AlertTile] = Field(default_factory=list)
+    user_first_name: Optional[str] = None
+    legacy_alert: Optional[AlertResponse | PersonalizedAlertResponse] = None
     science_nugget: Optional[ScienceNuggetOut] = None
     profile_nudge: Optional[str] = None
     weather_visuals: Optional[WeatherVisuals] = None

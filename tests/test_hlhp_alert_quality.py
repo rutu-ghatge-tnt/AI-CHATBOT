@@ -157,3 +157,26 @@ def test_pick_did_you_know_differs_from_l2_bullets():
     dyk = pick_did_you_know(f, l2=l2)
     assert "pediatric" in l2.lower() or ";" in l2
     assert dyk == "Think of your pores like clogged drains after heavy rain."
+
+
+def test_texts_overlap_detects_repeated_mechanism_copy():
+    from app.hlhp.evidence.alert_quality import texts_overlap
+
+    l2 = (
+        "Ultraviolet light damages the tight junctions that hold water in your skin, "
+        "so the surface loses moisture faster for days after."
+    )
+    dyk = (
+        "Ultraviolet light switches on a molecular signal that lowers the proteins "
+        "holding skin cells tightly together, so water escapes more quickly."
+    )
+    assert texts_overlap(l2, dyk)
+
+
+def test_texts_overlap_ignores_unrelated_paragraphs():
+    from app.hlhp.evidence.alert_quality import texts_overlap
+
+    assert not texts_overlap(
+        "Low humidity pulls moisture out of the skin.",
+        "Think of your pores like clogged drains after heavy rain.",
+    )

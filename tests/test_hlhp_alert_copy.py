@@ -56,6 +56,40 @@ def test_compose_how_routine_dehydration_maps_to_dryness_framework():
     assert how != "Barrier-repair moisturizer"
 
 
+def test_compose_how_routine_oily_dehydration_falls_back_to_dryness_framework():
+    store = get_evidence_store()
+    framework = (store.composition or {}).get("concern_routine_framework") or []
+    finding = next(f for f in store.findings if f.routine_action == "layer_barrier")
+    profile = UserProfile(
+        user_id="u5",
+        skin_type=SkinType.OILY,
+        skin_concerns=[SkinConcern.DEHYDRATION],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_25_30,
+    )
+    how = compose_how_routine(framework, finding, profile=profile, day_phase="morning")
+    assert how
+    assert how.count("→") >= 2
+    assert how != "Barrier-repair moisturizer"
+
+
+def test_compose_how_routine_dullness_profile_barrier_finding_uses_dryness_chain():
+    store = get_evidence_store()
+    framework = (store.composition or {}).get("concern_routine_framework") or []
+    finding = next(f for f in store.findings if f.routine_action == "layer_barrier")
+    profile = UserProfile(
+        user_id="u6",
+        skin_type=SkinType.OILY,
+        skin_concerns=[SkinConcern.DULLNESS],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_25_30,
+    )
+    how = compose_how_routine(framework, finding, profile=profile, day_phase="morning")
+    assert how
+    assert how.count("→") >= 2
+    assert how != "Barrier-repair moisturizer"
+
+
 def test_compose_how_routine_blot_suffix_after_chain():
     store = get_evidence_store()
     framework = (store.composition or {}).get("concern_routine_framework") or []

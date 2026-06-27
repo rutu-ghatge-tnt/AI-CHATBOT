@@ -1,5 +1,5 @@
 # Mirrors src/constants.js naming (typo preserved).
-totalScanIngedientPerDay = 5
+totalScanIngedientPerDay = 20
 
 DEFAULT_LANGUAGE = "English"
 

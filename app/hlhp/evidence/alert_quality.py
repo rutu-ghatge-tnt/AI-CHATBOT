@@ -198,6 +198,20 @@ def is_consumer_copy(text: str) -> bool:
     return len(t.split()) >= 6
 
 
+def texts_overlap(a: str, b: str, *, min_shared_tokens: int = 5) -> bool:
+    """True when two consumer paragraphs repeat the same story."""
+    def tokens(s: str) -> set[str]:
+        return {w for w in re.findall(r"[a-z]{4,}", (s or "").lower())}
+
+    ta, tb = tokens(a), tokens(b)
+    if not ta or not tb:
+        return False
+    if len(ta & tb) >= min_shared_tokens:
+        return True
+    an, bn = (a or "").strip().lower(), (b or "").strip().lower()
+    return bool(an and bn and (an in bn or bn in an))
+
+
 def pick_display_l2(finding: EvidenceFinding) -> str:
     if finding.alert_l2_explainer and is_consumer_copy(finding.alert_l2_explainer):
         return finding.alert_l2_explainer
@@ -221,6 +235,8 @@ def pick_did_you_know(finding: EvidenceFinding, *, l2: str) -> str | None:
         if not candidate or not is_consumer_copy(candidate):
             continue
         if candidate.strip().lower() == l2_norm:
+            continue
+        if texts_overlap(candidate, l2):
             continue
         return candidate.strip()
     return None

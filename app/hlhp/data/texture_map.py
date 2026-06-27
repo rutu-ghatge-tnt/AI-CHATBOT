@@ -44,6 +44,18 @@ def get_textured_product(product_category: str, skin_type: SkinType, generic_act
     core = action.rstrip(". ").strip()
     lower = core.lower()
 
+    # Action already names a product type — add skin-type suffix only, not a second prefix.
+    if prefix and any(
+        word in lower
+        for word in ("moistur", "cream", "barrier", "ceramide", "gel", "lotion", "humectant", "sunscreen", "spf")
+    ):
+        updated = core
+        if suffix and suffix.lower() not in lower:
+            updated = f"{updated} — {suffix}"
+        if trailing_dot and not updated.endswith("."):
+            updated += "."
+        return updated
+
     # L2 scenario lines ("Pick a …") are already product-specific — add suffix only.
     if lower.startswith("pick "):
         updated = core

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.hlhp.api.deps_auth import hlhp_optional_authenticated_user
 
 from app.hlhp.evidence.loader import get_evidence_store
 from app.hlhp.coach.models import ActionTapRequest, ActionTapResponse
@@ -19,9 +21,12 @@ router = APIRouter(prefix="/hlhp", tags=["HLHP v2 — Flash Alerts"])
 
 
 @router.post("/scan", response_model=ScanResponse)
-async def hlhp_scan(req: ScanRequest) -> ScanResponse:
+async def hlhp_scan(
+    req: ScanRequest,
+    auth_user: dict | None = Depends(hlhp_optional_authenticated_user),
+) -> ScanResponse:
     try:
-        return await run_scan(req)
+        return await run_scan(req, auth_user=auth_user)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:

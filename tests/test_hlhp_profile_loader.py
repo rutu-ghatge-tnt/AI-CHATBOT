@@ -10,6 +10,7 @@ from app.hlhp.models.profile import (
 )
 from app.hlhp.services.profile_loader import (
     _has_minimum_skin_profile,
+    diagnose_skin_profile,
     map_merged_doc_to_user_profile,
 )
 
@@ -65,3 +66,39 @@ def test_map_merged_doc_dark_circles_taxonomy_labels():
 def test_no_profile_when_missing_concerns():
     doc = {"age": 30, "gender": "male", "skinType": "dry"}
     assert map_merged_doc_to_user_profile("user-2", doc) is None
+
+
+def test_diagnose_skin_profile_lists_missing_fields():
+    diagnosis = diagnose_skin_profile({"age": 30, "gender": "female"})
+    assert diagnosis["ready"] is False
+    assert "skin type" in diagnosis["missing_fields"]
+    assert "skin concerns" in diagnosis["missing_fields"]
+    assert "incomplete" in diagnosis["message"].lower()
+
+
+def test_diagnose_skin_profile_flags_unrecognized_skin_type():
+    diagnosis = diagnose_skin_profile(
+        {
+            "age": 30,
+            "gender": "female",
+            "skinType": "very-oily",
+            "skinConcerns": ["acne"],
+        }
+    )
+    assert diagnosis["ready"] is False
+    assert diagnosis["missing_fields"] == []
+    assert diagnosis["invalid_fields"][0]["field"] == "skinType"
+    assert "oily" in diagnosis["invalid_fields"][0]["accepted"]
+
+
+def test_diagnose_skin_profile_flags_unmapped_concerns():
+    diagnosis = diagnose_skin_profile(
+        {
+            "age": 30,
+            "gender": "female",
+            "skinType": "oily",
+            "skinConcerns": ["wrinkles"],
+        }
+    )
+    assert diagnosis["ready"] is False
+    assert diagnosis["invalid_fields"][0]["field"] == "skinConcerns"

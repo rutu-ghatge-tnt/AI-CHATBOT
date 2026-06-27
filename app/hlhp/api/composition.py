@@ -152,6 +152,7 @@ async def plan_week_lane(
         longitude=longitude,
         city=city,
         concern_id=resolved,
+        profile=profile,
         days=days,
     )
 
@@ -178,12 +179,12 @@ async def sfi_timeline_lane(
 
 
 @router.get("/history")
-async def history_lane(user_id: str = Query(...), days: int = Query(30, ge=1, le=90)):
+async def history_lane(user_id: str = Query(...), days: int = Query(15, ge=1, le=15)):
     return await assemble_history(user_id, days=days)
 
 
 @router.get("/catchup")
-async def catchup_lane(user_id: str = Query(...), days: int = Query(30, ge=1, le=90)):
+async def catchup_lane(user_id: str = Query(...), days: int = Query(15, ge=1, le=15)):
     return await assemble_catchup(user_id, days=days)
 
 
