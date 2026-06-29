@@ -1,0 +1,113 @@
+{
+  "$themes": [],
+  "$metadata": { "tokenSetOrder": ["core", "semantic"] },
+  "core": {
+    "colour": {
+      "cream": { "value": "#FBF4E8", "type": "color", "description": "Primary canvas — warm cream base" },
+      "warm-pale": { "value": "#F5EFE0", "type": "color", "description": "Outer body background" },
+      "ink-deep": { "value": "#1A2B47", "type": "color", "description": "Primary text and dark UI surfaces" },
+      "ink-mid": { "value": "#4A5568", "type": "color", "description": "Body copy supporting text" },
+      "ink-muted": { "value": "#7A6B4C", "type": "color", "description": "Labels and metadata" },
+      "ink-soft": { "value": "#B0B0B0", "type": "color", "description": "Disabled and locked states" },
+      "indigo-primary": { "value": "#2864B8", "type": "color", "description": "Primary accent — humidity/calm" },
+      "indigo-deep": { "value": "#5240A6", "type": "color", "description": "Patterns and insight moments" },
+      "indigo-night": { "value": "#1A2B47", "type": "color", "description": "Dark mode surface" },
+      "amber-warm": { "value": "#E58124", "type": "color", "description": "Heat and warmth accent" },
+      "amber-light": { "value": "#F5B450", "type": "color", "description": "Streaks and warmth highlights" },
+      "amber-pale": { "value": "#FBE0CF", "type": "color", "description": "Soft amber surface" },
+      "amber-rust": { "value": "#9C3E0A", "type": "color", "description": "Selected chip text" },
+      "gold-bright": { "value": "#FFD93D", "type": "color", "description": "Celebration accent" },
+      "green-leaf": { "value": "#B7D34E", "type": "color", "description": "Calm/clean days" },
+      "green-deep": { "value": "#5C8B1F", "type": "color", "description": "Success state" },
+      "green-success": { "value": "#3F6A1D", "type": "color", "description": "Best-state SFI" },
+      "red-alert": { "value": "#E2554F", "type": "color", "description": "Urgent surge alert only" },
+      "red-deep": { "value": "#A2342F", "type": "color", "description": "Critical state" },
+      "red-pale": { "value": "#F5C6C3", "type": "color", "description": "Soft red border" },
+      "line-warm": { "value": "#E5D9BD", "type": "color", "description": "Card border on cream surface" },
+      "surface-rest": { "value": "#E5E0CF", "type": "color", "description": "Inactive dot / empty state" },
+      "surface-card": { "value": "#FFFFFF", "type": "color", "description": "Elevated card surface" },
+      "indigo-cool-pale": { "value": "#ECF2FA", "type": "color", "description": "Captured-data panel background" },
+      "purple-pale": { "value": "#E2DCF3", "type": "color", "description": "Pattern card subtle background" },
+      "white": { "value": "#FFFFFF", "type": "color" }
+    },
+    "spacing": {
+      "1": { "value": "4px", "type": "spacing" },
+      "2": { "value": "8px", "type": "spacing" },
+      "3": { "value": "12px", "type": "spacing" },
+      "4": { "value": "16px", "type": "spacing" },
+      "5": { "value": "20px", "type": "spacing" },
+      "6": { "value": "24px", "type": "spacing" },
+      "7": { "value": "28px", "type": "spacing" },
+      "8": { "value": "32px", "type": "spacing" },
+      "10": { "value": "40px", "type": "spacing" }
+    },
+    "radius": {
+      "xs": { "value": "6px", "type": "borderRadius", "description": "Small chips, day-marks" },
+      "s": { "value": "10px", "type": "borderRadius", "description": "Buttons, count tiles" },
+      "m": { "value": "14px", "type": "borderRadius", "description": "Cards, alerts, push banner" },
+      "l": { "value": "16px", "type": "borderRadius", "description": "Stage container" },
+      "xl": { "value": "28px", "type": "borderRadius", "description": "Frame outer" },
+      "round": { "value": "999px", "type": "borderRadius", "description": "Pills, badges, CTAs" }
+    },
+    "shadow": {
+      "card-rest": { "value": "0 1px 3px rgba(0,0,0,0.04)", "type": "boxShadow" },
+      "card-elevated": { "value": "0 4px 14px rgba(82,64,166,0.18)", "type": "boxShadow", "description": "Coach bubble lift" },
+      "frame-outer": { "value": "0 20px 60px rgba(0,0,0,0.12)", "type": "boxShadow", "description": "Phone frame shadow" },
+      "alert-glow": { "value": "0 8px 24px rgba(226,79,72,0.18)", "type": "boxShadow", "description": "Push banner glow at rest" },
+      "cta-pulse-base": { "value": "0 8px 24px rgba(26,43,71,0.2)", "type": "boxShadow" },
+      "orb-glow": { "value": "0 16px 40px rgba(229,129,36,0.3)", "type": "boxShadow", "description": "Mood orb on Hello" }
+    },
+    "duration": {
+      "instant": { "value": "200ms", "type": "duration" },
+      "quick": { "value": "400ms", "type": "duration" },
+      "medium": { "value": "600ms", "type": "duration" },
+      "card-bounce": { "value": "700ms", "type": "duration" },
+      "long": { "value": "1200ms", "type": "duration" },
+      "ring-fill": { "value": "1400ms", "type": "duration" },
+      "breathe": { "value": "8000ms", "type": "duration", "description": "Background breathing cycle" }
+    },
+    "easing": {
+      "spring": { "value": "cubic-bezier(0.34, 1.56, 0.64, 1)", "type": "cubicBezier", "description": "Signature card overshoot" },
+      "dip-cubic": { "value": "cubic-bezier(0.42, 0, 0.58, 1)", "type": "cubicBezier", "description": "Score dip on surge" },
+      "confetti-fall": { "value": "cubic-bezier(0.36, 0, 0.66, -0.06)", "type": "cubicBezier" },
+      "shake": { "value": "cubic-bezier(0.36, 0.07, 0.19, 0.97)", "type": "cubicBezier" },
+      "burst-out": { "value": "cubic-bezier(0.16, 1, 0.3, 1)", "type": "cubicBezier" }
+    }
+  },
+  "semantic": {
+    "background": {
+      "page": { "value": "{core.colour.warm-pale}", "type": "color" },
+      "frame": { "value": "{core.colour.cream}", "type": "color" },
+      "card": { "value": "{core.colour.surface-card}", "type": "color" },
+      "captured-data": { "value": "{core.colour.indigo-cool-pale}", "type": "color" },
+      "dark-overlay": { "value": "{core.colour.indigo-night}", "type": "color" }
+    },
+    "text": {
+      "primary": { "value": "{core.colour.ink-deep}", "type": "color" },
+      "secondary": { "value": "{core.colour.ink-mid}", "type": "color" },
+      "muted": { "value": "{core.colour.ink-muted}", "type": "color" },
+      "disabled": { "value": "{core.colour.ink-soft}", "type": "color" },
+      "on-dark": { "value": "{core.colour.cream}", "type": "color" },
+      "highlight-cool": { "value": "{core.colour.indigo-primary}", "type": "color" },
+      "highlight-warm": { "value": "{core.colour.amber-warm}", "type": "color" }
+    },
+    "verdict": {
+      "calm-clean": { "value": "{core.colour.green-leaf}", "type": "color" },
+      "balanced-best": { "value": "{core.colour.green-success}", "type": "color" },
+      "humidity": { "value": "{core.colour.indigo-primary}", "type": "color" },
+      "barrier-stress": { "value": "{core.colour.indigo-deep}", "type": "color" },
+      "warm-day": { "value": "{core.colour.amber-light}", "type": "color" },
+      "heat-day": { "value": "{core.colour.amber-warm}", "type": "color" },
+      "surge-alert": { "value": "{core.colour.red-alert}", "type": "color" },
+      "critical": { "value": "{core.colour.red-deep}", "type": "color" },
+      "celebration": { "value": "{core.colour.gold-bright}", "type": "color" }
+    },
+    "chip": {
+      "rest-bg": { "value": "{core.colour.surface-card}", "type": "color" },
+      "rest-border": { "value": "{core.colour.line-warm}", "type": "color" },
+      "selected-bg": { "value": "{core.colour.amber-pale}", "type": "color" },
+      "selected-border": { "value": "#F0BFA0", "type": "color" },
+      "selected-text": { "value": "{core.colour.amber-rust}", "type": "color" }
+    }
+  }
+}

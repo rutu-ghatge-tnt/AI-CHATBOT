@@ -1,0 +1,76 @@
+{
+  "typography": {
+    "font-family": {
+      "primary": { "value": "Inter", "type": "fontFamilies", "description": "Primary UI typeface; fall back to system-ui, BlinkMacSystemFont" },
+      "mono": { "value": "JetBrains Mono", "type": "fontFamilies", "description": "For data digits only; optional" }
+    },
+    "font-weight": {
+      "regular": { "value": "400", "type": "fontWeights" },
+      "medium": { "value": "500", "type": "fontWeights" },
+      "semibold": { "value": "600", "type": "fontWeights" },
+      "bold": { "value": "700", "type": "fontWeights" }
+    },
+    "text-style": {
+      "display-celebration": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.bold}", "fontSize": "76px", "lineHeight": "1.0", "letterSpacing": "-0.02em" },
+        "type": "typography",
+        "description": "Weekly Card big number"
+      },
+      "h1-celebration": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.bold}", "fontSize": "30px", "lineHeight": "1.1", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Good Day headline (letter-by-letter cascade)"
+      },
+      "h1-greeting": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.medium}", "fontSize": "26px", "lineHeight": "1.2", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Hello tab greeting line"
+      },
+      "h2-section": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.medium}", "fontSize": "22px", "lineHeight": "1.2", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Recap section header, Surge banner"
+      },
+      "body-large": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.medium}", "fontSize": "17px", "lineHeight": "1.4", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Mood verdict line"
+      },
+      "body": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.regular}", "fontSize": "13px", "lineHeight": "1.5", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Default body copy"
+      },
+      "body-medium": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.medium}", "fontSize": "14px", "lineHeight": "1.4", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Card titles, alert headlines"
+      },
+      "caption": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.regular}", "fontSize": "12px", "lineHeight": "1.4", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Coach bubble, metadata"
+      },
+      "label-small": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.medium}", "fontSize": "11px", "lineHeight": "1.4", "letterSpacing": "0.08em", "textCase": "uppercase" },
+        "type": "typography",
+        "description": "Section labels (How does your skin feel?)"
+      },
+      "micro-label": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.semibold}", "fontSize": "10px", "lineHeight": "1.4", "letterSpacing": "0.10em", "textCase": "uppercase" },
+        "type": "typography",
+        "description": "Tags, ribbons, super-labels"
+      },
+      "tab-label": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.medium}", "fontSize": "10px", "lineHeight": "1.2", "letterSpacing": "0.02em" },
+        "type": "typography",
+        "description": "Tab strip text"
+      },
+      "score-digit": {
+        "value": { "fontFamily": "{typography.font-family.primary}", "fontWeight": "{typography.font-weight.semibold}", "fontSize": "32px", "lineHeight": "1.0", "letterSpacing": "0em" },
+        "type": "typography",
+        "description": "Score ring digits, streak count"
+      }
+    }
+  }
+}
