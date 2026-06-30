@@ -108,14 +108,16 @@ class TestSpecScenarioPriyaMumbaiMorning:
             raw_temp=31.0,
         )
         with patch("app.hlhp.services.scan_service.load_user_profile", return_value=_profile()):
-            with patch("app.hlhp.services.scan_service.coach_voice_enabled", return_value=False):
-                resp = asyncio.run(run_scan(req))
+            resp = asyncio.run(run_scan(req))
         assert resp.mode == "personalised"
         assert resp.env_snapshot.uvi_band == "very_high"
         assert resp.env_snapshot.season in {"summer", "pre_monsoon", "monsoon", "post_monsoon", "winter"}
         assert 0 <= resp.outdoor_ok_score <= 100
-        assert len(resp.alerts) <= 3
-        assert len(resp.candidate_alerts) <= 5
+        assert resp.sfi is not None
+        assert resp.band
+        assert resp.scenario_library_version == "3.4"
+        assert len(resp.alerts) == 1
+        assert len(resp.candidate_alerts) == 0
         if resp.alerts:
             self._assert_voice_discipline(resp.alerts[0].l1)
 
@@ -138,11 +140,11 @@ class TestSpecScenarioNightGate:
             raw_temp=28.0,
         )
         with patch("app.hlhp.services.scan_service.load_user_profile", return_value=_profile()):
-            with patch("app.hlhp.services.scan_service.coach_voice_enabled", return_value=False):
-                resp = asyncio.run(run_scan(req))
+            resp = asyncio.run(run_scan(req))
         for tile in resp.alerts + resp.candidate_alerts:
-            assert "sunscreen" not in tile.l1.lower()
-            assert "spf" not in tile.l1.lower()
+            combined = f"{tile.l1} {tile.l2} {tile.how_text or ''}".lower()
+            assert "sunscreen" not in combined
+            assert "spf" not in combined
 
     def test_night_gate_blocks_at_engine_level(self):
         store = get_evidence_store()
@@ -333,8 +335,8 @@ class TestActionTapWithMockMongo:
         assert resp.longest_ever >= 1
 
 
-class TestScanWithCoachMocked:
-    def test_personalised_scan_attaches_coach_wrap_when_enabled(self):
+class TestScanWithScenarioLibrary:
+    def test_personalised_scan_returns_scenario_fields(self):
         req = ScanRequest(
             user_id="u_coach_test",
             city="Mumbai",
@@ -344,20 +346,15 @@ class TestScanWithCoachMocked:
             raw_rh=72.0,
             raw_temp=31.0,
         )
-        mock_ctx = CoachContext(user_id="u_coach_test", name="Priya", recent_actions=[], streaks={})
-
-        with patch("app.hlhp.services.scan_service.coach_voice_enabled", return_value=True):
-            with patch("app.hlhp.services.scan_service.load_user_profile", return_value=_profile()):
-                with patch("app.hlhp.services.scan_service.load_coach_context", return_value=mock_ctx):
-                    with patch("app.hlhp.services.scan_service.record_surfaced_rules", return_value=None):
-                        with patch("app.hlhp.services.scan_service.record_nugget_shown", return_value=None):
-                            resp = asyncio.run(run_scan(req))
+        with patch("app.hlhp.services.scan_service.load_user_profile", return_value=_profile()):
+            resp = asyncio.run(run_scan(req))
 
         assert resp.mode == "personalised"
-        if resp.alerts:
-            assert resp.alerts[0].coach_wrap is not None
-            assert resp.alerts[0].coach_wrap.greeting
-            assert resp.alerts[0].coach_wrap.effort_recognition is None
+        assert resp.sfi is not None
+        assert resp.band
+        assert resp.flash_alert is not None
+        assert resp.evidence_cell is not None
+        assert resp.alerts[0].engagement_archetype.startswith("SCENARIO_V34")
 
 
 class TestBuildGatesSample:
@@ -387,9 +384,10 @@ class TestAPIHealthEndpoint:
                 assert r.status_code == 200
                 body = r.json()
                 assert body["ok"] is True
-                assert body["rule_count"] >= 1950
-                assert body.get("workbook_version") == "1.0"
-                assert body.get("composition_row_count", 0) > 0
+                assert body["rule_count"] >= 880
+                assert "v3_4" in str(body.get("workbook_version", ""))
+                assert body.get("scenario_library_version") == "3.4"
+                assert body.get("composition_row_count", 0) >= 670
 
         asyncio.run(_call())
 
@@ -422,7 +420,9 @@ class TestAPIHealthEndpoint:
                 assert "outdoor_ok_score" in data
                 assert "mood_headline" in data
                 assert "lane_state_ctas" in data
-                assert data.get("workbook_version") == "1.0"
+                assert data.get("workbook_version", "").endswith("v3_4.xlsx")
+                assert data.get("sfi") is not None
+                assert data.get("band")
 
         asyncio.run(_call())
 
@@ -446,7 +446,7 @@ class TestAPIHealthEndpoint:
 
         asyncio.run(_call())
 
-    def test_history_and_catchup_routes_via_asgi(self):
+    def test_history_and_catchup_routes_require_auth(self):
         try:
             from httpx import ASGITransport, AsyncClient
         except ImportError:
@@ -458,13 +458,9 @@ class TestAPIHealthEndpoint:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.get("/api/hlhp/history", params={"user_id": "guest-history-test"})
-                assert r.status_code == 200
-                body = r.json()
-                assert body["user_id"] == "guest-history-test"
-                assert "scan_count" in body
+                assert r.status_code == 401
 
                 c = await client.get("/api/hlhp/catchup", params={"user_id": "guest-history-test"})
-                assert c.status_code == 200
-                assert c.json().get("paragraphs")
+                assert c.status_code == 401
 
         asyncio.run(_call())

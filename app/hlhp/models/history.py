@@ -20,6 +20,7 @@ class SfiTrendPoint(BaseModel):
     date: str
     sfi: int
     sudden_event: bool = False
+    driver: Optional[str] = None
 
 
 class MostFiredMood(BaseModel):

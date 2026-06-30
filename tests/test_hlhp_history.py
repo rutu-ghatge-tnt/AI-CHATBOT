@@ -196,6 +196,24 @@ def test_history_backfills_daily_logs_from_scans_when_missing():
     assert len(fake._daily.docs) == 2
 
 
+def test_history_daily_logs_without_mood_verdict():
+    daily = [
+        {
+            "user_id": "u1",
+            "date": (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat(),
+            "outdoor_score_avg": 55.0,
+            "user_logged": True,
+        }
+    ]
+    fake = FakeDb([], [], daily)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.hlhp.services.scan_log_store.hl_db", fake)
+        mp.setattr("app.hlhp.services.daily_log_store.hl_db", fake)
+        result = asyncio.run(assemble_history("u1", days=15))
+    assert len(result.daily_logs) == 1
+    assert result.daily_logs[0].mood_display == ""
+
+
 def test_history_daily_logs_merge_feelings():
     now = datetime.now(timezone.utc)
     daily = [_daily("u1", 1, 62.0, "manageable_day")]

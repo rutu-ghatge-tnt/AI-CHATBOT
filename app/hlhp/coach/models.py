@@ -44,6 +44,9 @@ class ActionTapRequest(BaseModel):
     raw_aqi: Optional[int] = Field(None, ge=0)
     raw_rh: Optional[float] = Field(None, ge=0, le=100)
     raw_temp: Optional[float] = None
+    outdoor_ok_score: Optional[int] = Field(None, ge=0, le=100)
+    mood_verdict: Optional[str] = None
+    sudden_event_tags: Optional[list[str]] = None
 
     @property
     def city(self) -> str:

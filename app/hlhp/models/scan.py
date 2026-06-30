@@ -25,6 +25,7 @@ class ScanRequest(BaseModel):
     raw_aqi: Optional[int] = Field(None, ge=0)
     raw_rh: Optional[float] = Field(None, ge=0, le=100)
     raw_temp: Optional[float] = None
+    force_surge: bool = False
 
     @model_validator(mode="after")
     def require_env_source(self):
@@ -104,6 +105,41 @@ class SfiFactorCard(BaseModel):
     severity_pct: int = 0
 
 
+SeverityBandName = Literal[
+    "Paradise Mode",
+    "Smooth Sailing",
+    "Guard Up",
+    "Battle Stations",
+    "Hostile Mode",
+    "Code Red",
+]
+
+
+class FlashAlertOut(BaseModel):
+    level: Literal["L0", "L1"]
+    mode: SeverityBandName
+    l0: str
+    l1: str
+    tip: str
+
+
+class ImpactLineOut(BaseModel):
+    driver: Literal["temp", "uv", "humidity", "aqi"]
+    name: str
+    level: Literal["Low", "Medium", "High"]
+    value: float
+
+
+class EvidenceCellOut(BaseModel):
+    id: str
+    factor: str
+    band: str
+    evidence: str
+    pmids: list[str] = Field(default_factory=list)
+    confidence: str
+    action: str = ""
+
+
 class ScanResponse(BaseModel):
     snapshot_version: str
     workbook_version: Optional[str] = None
@@ -129,7 +165,20 @@ class ScanResponse(BaseModel):
     profile_nudge: Optional[str] = None
     weather_visuals: Optional[WeatherVisuals] = None
     skin_care_tip: Optional[str] = None
+    weather_api_url: Optional[str] = None
     raw_weather_payload: Optional[dict[str, Any]] = None
+    # v3.4 scenario library (SkinBB_HLHP_Scenario_Library_v3_4.xlsx)
+    sfi: Optional[int] = None
+    personal_sfi: Optional[int] = None
+    band: Optional[SeverityBandName] = None
+    action_cluster: Optional[str] = None
+    risk: Optional[int] = None
+    risk_label: Optional[str] = None
+    confidence: Optional[str] = None
+    flash_alert: Optional[FlashAlertOut] = None
+    impacts: list[ImpactLineOut] = Field(default_factory=list)
+    evidence_cell: Optional[EvidenceCellOut] = None
+    scenario_library_version: Optional[str] = None
 
 
 class SymptomTapRequest(BaseModel):
@@ -167,6 +216,15 @@ class SymptomFeelingResponse(BaseModel):
     selected_keywords: list[str] = Field(default_factory=list)
 
 
+class SymptomSelectedResponse(BaseModel):
+    user_id: str
+    selected_keywords: list[str] = Field(default_factory=list)
+    areas: list[str] = Field(
+        default_factory=list,
+        description="Face areas from the latest log on the requested date",
+    )
+
+
 class HealthResponse(BaseModel):
     ok: bool
     snapshot_version: str
@@ -174,3 +232,6 @@ class HealthResponse(BaseModel):
     rule_count: int
     composition_row_count: int = 0
     generated_at: str
+    scenario_library_version: Optional[str] = None
+    scenario_master_cells: int = 0
+    scenario_compound_cells: int = 0
