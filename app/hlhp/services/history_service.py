@@ -28,7 +28,7 @@ from app.hlhp.services.scan_log_store import fetch_scans, scan_gap_days
 
 _TRACKING_PROMPT = (
     "Visit SkinBB daily and open Today to keep your skin log going — "
-    "we save up to 15 days of your scores and how you felt."
+    "we save up to 30 days of your scores and how you felt."
 )
 
 _SUDDEN_LABELS = {
@@ -77,6 +77,22 @@ def _sudden_entry(tag: str, scan_date: datetime, now: datetime) -> SuddenEventEn
     )
 
 
+def _merge_feeling_only_docs(
+    daily_docs: list[dict[str, Any]],
+    feelings_by_day: dict[str, list[str]],
+) -> list[dict[str, Any]]:
+    """Include days where the user logged feelings but no scan aggregate exists yet."""
+    by_date = {str(d.get("date") or ""): d for d in daily_docs if d.get("date")}
+    for date_key, keywords in feelings_by_day.items():
+        if date_key and date_key not in by_date and keywords:
+            by_date[date_key] = {
+                "date": date_key,
+                "outdoor_score_avg": None,
+                "user_logged": True,
+            }
+    return sorted(by_date.values(), key=lambda d: d.get("date", ""))
+
+
 def _daily_logs_from_store(
     docs: list[dict[str, Any]],
     feelings_by_day: dict[str, list[str]],
@@ -99,12 +115,20 @@ def _daily_logs_from_store(
                 date=date_key,
                 days_ago=days_ago,
                 outdoor_score=int(round(float(avg))) if avg is not None else None,
-                mood_display=mood_headline(str(doc.get("mood_verdict") or "")),
-                day_description=_day_description_from_doc(doc),
+                mood_display=(
+                    mood_headline(str(doc.get("mood_verdict") or ""))
+                    if doc.get("mood_verdict")
+                    else ""
+                ),
+                day_description=(
+                    _day_description_from_doc(doc)
+                    if "uvi" in doc or "temp_c" in doc
+                    else "Logged how your skin felt."
+                ),
                 feelings=[_humanize_feeling(k) for k in feelings_by_day.get(date_key, [])],
                 sudden_event=bool(doc.get("sudden_event")),
                 is_sample=False,
-                logged=True,
+                logged=bool(doc.get("user_logged") or feelings_by_day.get(date_key)),
             )
         )
     return logs
@@ -123,6 +147,8 @@ async def assemble_history(user_id: str, *, days: int = RETENTION_DAYS) -> Histo
         await backfill_from_scans(user_id, scans)
         daily_docs = await fetch_daily_logs(user_id, since=since, limit=span)
 
+    daily_docs = _merge_feeling_only_docs(daily_docs, feelings_by_day)
+
     daily_logs = _daily_logs_from_store(daily_docs, feelings_by_day, now=now)
     scan_count = sum(int(d.get("scan_count") or 0) for d in daily_docs)
     logged_days = len(daily_logs)
@@ -137,7 +163,7 @@ async def assemble_history(user_id: str, *, days: int = RETENTION_DAYS) -> Histo
             sfi_average=None,
             sudden_events=[],
             daily_logs=[],
-            message="No daily logs yet — open Today to start your 15-day skin track.",
+            message="No daily logs yet — open Today to start your 30-day skin track.",
             tracking_prompt=_TRACKING_PROMPT,
             show_tracking_prompt=True,
             workbook_version=store.workbook_version,
@@ -160,13 +186,15 @@ async def assemble_history(user_id: str, *, days: int = RETENTION_DAYS) -> Histo
         if not date_key:
             continue
         avg = doc.get("outdoor_score_avg")
-        if avg is None:
+        has_feelings = bool(feelings_by_day.get(date_key))
+        if avg is None and not has_feelings:
             continue
         trend.append(
             SfiTrendPoint(
                 date=date_key,
-                sfi=int(round(float(avg))),
+                sfi=int(round(float(avg))) if avg is not None else 0,
                 sudden_event=bool(doc.get("sudden_event")),
+                driver=str(doc.get("driver") or "") or None,
             )
         )
         tags = doc.get("sudden_event_tags") or []
@@ -225,7 +253,7 @@ async def assemble_history(user_id: str, *, days: int = RETENTION_DAYS) -> Histo
     if logged_days < span:
         message = (
             f"{logged_days} of {span} days logged — open Today each day to build a complete "
-            "15-day skin track."
+            "30-day skin track."
         )
 
     return HistoryResponse(
@@ -295,7 +323,7 @@ async def assemble_catchup(user_id: str, *, days: int = RETENTION_DAYS) -> Catch
             )
 
         paragraphs.append(
-            "Open Today daily so your 15-day log stays complete — scores and how you felt add up over time."
+            "Open Today daily so your 30-day log stays complete — scores and how you felt add up over time."
         )
 
     return CatchupResponse(

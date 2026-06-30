@@ -32,6 +32,14 @@ def auth_failed_detail(message: str) -> dict[str, Any]:
     )
 
 
+def auth_user_mismatch_detail() -> dict[str, Any]:
+    return http_error_detail(
+        code="auth_user_mismatch",
+        message="The user id in this request does not match your signed-in account.",
+        action="Remove user_id from the request or use the id for your signed-in account.",
+    )
+
+
 def profile_incomplete_detail(diagnosis: dict[str, Any]) -> dict[str, Any]:
     missing = list(diagnosis.get("missing_fields") or [])
     invalid = list(diagnosis.get("invalid_fields") or [])

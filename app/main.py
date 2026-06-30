@@ -482,6 +482,11 @@ async def create_indexes():
         await notifications_col.create_index([("user_id", 1), ("module", 1)])
         await notifications_col.create_index("id", unique=True)
         print("Formulynx notifications collection indexes created successfully")
+
+        from app.hlhp.mongo_setup import ensure_hlhp_indexes
+
+        await ensure_hlhp_indexes()
+        print("HLHP Mongo indexes ensured")
         
         # Initialize endpoint timing Excel file if it doesn't exist
         from app.ai_ingredient_intelligence.middleware.timing_middleware import TIMING_EXCEL_FILE

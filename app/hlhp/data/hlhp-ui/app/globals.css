@@ -1,0 +1,265 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================================
+   THEME BRIDGE  (Tailwind v4 — CSS-first, no tailwind.config.js)
+   Exposes the :root tokens below as Tailwind utility colors
+   (bg-primary, text-accent-primary, border-border, …).
+   ========================================================================= */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-primary-foreground: var(--accent-primary-foreground);
+  --color-accent-primary-light: var(--accent-primary-light);
+  --color-accent-primary-dark: var(--accent-primary-dark);
+
+  --color-accent-secondary: var(--accent-secondary);
+  --color-accent-secondary-foreground: var(--accent-secondary-foreground);
+  --color-accent-secondary-light: var(--accent-secondary-light);
+  --color-accent-secondary-dark: var(--accent-secondary-dark);
+
+  --color-accent-tertiary: var(--accent-tertiary);
+  --color-accent-tertiary-foreground: var(--accent-tertiary-foreground);
+  --color-accent-tertiary-light: var(--accent-tertiary-light);
+  --color-accent-tertiary-dark: var(--accent-tertiary-dark);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* --- HLHP semantic colors (mapped onto SkinBB tokens, see below) --- */
+  --color-hlhp-canvas: var(--hlhp-canvas);
+  --color-hlhp-canvas-soft: var(--hlhp-canvas-soft);
+  --color-hlhp-ink: var(--hlhp-ink);
+  --color-hlhp-insight: var(--hlhp-insight);
+  --color-hlhp-insight-2: var(--hlhp-insight-2);
+  --color-hlhp-warmth: var(--hlhp-warmth);
+  --color-hlhp-warmth-deep: var(--hlhp-warmth-deep);
+  --color-hlhp-surge: var(--hlhp-surge);
+  --color-hlhp-surge-deep: var(--hlhp-surge-deep);
+  --color-hlhp-good: var(--hlhp-good);
+  --color-hlhp-good-deep: var(--hlhp-good-deep);
+  --color-hlhp-sun: var(--hlhp-sun);
+  --color-hlhp-flame: var(--hlhp-flame);
+  --color-hlhp-flame-mid: var(--hlhp-flame-mid);
+  --color-hlhp-flame-core: var(--hlhp-flame-core);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+  --font-holiday: var(--font-holiday);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+}
+
+/* =========================================================================
+   DESIGN TOKENS  (SkinBB design system — verbatim from Design-styling-template.md)
+   ========================================================================= */
+:root {
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.2799 0.0669 255.73);            /* deep SkinBB indigo */
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.9624 0.0062 75.41);
+  --secondary-foreground: oklch(0.2924 0.0036 106.62);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);          /* red — surge only */
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+
+  --accent-primary-light: oklch(0.9211 0.0289 266.36);
+  --accent-primary: oklch(0.7622 0.0935 265.22);     /* periwinkle / insight */
+  --accent-primary-dark: oklch(0.6219 0.0972 257.77);
+  --accent-primary-foreground: oklch(0.2924 0.0036 106.62);
+
+  --accent-secondary-light: oklch(0.9645 0.0125 271.29);
+  --accent-secondary: oklch(0.8906 0.0411 271.88);   /* lavender */
+  --accent-secondary-dark: oklch(0.7879 0.0656 268.36);
+  --accent-secondary-foreground: oklch(0.2924 0.0036 106.62);
+
+  --accent-tertiary-light: oklch(0.977 0.029 113.24);
+  --accent-tertiary: oklch(0.9343 0.0892 114.86);    /* soft lime */
+  --accent-tertiary-dark: oklch(0.8961 0.1124 112.86);
+  --accent-tertiary-foreground: oklch(0.2924 0.0036 106.62);
+
+  --chart-1: oklch(0.696 0.17 162.48);
+  --chart-2: oklch(0.62 0.19 260);
+  --chart-3: oklch(0.55 0.22 263);
+  --chart-4: oklch(0.49 0.22 264);
+  --chart-5: oklch(0.42 0.18 266);
+
+  --font-holiday: "Proxima Nova", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Glacial Indifference", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Proxima Nova", ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --radius: 0.625rem;
+  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2924 0.0036 106.62);
+
+  /* =======================================================================
+     HLHP SEMANTIC LAYER  (prototype semantics → SkinBB tokens)
+     STRICT RULE: every --hlhp-* var below aliases a real SkinBB token. There
+     are NO invented oklch literals here. The SkinBB palette has no amber/orange
+     and no cream, so the prototype's "warm" roles are mapped onto the indigo /
+     periwinkle / lavender ramp; "good/positive" onto the lime tertiary; surge
+     onto destructive; surfaces onto the real neutrals.
+
+       canvas / surfaces → --background (white) + --secondary / --muted neutrals
+       ink / insight     → --primary (deep indigo) + --accent-primary(-dark)
+       warmth / sun      → indigo→periwinkle→lavender ramp (NO amber)
+       surge (only)      → --destructive
+       good / positive   → --accent-tertiary (SkinBB lime) ramp
+     ======================================================================= */
+  --hlhp-canvas: var(--background);             /* app frame — white */
+  --hlhp-canvas-soft: var(--secondary);         /* soft neutral screen tint */
+  --hlhp-ink: var(--primary);                   /* primary text / dark UI */
+  --hlhp-insight: var(--primary);               /* indigo — insight gradients */
+  --hlhp-insight-2: var(--accent-primary-dark); /* periwinkle-dark */
+  /* "warmth" now = the brand indigo/periwinkle ramp (no amber in the palette) */
+  --hlhp-warmth: var(--accent-primary);         /* periwinkle */
+  --hlhp-warmth-deep: var(--accent-primary-dark);
+  --hlhp-sun: var(--accent-secondary);          /* lavender — soft highlight */
+  --hlhp-surge: var(--destructive);             /* red — surge only */
+  --hlhp-surge-deep: var(--destructive);        /* red (deepened via color-mix at call site) */
+  --hlhp-good: var(--accent-tertiary);          /* SkinBB lime */
+  --hlhp-good-deep: var(--accent-tertiary-dark);
+
+  /* The ONE approved palette extension: a warm amber ramp used *only* for the
+     Streak flame + its embers, so the flame keeps its warm energy. Not used
+     anywhere else in the app — everything else stays indigo / lime / red. */
+  --hlhp-flame: oklch(0.82 0.15 75);            /* amber */
+  --hlhp-flame-mid: oklch(0.74 0.16 60);        /* deep amber */
+  --hlhp-flame-core: oklch(0.88 0.15 95);       /* hot yellow core */
+
+  /* Driver colours (Recap day marks, Hello impact lines, Patterns):
+     Humidity = blue · UV = red · Heat = orange · AQI = purple · Comfort = green.
+     These are functional category colours, kept distinct from the brand ramp. */
+  --drv-humidity: oklch(0.62 0.16 250);
+  --drv-uv: oklch(0.60 0.21 25);
+  --drv-temp: oklch(0.72 0.16 55);
+  --drv-aqi: oklch(0.55 0.18 300);
+  --drv-comfort: oklch(0.70 0.16 145);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--secondary);   /* SkinBB warm-neutral page bg (behind the frame) */
+  color: var(--foreground);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* =========================================================================
+   ANIMATION KEYFRAMES  (ported 1:1 from the HLHP master prototype)
+   These are intentionally preserved verbatim per the brief.
+   ========================================================================= */
+@keyframes fadeSlide { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
+@keyframes shake { 10%,90% { transform: translateX(-2px); } 20%,80% { transform: translateX(3px); } 30%,50%,70% { transform: translateX(-5px); } 40%,60% { transform: translateX(5px); } }
+@keyframes drift { 0% { transform: translateY(110%) translateX(0) rotate(45deg); opacity: 0; } 10% { opacity: 0.5; } 90% { opacity: 0.5; } 100% { transform: translateY(-20%) translateX(var(--dx, 20px)) rotate(45deg); opacity: 0; } }
+@keyframes ember { 0% { transform: translateY(0) translateX(0) scale(1); opacity: 0.9; } 100% { transform: translateY(-140px) translateX(var(--dx, 0)) scale(0.3); opacity: 0; } }
+@keyframes cardBounce { 0% { transform: translateY(60px) scale(.85); opacity: 0; } 55% { transform: translateY(-8px) scale(1.02); opacity: 1; } 80% { transform: translateY(3px) scale(.99); } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes slideDown { 0% { transform: translateY(-100px); opacity: 0; } 60% { transform: translateY(8px); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes glowPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(226,79,72,0.0), 0 4px 16px rgba(226,79,72,0.2); } 50% { box-shadow: 0 0 0 12px rgba(226,79,72,0.15), 0 4px 24px rgba(226,79,72,0.4); } }
+@keyframes burstOut { 0% { transform: translate(0,0) scale(.4); opacity: 1; } 100% { transform: translate(var(--bx),var(--by)) scale(.2); opacity: 0; } }
+@keyframes confettiFall { 0% { transform: translate(0,0) rotate(0); opacity: 1; } 100% { transform: translate(var(--cx),420px) rotate(720deg); opacity: 0; } }
+@keyframes chipPop { 0% { transform: scale(1); } 35% { transform: scale(.85); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes flameFlicker { 0%,100% { transform: scaleY(1) scaleX(1); } 25% { transform: scaleY(1.06) scaleX(0.96); } 50% { transform: scaleY(0.98) scaleX(1.04); } 75% { transform: scaleY(1.04) scaleX(0.98); } }
+@keyframes pulseDot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: .6; } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes dotPop { 0% { transform: scale(0); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes bobble { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-4px) rotate(2deg); } }
+@keyframes breathe { 0%,100% { transform: scale(1); opacity: 0.95; } 50% { transform: scale(1.06); opacity: 1; } }
+@keyframes sunRotate { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes cloudDrift { 0% { transform: translateX(-40px); } 100% { transform: translateX(460px); } }
+@keyframes typewriter { from { width: 0; } to { width: 100%; } }
+@keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(82,64,166,0.4); } 50% { box-shadow: 0 0 0 16px rgba(82,64,166,0); } }
+@keyframes sparkleAnim { 0%,100% { opacity: 0; transform: scale(0.3) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(180deg); } }
+@keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-60px) scale(0.6); opacity: 0; } }
+@keyframes walk { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes wave { 0%,100% { transform: rotate(-10deg); } 50% { transform: rotate(20deg); } }
+@keyframes bgBreathe { 0%,100% { filter: brightness(1) saturate(1); } 50% { filter: brightness(1.04) saturate(1.08); } }
+@keyframes letterPop { 0% { transform: translateY(40px) rotate(-20deg); opacity: 0; } 60% { transform: translateY(-8px) rotate(4deg); opacity: 1; } 100% { transform: translateY(0) rotate(0); opacity: 1; } }
+@keyframes celebJump { 0%,100% { transform: translateY(0); } 25%,75% { transform: translateY(-12px); } 50% { transform: translateY(-20px); } }
+@keyframes ringPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,180,80,0); } 50% { box-shadow: 0 0 0 18px rgba(245,180,80,0.15); } }
+
+/* spring easing used across the prototype */
+:root { --spring: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* =========================================================================
+   PROTOTYPE PARTICLE / FX PRIMITIVES (ported; recolored to brand where noted)
+   ========================================================================= */
+.particle { position: absolute; width: 6px; height: 8px; background: color-mix(in oklch, var(--accent-primary-dark) 40%, transparent); border-radius: 50% 50% 50% 0; animation: drift linear infinite; pointer-events: none; }
+.ember-p { position: absolute; width: 6px; height: 6px; border-radius: 50%; animation: ember 2.4s ease-out infinite; pointer-events: none; }
+.sparkle-p { position: absolute; pointer-events: none; animation: sparkleAnim 1.8s ease-in-out infinite; }
+.burst { position: absolute; width: 8px; height: 8px; border-radius: 50%; pointer-events: none; }
+.confetti-p { position: absolute; width: 8px; height: 12px; pointer-events: none; }
+.floatup-p { position: absolute; font-size: 18px; pointer-events: none; animation: floatUp 1.5s ease-out forwards; font-weight: bold; }
+
+.fade { opacity: 0; transition: opacity 600ms ease; }
+.fade.show { opacity: 1; }
+
+/* respect reduced-motion: stop looping decorative animation */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* thin scrollbars for the tab/badge strips */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
