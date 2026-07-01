@@ -8,6 +8,8 @@ from typing import Optional
 
 from fastapi import HTTPException
 
+from app.hlhp.core.local_date import calendar_date, calendar_date_key, today_local
+
 from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
 from app.hlhp.composition.explore import pick_learn_nuggets
 from app.hlhp.composition.symptom import assemble_symptom_explainer
@@ -134,7 +136,7 @@ async def assemble_streak(user_id: str, *, today: date | None = None) -> StreakR
     if profile is None:
         raise HTTPException(status_code=404, detail="Complete your skin profile first")
 
-    today = today or datetime.now(timezone.utc).date()
+    today = today or today_local()
     dates = await counting_dates(user_id)
     current = calendar_streak(dates, today)
     longest = max(longest_calendar_streak(dates), current)
@@ -299,7 +301,7 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         areas = _normalize_areas(body.areas)
 
     when = _parse_dt(body.local_time)
-    date_key = when.date().isoformat()
+    date_key = calendar_date_key(when)
 
     scan_req = ScanRequest(
         user_id=body.user_id,
@@ -385,7 +387,7 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         logger.warning("HLHP action_tap during log save skipped: %s", exc)
 
     dates = await counting_dates(body.user_id)
-    current = calendar_streak(dates, when.date())
+    current = calendar_streak(dates, calendar_date(when))
     longest = max(longest_calendar_streak(dates), current)
 
     logged_out = LoggedEventOut(

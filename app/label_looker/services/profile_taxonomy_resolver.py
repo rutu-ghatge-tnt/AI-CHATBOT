@@ -65,6 +65,17 @@ _TAXONOMY_COLLECTIONS = (
 )
 
 
+def _slug_from_taxonomy_doc(doc: dict[str, Any]) -> str | None:
+    """Prefer canonical Mongo `value` slug; fall back to label / name."""
+    val = doc.get("value")
+    if isinstance(val, str) and val.strip():
+        return val.strip()
+    slug = doc.get("slug")
+    if isinstance(slug, str) and slug.strip():
+        return slug.strip()
+    return _label_from_doc(doc)
+
+
 async def _resolve_object_ids(db: AsyncIOMotorDatabase, ids: list[ObjectId]) -> dict[ObjectId, str]:
     if not ids:
         return {}
@@ -74,12 +85,15 @@ async def _resolve_object_ids(db: AsyncIOMotorDatabase, ids: list[ObjectId]) -> 
         if not pending:
             break
         coll = db[coll_name]
-        cursor = coll.find({"_id": {"$in": pending}}, {"name": 1, "title": 1, "label": 1, "value": 1, "slug": 1})
+        cursor = coll.find(
+            {"_id": {"$in": pending}},
+            {"name": 1, "title": 1, "label": 1, "value": 1, "slug": 1},
+        )
         async for doc in cursor:
             oid = doc.get("_id")
             if not isinstance(oid, ObjectId):
                 continue
-            label = _label_from_doc(doc)
+            label = _slug_from_taxonomy_doc(doc)
             if label:
                 resolved[oid] = label
         pending = [oid for oid in pending if oid not in resolved]

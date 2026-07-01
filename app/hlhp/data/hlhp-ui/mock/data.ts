@@ -20,6 +20,7 @@ import type {
   SuddenEventTag,
   DailyLog,
 } from "@/api/types";
+import { localDateKey } from "@/lib/dates";
 
 // ---- profile (would come from onboarding) --------------------------------
 export const MOCK_USER = {
@@ -66,8 +67,9 @@ function seeded(seed: number) {
 
 function isoDaysAgo(n: number): string {
   const d = new Date();
+  d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDateKey(d);
 }
 
 /**

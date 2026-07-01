@@ -50,6 +50,11 @@ CONCERN_TO_LIBRARY: dict[SkinConcern, str] = {
     SkinConcern.DEHYDRATION: "Dryness",
     SkinConcern.REDNESS: "Eczema",
     SkinConcern.SENSITIVITY: "Eczema",
+    SkinConcern.DARK_CIRCLES: "Uneven Skin Tone / Tan",
+    SkinConcern.PORES: "Oily Skin",
+    SkinConcern.TEXTURE: "Dark Marks (Post-Acne / PIH)",
+    SkinConcern.FUNGAL: "Fungal Infection (Sweat & Folds)",
+    SkinConcern.HEAT_RASH: "Heat Rash (Prickly Heat)",
 }
 
 SKIN_TO_LIBRARY: dict[SkinType, str] = {
@@ -219,14 +224,23 @@ def resolve_skin(profile: UserProfile | None, guest_mode: bool) -> str:
     return DEFAULT_SKIN
 
 
-def resolve_concern(profile: UserProfile | None, guest_mode: bool) -> str:
+def resolve_library_concerns(profile: UserProfile | None, guest_mode: bool) -> list[str]:
     if guest_mode:
-        return GUEST_CONCERN
-    if profile and profile.skin_concerns:
-        mapped = CONCERN_TO_LIBRARY.get(profile.primary_concern)
-        if mapped:
-            return mapped
-    return DEFAULT_CONCERN
+        return [GUEST_CONCERN]
+    if not profile or not profile.skin_concerns:
+        return [DEFAULT_CONCERN]
+    seen: set[str] = set()
+    out: list[str] = []
+    for concern in profile.skin_concerns:
+        mapped = CONCERN_TO_LIBRARY.get(concern)
+        if mapped and mapped not in seen:
+            seen.add(mapped)
+            out.append(mapped)
+    return out or [DEFAULT_CONCERN]
+
+
+def resolve_concern(profile: UserProfile | None, guest_mode: bool) -> str:
+    return resolve_library_concerns(profile, guest_mode)[0]
 
 
 def _drivers_by_factor(drivers: list[DriverState]) -> dict[str, DriverState]:
@@ -330,10 +344,12 @@ def resolve_alert_cell(
     concern: str,
     guest_mode: bool,
     zone: str | None,
+    concern_candidates: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, str, str | None]:
     """Return (cell, cell_kind, compound_name)."""
     compound_index = match_compound_index(store, drivers, zone=zone)
     compound_name = str(compound_index.get("name", "")) if compound_index else None
+    candidates = concern_candidates or [concern]
 
     if guest_mode:
         if compound_name:
@@ -345,13 +361,15 @@ def resolve_alert_cell(
             return cell, "guest_single", None
         return None, "guest_single", None
 
-    if compound_name:
-        cell = lookup_compound_cell(store, compound_name, skin, concern)
+    for concern_name in candidates:
+        if compound_name:
+            cell = lookup_compound_cell(store, compound_name, skin, concern_name)
+            if cell:
+                return cell, "compound", compound_name
+        cell = lookup_master_cell(store, drivers, skin, concern_name)
         if cell:
-            return cell, "compound", compound_name
-
-    cell = lookup_master_cell(store, drivers, skin, concern)
-    return cell, "master", compound_name
+            return cell, "master", compound_name
+    return None, "master", compound_name
 
 
 def lookup_master_cell(
@@ -418,7 +436,8 @@ def evaluate_scenario(
     band = band_for_sfi(sfi)
     dom = dominant_driver(drivers)
     skin = resolve_skin(profile, guest_mode)
-    concern = resolve_concern(profile, guest_mode)
+    library_concerns = resolve_library_concerns(profile, guest_mode)
+    concern = library_concerns[0]
     zone = store.city_zone.get((city or "").lower())
     cell, cell_kind, compound_name = resolve_alert_cell(
         store,
@@ -427,6 +446,7 @@ def evaluate_scenario(
         concern=concern,
         guest_mode=guest_mode,
         zone=zone,
+        concern_candidates=library_concerns,
     )
 
     risk = _risk_int(cell, surge=force_surge)

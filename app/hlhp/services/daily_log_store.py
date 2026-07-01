@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from app.hlhp.core.local_date import calendar_date_key
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
 from app.hlhp.core.sfi_driver import bands_snapshot, driver_key_from_env
 from app.hlhp.models.environmental import EnvironmentalData
@@ -53,7 +54,7 @@ async def upsert_from_scan(
         return
     await ensure_hlhp_indexes()
     when = _parse_dt(scanned_at)
-    date_key = when.date().isoformat()
+    date_key = calendar_date_key(when)
     tags = list(sudden_event_tags or [])
     col = hl_db[_DAILY_LOG]
 
@@ -127,7 +128,7 @@ async def upsert_user_log_day(
         return
     await ensure_hlhp_indexes()
     when = _parse_dt(logged_at)
-    date_key = when.date().isoformat()
+    date_key = calendar_date_key(when)
     tags = [str(t) for t in (sudden_event_tags or []) if t]
     col = hl_db[_DAILY_LOG]
 
@@ -238,7 +239,7 @@ async def backfill_from_scans(user_id: str, scans: list[dict[str, Any]]) -> None
     by_day: dict[str, list[dict[str, Any]]] = {}
     for scan in scans:
         when = _parse_dt(scan.get("scanned_at"))
-        by_day.setdefault(when.date().isoformat(), []).append(scan)
+        by_day.setdefault(calendar_date_key(when), []).append(scan)
 
     col = hl_db[_DAILY_LOG]
     for date_key, day_scans in by_day.items():

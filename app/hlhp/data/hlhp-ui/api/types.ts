@@ -246,3 +246,41 @@ export interface HealthResponse {
   engine_library_version: string;
   source: "mock" | "live";
 }
+
+// ---- GET /streak  (Streak screen) ---------------------------------------
+export interface WeekGridDay {
+  date: string;
+  done: boolean;
+  today: boolean;
+}
+
+export interface StreakBadges {
+  first_log: boolean;
+  streak_7: boolean;
+  streak_30: boolean;
+}
+
+export interface StreakResponse {
+  current_streak: number;
+  longest_streak: number;
+  badges: StreakBadges;
+  days_to_next_badge: number;
+  week_grid: WeekGridDay[];
+}
+
+// ---- POST /log  (Log screen save) ---------------------------------------
+export interface UserLogRequest {
+  user_id: string;
+  symptoms: string[];
+  areas?: string[];
+  local_time: string;
+  location_city?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface UserLogResponse {
+  logged: { date: string; symptoms: string[] };
+  streak: number;
+  longest_streak: number;
+}

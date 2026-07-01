@@ -179,12 +179,15 @@ body{font-family:var(--font-sans);background:var(--secondary);min-height:100vh;d
 
 /* ===================== STREAK (amber flame) ===================== */
 .s2-stage{background:radial-gradient(ellipse at top,color-mix(in oklch,var(--hlhp-flame) 22%,transparent),transparent 70%)}
-.flame-wrap{position:relative;width:150px;height:188px;margin:0 auto;animation:flameFlicker 1.8s ease-in-out infinite}
+.flame-stack{position:relative;width:150px;height:188px;margin:0 auto}
+.flame-anim{position:absolute;inset:0;animation:flameFlicker 1.8s ease-in-out infinite;transform-origin:center bottom}
 .flame-glow{position:absolute;inset:0;background:radial-gradient(circle at 50% 70%,color-mix(in oklch,var(--hlhp-flame) 50%,transparent),transparent 60%);border-radius:50%}
+.hlhp-streak-count{display:inline-block;white-space:nowrap;line-height:1;font-size:32px;font-weight:600;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.35);font-variant-numeric:tabular-nums}
 .day-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:18px}
-.day-dot{aspect-ratio:1;border-radius:50%;background:var(--muted);transform:scale(0);animation:dotPop 400ms var(--spring) forwards;display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent;transition:color 300ms ease 250ms;font-weight:500}
-.day-dot.done{background:linear-gradient(135deg,var(--hlhp-flame),var(--hlhp-flame-mid));color:#fff}
-.day-dot.today{background:linear-gradient(135deg,var(--accent-primary-dark),var(--primary));color:#fff;box-shadow:0 0 0 4px color-mix(in oklch,var(--accent-primary) 20%,transparent)}
+.day-dot{aspect-ratio:1;border-radius:50%;transform:scale(0);animation:dotPop 400ms var(--spring) forwards;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff}
+.day-dot.done{background:linear-gradient(135deg,#65a30d,#a3e635)}
+.day-dot.missed{background:linear-gradient(135deg,#dc2626,#ef4444)}
+.day-dot.today{box-shadow:0 0 0 3px color-mix(in oklch,var(--primary) 35%,transparent)}
 .milestone{background:linear-gradient(90deg,color-mix(in oklch,var(--hlhp-flame) 18%,white),color-mix(in oklch,var(--hlhp-flame-core) 14%,white),color-mix(in oklch,var(--hlhp-flame) 18%,white));background-size:200% 100%;animation:shimmer 3s ease infinite;border-radius:12px;padding:12px 14px;margin-top:16px;border:.5px solid color-mix(in oklch,var(--hlhp-flame) 40%,transparent)}
 
 /* ===================== RECAP (driver colors) ===================== */
@@ -444,14 +447,16 @@ body{font-family:var(--font-sans);background:var(--secondary);min-height:100vh;d
     <div class="fx" id="fx-s2"></div>
     <div class="replay-bar"><span class="replay-label" id="s2-label">Day 23 streak</span><button class="replay-btn" onclick="HLHP.replay('s2')"><i class="ti ti-refresh"></i></button></div>
     <div style="position:relative;z-index:2;text-align:center">
-      <div class="flame-wrap">
-        <div class="flame-glow"></div>
-        <svg width="150" height="188" viewBox="0 0 160 200" style="position:relative;z-index:1">
-          <path d="M 80 180 Q 30 150 40 100 Q 50 70 65 80 Q 60 50 80 30 Q 100 50 95 80 Q 110 70 120 100 Q 130 150 80 180 Z" fill="var(--hlhp-flame-mid)" opacity=".95"/>
-          <path d="M 80 175 Q 45 150 55 110 Q 65 85 80 90 Q 80 65 95 95 Q 110 110 115 150 Q 105 170 80 175 Z" fill="var(--hlhp-flame)"/>
-          <path d="M 80 170 Q 60 155 65 130 Q 75 110 80 115 Q 85 105 95 130 Q 100 155 80 170 Z" fill="var(--hlhp-flame-core)"/>
-        </svg>
-        <div style="position:absolute;bottom:30px;left:50%;transform:translateX(-50%);z-index:2"><span id="s2-num" style="font-size:32px;font-weight:600;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.3)">0</span></div>
+      <div class="flame-stack">
+        <div class="flame-anim">
+          <div class="flame-glow"></div>
+          <svg width="150" height="188" viewBox="0 0 160 200" style="position:relative;z-index:1">
+            <path d="M 80 180 Q 30 150 40 100 Q 50 70 65 80 Q 60 50 80 30 Q 100 50 95 80 Q 110 70 120 100 Q 130 150 80 180 Z" fill="var(--hlhp-flame-mid)" opacity=".95"/>
+            <path d="M 80 175 Q 45 150 55 110 Q 65 85 80 90 Q 80 65 95 95 Q 110 110 115 150 Q 105 170 80 175 Z" fill="var(--hlhp-flame)"/>
+            <path d="M 80 170 Q 60 155 65 130 Q 75 110 80 115 Q 85 105 95 130 Q 100 155 80 170 Z" fill="var(--hlhp-flame-core)"/>
+          </svg>
+        </div>
+        <div style="position:absolute;bottom:26px;left:0;right:0;z-index:3;text-align:center"><span id="s2-num" class="hlhp-streak-count">0</span></div>
       </div>
       <div class="fade" id="s2-caption" style="margin-top:-6px;font-size:12px;color:var(--muted-foreground);letter-spacing:.08em;text-transform:uppercase;font-weight:500">days strong</div>
       <div class="day-grid" id="s2-grid"></div>
@@ -592,8 +597,17 @@ const isoAgo=(n)=>{const d=new Date(TODAY);d.setDate(d.getDate()-n);return d.toI
    co-located json), so the demo still runs.
    ============================================================ */
 let EV=null;                 // the loaded evidence library
-const STREAK=23;
+let STREAK=23;
+let STREAK_GRID=null;          // from GET /api/hlhp/streak when live
+const API_BASE=(window.HLHP_API_BASE||"http://localhost:8000").replace(/\/$/,"");
+const USER_ID=window.HLHP_USER_ID||"demo-user";
 const DRIVER_KEYS={Temperature:"temp",UV:"uv",Humidity:"humidity",AQI:"aqi"};
+
+function localDateKey(d){
+  d=d||new Date();
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+  return y+"-"+m+"-"+day;
+}
 
 /* tiny fallback so the page works even with no JSON */
 const FALLBACK_EV={
@@ -814,7 +828,7 @@ function animS0(){
   $("s0-demo").textContent=state.surge?"Surge ON — reset":"Simulate sudden surge";$("s0-demo").classList.toggle("on",state.surge);
   clearFx($("fx-s0"));drift($("fx-s0"),10,state.surge?"var(--destructive)":"var(--accent-primary-dark)");
 }
-function confCol(c){return c==="HIGH"?"var(--accent-tertiary-dark)":c==="MODERATE"?"var(--accent-primary-dark)":"var(--muted-foreground)";}
+function confCol(c){return c==="HIGH"?"var(--accent-primary-dark)":c==="MODERATE"?"var(--accent-primary-dark)":"var(--muted-foreground)";}
 function countTo(id,target,dur){const el=$(id);const start=performance.now();let last=-1;function step(now){const t=Math.min(1,(now-start)/dur);const e=1-Math.pow(1-t,3);const v=Math.round(target*e);el.textContent=v;if(v!==last&&v%6===0)sfx("count");last=v;if(t<1)requestAnimationFrame(step);}requestAnimationFrame(step);}
 
 /* ============================================================
@@ -875,17 +889,43 @@ function cap1(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function burstAt(host,el){if(!host)return;const r=el.getBoundingClientRect();const hr=host.getBoundingClientRect();const x=r.left-hr.left+r.width/2;const y=r.top-hr.top+r.height/2;const wrap=document.createElement("div");wrap.style.position="absolute";wrap.style.left=x+"px";wrap.style.top=y+"px";const pal=["var(--accent-primary)","var(--accent-primary-dark)","var(--accent-secondary)","var(--accent-tertiary)"];for(let i=0;i<8;i++){const ang=i/8*Math.PI*2;const s=document.createElement("span");s.className="burst";s.style.background=pal[i%4];s.style.setProperty("--bx",Math.cos(ang)*32+"px");s.style.setProperty("--by",Math.sin(ang)*32+"px");s.style.animation="burstOut 600ms ease-out forwards";wrap.appendChild(s);}const h=document.createElement("span");h.className="floatup-p";h.style.left="-6px";h.textContent="♥";wrap.appendChild(h);host.appendChild(wrap);setTimeout(()=>wrap.remove(),1600);}
 
 /* ============================================================
-   STREAK
+   STREAK — uses /api/hlhp/streak week_grid when available
    ============================================================ */
+async function refreshStreakData(){
+  if(!window.HLHP_USE_LIVE)return;
+  try{
+    const r=await fetch(API_BASE+"/api/hlhp/streak?user_id="+encodeURIComponent(USER_ID),{credentials:"include"});
+    if(r.ok){const j=await r.json();STREAK=j.current_streak||0;STREAK_GRID=j.week_grid||null;state.streakData=j;}
+  }catch(e){}
+}
 function animS2(){
-  $("s2-label").textContent="Day "+STREAK+" streak";
+  const n=state.streakData?.current_streak??STREAK;
+  $("s2-label").textContent="Day "+n+" streak";
   $("s2-num").textContent="0";$("s2-caption").classList.remove("show");$("s2-milestone").classList.remove("show");
-  let n=0;const step=Math.max(1,Math.round(STREAK/18));const t=setInterval(()=>{n=Math.min(STREAK,n+step);$("s2-num").textContent=n;if(!muted&&n%4===0)sfx("count");if(n>=STREAK)clearInterval(t);},45);
+  let cur=0;const step=Math.max(1,Math.round(n/18));const t=setInterval(()=>{cur=Math.min(n,cur+step);$("s2-num").textContent=String(cur);if(!muted&&cur%4===0)sfx("count");if(cur>=n)clearInterval(t);},45);
   setTimeout(()=>{$("s2-caption").classList.add("show");$("s2-milestone").classList.add("show");},700);
-  $("s2-milestone-txt").textContent=(STREAK<7?(7-STREAK)+" days to your 7-day badge":(30-STREAK)+" days to your 30-day badge");
-  const logged={};DAILY_LOGS.forEach(l=>logged[l.date]=true);
+  const nxt=state.streakData?.days_to_next_badge??(n<7?7-n:n<30?30-n:0);
+  $("s2-milestone-txt").textContent=nxt>0?(nxt+" days to your "+(n<7?"7":"30")+"-day badge"):"Badge unlocked";
   const grid=$("s2-grid");grid.innerHTML="";
-  for(let i=0;i<7;i++){const d=new Date(TODAY);d.setDate(d.getDate()-(6-i));const dd=d.toISOString().slice(0,10);const today=i===6;const done=logged[dd]||today;const el=document.createElement("div");el.className="day-dot"+(today?" today":done?" done":"");el.style.animationDelay=(i*60)+"ms";el.textContent=d.getDate();grid.appendChild(el);}
+  const cells=STREAK_GRID||null;
+  for(let i=0;i<7;i++){
+    let cell,dayNum;
+    if(cells&&cells[i]){
+      cell=cells[i];
+      dayNum=parseInt(String(cell.date).slice(-2),10)||0;
+    }else{
+      const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-(6-i));
+      const dd=localDateKey(d);
+      const logged={};DAILY_LOGS.forEach(l=>logged[l.date]=true);
+      cell={date:dd,done:!!logged[dd],today:i===6};
+      dayNum=d.getDate();
+    }
+    const el=document.createElement("div");
+    el.className="day-dot "+(cell.done?"done":"missed")+(cell.today?" today":"");
+    el.style.animationDelay=(i*60)+"ms";
+    el.textContent=dayNum;
+    grid.appendChild(el);
+  }
   clearFx($("fx-s2"));embers($("fx-s2"),16);
 }
 
@@ -991,7 +1031,8 @@ function go(id){
   $$(".tab").forEach(t=>t.classList.toggle("active",t.getAttribute("data-screen")===id));
   $$(".screen").forEach(s=>s.classList.toggle("active",s.id===id));
   sfx("whoosh");showCoach();renderBadges();
-  if(ANIM[id])ANIM[id]();
+  if(id==="s2")refreshStreakData().then(()=>animS2());
+  else if(ANIM[id])ANIM[id]();
 }
 function replay(id){sfx("tap");if(ANIM[id])ANIM[id]();}
 
@@ -1002,7 +1043,7 @@ window.HLHP={
   toggleSound:function(){muted=!muted;$("sound-btn").classList.toggle("muted",muted);$("sound-ico").className="ti "+(muted?"ti-volume-off":"ti-volume");$("sound-lbl").textContent=muted?"sound off":"sound on";if(!muted)sfx("tap");},
   toggleSurge:function(){state.surge=!state.surge;refreshWeather();buildHistory();sfx(state.surge?"alert":"tap");if(ANIM[state.tab])ANIM[state.tab]();showCoach();},
   toggleAlert:function(){state.alertOpen=!state.alertOpen;$("alert-card").classList.toggle("open",state.alertOpen);sfx(state.alertOpen?"reveal":"tap");},
-  saveLog:function(){if($("s1-save").disabled)return;state.saved=true;state.logCount++;sfx("save");const b=$("s1-save");b.classList.add("saved");b.innerHTML='<i class="ti ti-check"></i> Logged';$("s1-saved").classList.add("show");$("s1-learned").classList.add("show");burstAt($("fx-s1"),b);renderBadges();setTimeout(()=>$("s1-saved").classList.remove("show"),2200);},
+  saveLog:function(){if($("s1-save").disabled)return;state.saved=true;state.logCount++;sfx("save");const b=$("s1-save");b.classList.add("saved");b.innerHTML='<i class="ti ti-check"></i> Logged';$("s1-saved").classList.add("show");$("s1-learned").classList.add("show");burstAt($("fx-s1"),b);renderBadges();refreshStreakData();setTimeout(()=>$("s1-saved").classList.remove("show"),2200);},
   share:function(kind){sfx("share");clearFx($("fx-sc"));sparkles($("fx-sc"),14);confetti($("fx-sc"),30);const msg=kind==="save"?"Saved to your device":kind==="wa"?"Ready for WhatsApp":"Ready for your Story";const tt=$("sc-toast");tt.textContent=msg;tt.classList.add("show");setTimeout(()=>tt.classList.remove("show"),1800);},
   copyCaption:function(){const txt=$("sc-caption").textContent;if(navigator.clipboard)navigator.clipboard.writeText(txt).catch(()=>{});sfx("pop");$("cap-copy-lbl").textContent="Copied!";setTimeout(()=>$("cap-copy-lbl").textContent="Copy",1600);}
 };
@@ -1028,9 +1069,12 @@ function populateSelectors(){
 function boot(){
   refreshWeather();buildHistory();populateSelectors();
   renderBadges();showCoach();animS0();
+  refreshStreakData().then(()=>{if(state.tab==="s2")animS2();});
 }
 (function loadEvidence(){
-  // try to fetch the exported library; fall back to the built-in sample
+  if(window.HLHP_USE_LIVE){
+    EV=FALLBACK_EV;boot();return;
+  }
   fetch("hlhp-evidence.json").then(r=>{if(!r.ok)throw 0;return r.json();})
     .then(j=>{EV=j;boot();})
     .catch(()=>{EV=FALLBACK_EV;boot();const b=$("profile-bar");if(b){const w=document.createElement("span");w.className="pf-lbl";w.style.color="var(--muted-foreground)";w.textContent="(sample data — run export for full 880-cell library)";b.appendChild(w);}});

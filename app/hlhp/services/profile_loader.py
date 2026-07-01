@@ -15,15 +15,20 @@ from app.hlhp.db import get_hlhp_db
 from app.hlhp.models.profile import (
     AgeBracket,
     Gender,
-    HairConcern,
-    HairType,
-    SkinConcern,
     SkinGoal,
     SkinType,
     SleepTime,
     SmokingStatus,
     StressLevel,
     UserProfile,
+)
+from app.hlhp.services.profile_taxonomy_mapper import (
+    map_hair_concerns,
+    map_hair_type,
+    map_skin_concerns,
+    map_skin_type,
+    refresh_taxonomy_aliases_from_db,
+    supported_skin_concern_examples,
 )
 from app.hlhp.services.user_display import extract_first_name_from_doc
 from app.label_looker.services.profile_form import _list_values, _parse_age, _scalar
@@ -41,29 +46,6 @@ logger = logging.getLogger(__name__)
 _USER_COLL = os.getenv("LABEL_LOOKER_USER_COLLECTION", "users")
 _USER_DETAILS_COLL = os.getenv("LABEL_LOOKER_USER_DETAILS_COLLECTION", "user_details")
 
-_SKIN_CONCERN_MAP = {
-    "sensitive": SkinConcern.SENSITIVITY,
-    "sensitivity": SkinConcern.SENSITIVITY,
-    "acne": SkinConcern.ACNE,
-    "oiliness": SkinConcern.PORES,
-    "oily": SkinConcern.PORES,
-    "pigmentation": SkinConcern.PIGMENTATION,
-    "tan": SkinConcern.TAN,
-    "aging": SkinConcern.AGING,
-    "dullness": SkinConcern.DULLNESS,
-    "dark-circles": SkinConcern.DARK_CIRCLES,
-    "dark_circles": SkinConcern.DARK_CIRCLES,
-    "dark circles": SkinConcern.DARK_CIRCLES,
-    "sleep-deprivation": SkinConcern.DARK_CIRCLES,
-    "pores": SkinConcern.PORES,
-    "texture": SkinConcern.TEXTURE,
-    "dehydration": SkinConcern.DEHYDRATION,
-    "dryness": SkinConcern.DEHYDRATION,
-    "redness": SkinConcern.REDNESS,
-    "melasma": SkinConcern.MELASMA,
-    "pih": SkinConcern.PIGMENTATION,
-}
-
 _SKIN_GOAL_MAP = {
     "prevention": SkinGoal.PREVENTION,
     "barrier_health": SkinGoal.BARRIER_HEALTH,
@@ -80,21 +62,6 @@ _SKIN_GOAL_MAP = {
     "eventone": SkinGoal.EVEN_TONE,
     "general_wellness": SkinGoal.GENERAL_WELLNESS,
     "general-wellness": SkinGoal.GENERAL_WELLNESS,
-}
-
-_HAIR_CONCERN_MAP = {
-    "frizz": HairConcern.FRIZZ,
-    "dandruff": HairConcern.DANDRUFF,
-    "hair-fall": HairConcern.THINNING,
-    "hair_fall": HairConcern.THINNING,
-    "thinning": HairConcern.THINNING,
-    "oiliness": HairConcern.OILINESS,
-    "dryness": HairConcern.DRYNESS,
-    "color-treated": HairConcern.COLOR_TREATED,
-    "color_treated": HairConcern.COLOR_TREATED,
-    "breakage": HairConcern.BREAKAGE,
-    "scalp-sensitivity": HairConcern.SCALP_SENSITIVITY,
-    "scalp_sensitivity": HairConcern.SCALP_SENSITIVITY,
 }
 
 _SMOKING_MAP = {
@@ -168,46 +135,6 @@ def _map_optional_enum(raw, mapping: dict):
             return mapping[key]
         return mapping.get(raw.strip().lower())
     return None
-
-
-def _map_skin_concerns(raw_values: list[str]) -> list[SkinConcern]:
-    concerns: list[SkinConcern] = []
-    for item in raw_values:
-        key = _norm_key(item)
-        mapped = _SKIN_CONCERN_MAP.get(key) or _SKIN_CONCERN_MAP.get(key.replace("-", "_"))
-        if mapped and mapped not in concerns:
-            concerns.append(mapped)
-    return concerns[:3]
-
-
-def _map_skin_type(raw_value: str | None) -> SkinType | None:
-    scalar = _scalar(raw_value)
-    if not scalar or not isinstance(scalar, str):
-        return None
-    try:
-        return SkinType(scalar.strip().lower())
-    except ValueError:
-        return None
-
-
-def _map_hair_type(raw_value: str | None) -> HairType | None:
-    scalar = _scalar(raw_value)
-    if not scalar or not isinstance(scalar, str):
-        return None
-    try:
-        return HairType(scalar.strip().lower())
-    except ValueError:
-        return None
-
-
-def _map_hair_concerns(raw_values: list[str]) -> list[HairConcern]:
-    out: list[HairConcern] = []
-    for item in raw_values:
-        key = _norm_key(item)
-        mapped = _HAIR_CONCERN_MAP.get(key)
-        if mapped and mapped not in out:
-            out.append(mapped)
-    return out[:3]
 
 
 def _map_gender(raw) -> Gender | None:
@@ -331,7 +258,7 @@ def diagnose_skin_profile(doc: dict | None) -> dict[str, Any]:
     skin_type_raw = doc.get("skinType") or doc.get("skin_type")
     if not _scalar(skin_type_raw):
         missing.append("skin type")
-    elif _map_skin_type(skin_type_raw) is None:
+    elif map_skin_type(_scalar(skin_type_raw) if skin_type_raw is not None else None) is None:
         invalid.append(
             {
                 "field": "skinType",
@@ -346,8 +273,9 @@ def diagnose_skin_profile(doc: dict | None) -> dict[str, Any]:
     if not concerns_raw:
         missing.append("skin concerns")
     else:
-        mapped = _map_skin_concerns(concerns_raw)
+        mapped = map_skin_concerns(concerns_raw)
         if not mapped:
+            examples = ", ".join(supported_skin_concern_examples())
             invalid.append(
                 {
                     "field": "skinConcerns",
@@ -355,8 +283,8 @@ def diagnose_skin_profile(doc: dict | None) -> dict[str, Any]:
                     "reason": "unrecognized_values",
                     "value": concerns_raw,
                     "hint": (
-                        "Choose at least one supported concern, for example acne, pigmentation, "
-                        "dullness, sensitivity, or dark circles."
+                        "Choose at least one skin concern from your profile (e.g. "
+                        f"{examples})."
                     ),
                 }
             )
@@ -434,6 +362,7 @@ async def load_merged_profile_doc(
         merged = merge_auth_user_details(merged, auth_user)
 
     if merged:
+        await refresh_taxonomy_aliases_from_db()
         merged = await resolve_profile_taxonomy_refs(db, merged)
     return merged
 
@@ -442,13 +371,13 @@ def map_merged_doc_to_user_profile(user_id: str, doc: dict) -> UserProfile | Non
     if not _has_minimum_skin_profile(doc):
         return None
 
-    skin_concerns = _map_skin_concerns(
+    skin_concerns = map_skin_concerns(
         _list_values(doc.get("skinConcerns") or doc.get("skin_concerns"))
     )
     if not skin_concerns:
         return None
 
-    skin_type = _map_skin_type(doc.get("skinType") or doc.get("skin_type"))
+    skin_type = map_skin_type(_scalar(doc.get("skinType") or doc.get("skin_type")))
     gender = _map_gender(doc.get("gender"))
     age_bracket = _map_age_bracket(doc)
     if not skin_type or not gender or not age_bracket:
@@ -468,8 +397,8 @@ def map_merged_doc_to_user_profile(user_id: str, doc: dict) -> UserProfile | Non
             doc.get("stressLevel") or doc.get("stress_level"), _STRESS_MAP
         ),
         sleep_time=_map_sleep_time(doc),
-        hair_type=_map_hair_type(doc.get("hairType") or doc.get("hair_type")),
-        hair_concerns=_map_hair_concerns(
+        hair_type=map_hair_type(_scalar(doc.get("hairType") or doc.get("hair_type"))),
+        hair_concerns=map_hair_concerns(
             _list_values(doc.get("hairConcerns") or doc.get("hair_concerns"))
         ),
         skin_tone_fitzpatrick=_map_skin_tone_fitzpatrick(doc),
