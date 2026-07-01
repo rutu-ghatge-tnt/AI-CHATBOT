@@ -14,6 +14,8 @@
  *    symptomFeeling(...)     → POST /api/hlhp/symptom_feeling
  *    actionTap(...)          → POST /api/hlhp/action_tap
  *    history(...)            → GET  /api/hlhp/history
+ *    streak(...)             → GET  /api/hlhp/streak
+ *    userLog(...)            → POST /api/hlhp/log
  *    sfiTimeline(...)        → GET  /api/hlhp/sfi_timeline
  *    catchup(...)            → GET  /api/hlhp/catchup
  *    symptomExplainer(kw)    → GET  /api/hlhp/symptom_explainer/{kw}
@@ -33,6 +35,9 @@ import type {
   SymptomExplainerResponse,
   ConsentResponse,
   HealthResponse,
+  StreakResponse,
+  UserLogRequest,
+  UserLogResponse,
 } from "./types";
 import {
   MOCK_USER, MOCK_TREND_30, MOCK_DAILY_LOGS, MOCK_SUDDEN_EVENTS,
@@ -49,6 +54,7 @@ import {
 } from "@/lib/evidence";
 import type { BackendScanResponse } from "@/api/backendScanTypes";
 import { mapBackendScanToUi } from "@/api/scanAdapter";
+import { localDateKey } from "@/lib/dates";
 
 // ---- config --------------------------------------------------------------
 export const API_BASE =
@@ -68,6 +74,76 @@ export const ENV = {
 // simulate a little latency so the loading/animation states are visible
 const LATENCY = USE_MOCK ? 220 : 0;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Extra log days recorded in mock mode (survives until page reload). */
+const mockLoggedDates = new Set<string>();
+
+export function mockMarkLogDay(iso?: string) {
+  mockLoggedDates.add(iso ?? localDateKey());
+}
+
+function mockLoggedDateSet(): Set<string> {
+  const dates = new Set(MOCK_DAILY_LOGS.map((l) => l.date));
+  mockLoggedDates.forEach((d) => dates.add(d));
+  return dates;
+}
+
+function mockCalendarStreak(dates: Set<string>, today: string): number {
+  let n = 0;
+  const d = new Date(`${today}T12:00:00`);
+  while (dates.has(localDateKey(d))) {
+    n += 1;
+    d.setDate(d.getDate() - 1);
+  }
+  return n;
+}
+
+function mockLongestStreak(dates: Set<string>): number {
+  if (!dates.size) return 0;
+  const sorted = [...dates].sort();
+  let longest = 1;
+  let current = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(`${sorted[i - 1]}T12:00:00`);
+    const cur = new Date(`${sorted[i]}T12:00:00`);
+    prev.setDate(prev.getDate() + 1);
+    if (localDateKey(prev) === localDateKey(cur)) {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 1;
+    }
+  }
+  return Math.max(longest, current);
+}
+
+function buildMockStreak(): StreakResponse {
+  const dates = mockLoggedDateSet();
+  const today = localDateKey();
+  const current = mockCalendarStreak(dates, today);
+  const longest = Math.max(mockLongestStreak(dates), current);
+  const week_grid = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() - (6 - i));
+    const iso = localDateKey(d);
+    return { date: iso, done: dates.has(iso), today: iso === today };
+  });
+  let nxt = 0;
+  if (current < 7) nxt = 7 - current;
+  else if (current < 30) nxt = 30 - current;
+  return {
+    current_streak: current,
+    longest_streak: longest,
+    badges: {
+      first_log: dates.size >= 1,
+      streak_7: current >= 7,
+      streak_30: current >= 30,
+    },
+    days_to_next_badge: Math.max(nxt, 0),
+    week_grid,
+  };
+}
 
 async function live<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -275,13 +351,13 @@ export async function symptomFeeling(
   body: SymptomFeelingRequest
 ): Promise<SymptomFeelingResponse> {
   if (!USE_MOCK) {
-    // LIVE: POST /v2/logs  { user_id, symptom }
     return live<SymptomFeelingResponse>(`/api/hlhp/symptom_feeling`, {
       method: "POST",
-      body: JSON.stringify({ user_id: body.user_id, symptom: body.symptom_keyword }),
+      body: JSON.stringify(body),
     });
   }
   await wait(LATENCY);
+  if (body.selected) mockMarkLogDay(body.local_time?.slice(0, 10) || undefined);
   return {
     symptom_keyword: body.symptom_keyword,
     selected: body.selected,
@@ -306,6 +382,35 @@ export async function actionTap(
   }
   await wait(LATENCY);
   return { streak: 23, longest_ever: 23 };
+}
+
+/** GET /streak → Streak screen (counter + 7-day grid + badges). */
+export async function streak(userId: string = ENV.userId): Promise<StreakResponse> {
+  if (!USE_MOCK) {
+    return live<StreakResponse>(
+      `/api/hlhp/streak?user_id=${encodeURIComponent(userId)}`
+    );
+  }
+  await wait(LATENCY);
+  return buildMockStreak();
+}
+
+/** POST /log → unified symptom log (preferred live path for Log screen save). */
+export async function userLog(body: UserLogRequest): Promise<UserLogResponse> {
+  if (!USE_MOCK) {
+    return live<UserLogResponse>(`/api/hlhp/log`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+  await wait(LATENCY);
+  mockMarkLogDay(body.local_time?.slice(0, 10) || undefined);
+  const s = buildMockStreak();
+  return {
+    logged: { date: localDateKey(), symptoms: body.symptoms },
+    streak: s.current_streak,
+    longest_streak: s.longest_streak,
+  };
 }
 
 /** GET /history → Recap / Share / Good Day / Patterns inputs. */
@@ -425,7 +530,7 @@ export async function health(): Promise<HealthResponse> {
 }
 
 export const hlhpClient = {
-  scan, symptomFeeling, actionTap, history, sfiTimeline,
+  scan, symptomFeeling, actionTap, streak, userLog, history, sfiTimeline,
   catchup, symptomExplainer, learn, getConsent, postConsent, health,
 };
 export default hlhpClient;

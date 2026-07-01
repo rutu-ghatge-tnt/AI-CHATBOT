@@ -248,6 +248,37 @@ body {
 .confetti-p { position: absolute; width: 8px; height: 12px; pointer-events: none; }
 .floatup-p { position: absolute; font-size: 18px; pointer-events: none; animation: floatUp 1.5s ease-out forwards; font-weight: bold; }
 
+/* Streak screen — explicit green logged / red missed (works in embeds without Tailwind) */
+.hlhp-streak-count {
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1;
+  font-size: 32px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  font-variant-numeric: tabular-nums;
+}
+.hlhp-streak-dot {
+  display: flex;
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+}
+.hlhp-streak-dot--done {
+  background: linear-gradient(135deg, #65a30d, #a3e635);
+}
+.hlhp-streak-dot--missed {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+}
+.hlhp-streak-dot--today {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+
 .fade { opacity: 0; transition: opacity 600ms ease; }
 .fade.show { opacity: 1; }
 

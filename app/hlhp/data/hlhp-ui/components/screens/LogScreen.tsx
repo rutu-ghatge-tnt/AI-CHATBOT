@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useHlhp } from "@/lib/store";
-import hlhpClient, { ENV } from "@/api/hlhpClient";
+import hlhpClient, { ENV, USE_MOCK } from "@/api/hlhpClient";
 import { Screen, ReplayBar } from "@/components/shell/ScreenShell";
 import { DriftParticles } from "@/components/anim/Particles";
 import { useReplay } from "@/lib/hooks";
@@ -29,7 +29,7 @@ const NEEDS_AREA: Record<string, boolean> = { breakout: true, spots: true };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function LogScreen() {
-  const { surge, sfx, bumpLog } = useHlhp();
+  const { surge, sfx, bumpLog, refreshStreak } = useHlhp();
   const [rk, replay] = useReplay();
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [areas, setAreas] = useState<Record<string, boolean>>({});
@@ -82,14 +82,33 @@ export function LogScreen() {
     sfx("save");
     setSaved(true);
     bumpLog();
+    const localTime = new Date().toISOString();
+    const areaSlugs = areaList.map((a) =>
+      a === "Full face" ? "full_face" : a.toLowerCase().replace(/\s+/g, "_")
+    );
+    if (!USE_MOCK) {
+      await hlhpClient.userLog({
+        user_id: ENV.userId,
+        symptoms: syms,
+        areas: areaSlugs,
+        local_time: localTime,
+        location_city: ENV.city,
+        latitude: ENV.lat,
+        longitude: ENV.lng,
+      });
+    } else {
+      for (const s of syms) {
+        await hlhpClient.symptomFeeling({
+          user_id: ENV.userId,
+          symptom_keyword: s,
+          local_time: localTime,
+          selected: true,
+        });
+      }
+    }
+    await refreshStreak();
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2200);
-    // POST each symptom (mock)
-    for (const s of syms) {
-      await hlhpClient.symptomFeeling({
-        user_id: ENV.userId, symptom_keyword: s, local_time: new Date().toISOString(), selected: true,
-      });
-    }
   }
 
   const envLine = surge ? "Heat surge · UV 11 · AQI 380" : "Humidity surge +22pts";

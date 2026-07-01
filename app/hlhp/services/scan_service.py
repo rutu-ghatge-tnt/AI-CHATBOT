@@ -14,9 +14,9 @@ from app.hlhp.evidence.voice import apply_lay_voice
 from app.hlhp.coach.models import CoachWrap
 from app.hlhp.coach.state_store import (
     fetch_selected_symptoms,
-    fetch_streak_meta,
     record_symptom_tap,
 )
+from app.hlhp.core.local_date import calendar_date
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.models.scan import (
@@ -116,28 +116,26 @@ async def _scenario_coach_wrap(
 ) -> CoachWrap | None:
     if guest_mode or not user_id:
         return None
-    bands = bucketize_environment(env)
-    routine_action = scenario.action_cluster or "Maintain"
-    today = local_time.date() if hasattr(local_time, "date") else date.today()
-    meta = await fetch_streak_meta(
-        user_id,
-        uvi_band=bands.uvi,
-        routine_action=routine_action,
-        today=today,
-    )
+    from app.hlhp.services.engagement_service import calendar_streak, counting_dates
+
+    today = calendar_date(local_time) if local_time else date.today()
+    dates = await counting_dates(user_id)
+    current = calendar_streak(dates, today)
     effort = None
-    if meta.current >= 1:
+    if current >= 1:
         effort = (
-            f"Day {meta.current} of showing up. Your skin notices the consistency."
+            f"Day {current} of showing up. Your skin notices the consistency."
         )
     greeting = None
     if first_name and resolve_day_phase(local_time) == "morning":
         greeting = f"Good morning, {first_name}"
+    from app.hlhp.coach.models import StreakMeta
+
     return CoachWrap(
         greeting=greeting,
         effort_recognition=effort,
         forward_hook=scenario.flash_alert.l0,
-        streak_meta=meta,
+        streak_meta=StreakMeta(current=current, longest=current) if current else None,
     )
 
 

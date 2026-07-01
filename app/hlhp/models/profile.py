@@ -25,6 +25,8 @@ class SkinConcern(str, Enum):
     DEHYDRATION = "dehydration"
     REDNESS = "redness"
     MELASMA = "melasma"
+    FUNGAL = "fungal"
+    HEAT_RASH = "heat_rash"
 
 
 class SkinGoal(str, Enum):

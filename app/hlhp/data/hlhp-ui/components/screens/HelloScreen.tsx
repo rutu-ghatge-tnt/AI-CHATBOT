@@ -52,7 +52,7 @@ function ringColor(sfi: number) {
   return "var(--destructive)";
 }
 function confColor(c: string) {
-  return c === "HIGH" ? "var(--accent-tertiary-dark)" : c === "MODERATE" ? "var(--accent-primary-dark)" : "var(--muted-foreground)";
+  return c === "HIGH" ? "var(--accent-primary-dark)" : c === "MODERATE" ? "var(--accent-primary-dark)" : "var(--muted-foreground)";
 }
 const LEVEL_PCT: Record<string, number> = { Low: 33, Medium: 66, High: 100 };
 

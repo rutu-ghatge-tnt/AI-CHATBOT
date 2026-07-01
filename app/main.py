@@ -28,6 +28,7 @@ warnings.filterwarnings('ignore', message='.*Feedback manager.*')
 warnings.filterwarnings('ignore', category=UserWarning, module='langchain')
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 # Import chatbot router (with error handling for missing dependencies)
 try:
@@ -65,6 +66,9 @@ from app.hlhp.api.personalized_alerts import router as hl_personalized_alerts_ro
 from app.hlhp.api.scan import router as hlhp_scan_router
 from app.hlhp.api.composition import router as hlhp_composition_router
 from app.hlhp.api.weather import router as hlhp_weather_router
+from pathlib import Path
+
+HLHP_UI_PUBLIC = Path(__file__).resolve().parent / "hlhp" / "data" / "hlhp-ui" / "public"
 
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
@@ -98,7 +102,6 @@ except ImportError as e:
     print("   Notifications API will not be available. This is not critical.")
     notifications_router = None
 # from app.product_listing_image_extraction.route import router as image_extractor_router  # Commented out - module doesn't exist
-from pathlib import Path
 
 # Add Face Analysis path to Python path
 face_analysis_path = Path(__file__).parent / "faceAnalysis"
@@ -347,6 +350,13 @@ app.include_router(hl_personalized_alerts_router, prefix="/api")
 app.include_router(hlhp_scan_router, prefix="/api")
 app.include_router(hlhp_composition_router, prefix="/api")
 app.include_router(hlhp_weather_router, prefix="/api")
+
+if HLHP_UI_PUBLIC.is_dir():
+    app.mount(
+        "/hlhp-ui",
+        StaticFiles(directory=str(HLHP_UI_PUBLIC), html=False),
+        name="hlhp-ui-static",
+    )
 
 # ✅ Add trend insights API
 if trend_insights_router is not None:

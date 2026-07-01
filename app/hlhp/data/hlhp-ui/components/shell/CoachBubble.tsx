@@ -11,14 +11,17 @@ import { cn } from "@/lib/utils";
  * each tab change (spring easing, ported from the prototype .coach-bubble).
  */
 export function CoachBubble() {
-  const { tab, scan } = useHlhp();
+  const { tab, scan, streak } = useHlhp();
   const [show, setShow] = useState(false);
 
-  // resolve message
   const wrap = scan?.alerts?.[0]?.coach_wrap;
+  const streakMsg =
+    streak >= 1
+      ? `Day ${streak} of showing up. Your skin notices the consistency.`
+      : undefined;
   const live: Partial<Record<string, string | undefined>> = {
     s0: scan?.sudden_event_tags.length ? wrap?.l2 : wrap?.forward_hook ?? wrap?.greeting,
-    s2: wrap?.effort_recognition,
+    s2: streakMsg ?? wrap?.effort_recognition,
   };
   const meta = COACH_BY_TAB[tab];
   const msg = live[tab] ?? meta.fallback;

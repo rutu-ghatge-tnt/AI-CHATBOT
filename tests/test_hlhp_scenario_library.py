@@ -5,12 +5,15 @@ from datetime import datetime
 from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.services.scenario_engine import (
+    CONCERN_TO_LIBRARY,
     band_for_sfi,
     compute_sfi,
     evaluate_scenario,
     lookup_master_cell,
     driver_states,
+    resolve_library_concerns,
 )
+from app.hlhp.models.profile import AgeBracket, Gender, SkinConcern, SkinType, UserProfile
 
 
 def _env(**kwargs):
@@ -107,3 +110,40 @@ def test_lookup_master_cell_key_format():
     assert cell is not None
     assert cell.get("l0")
     assert cell.get("l1")
+
+
+def test_concern_to_library_covers_all_skin_concerns():
+    for concern in SkinConcern:
+        assert concern in CONCERN_TO_LIBRARY, f"missing library map for {concern}"
+
+
+def test_resolve_library_concerns_uses_secondary_when_primary_unmapped_cell():
+    profile = UserProfile(
+        user_id="u1",
+        skin_type=SkinType.OILY,
+        skin_concerns=[SkinConcern.PORES, SkinConcern.DEHYDRATION],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_25_30,
+    )
+    concerns = resolve_library_concerns(profile, guest_mode=False)
+    assert concerns == ["Oily Skin", "Dryness"]
+
+
+def test_personalised_scan_uses_profile_concern_cell():
+    store = get_scenario_store()
+    env = _env(humidity_pct=88, temperature_c=28, uv_index=0.6, aqi=55)
+    profile = UserProfile(
+        user_id="u1",
+        skin_type=SkinType.COMBINATION,
+        skin_concerns=[SkinConcern.DEHYDRATION],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_25_30,
+    )
+    result = evaluate_scenario(
+        store, env, city="Mumbai", profile=profile, guest_mode=False
+    )
+    assert result.concern == "Dryness"
+    assert result.cell is not None
+    assert "humid" in result.flash_alert.l0.lower()
+    assert result.evidence_cell is not None
+    assert result.evidence_cell.confidence in {"HIGH", "MODERATE", "LOW"}

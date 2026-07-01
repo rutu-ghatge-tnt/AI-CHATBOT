@@ -3,6 +3,8 @@
 from app.hlhp.models.profile import (
     AgeBracket,
     Gender,
+    HairConcern,
+    HairType,
     SkinConcern,
     SkinGoal,
     SkinType,
@@ -81,7 +83,7 @@ def test_diagnose_skin_profile_flags_unrecognized_skin_type():
         {
             "age": 30,
             "gender": "female",
-            "skinType": "very-oily",
+            "skinType": "not-a-real-skin-type",
             "skinConcerns": ["acne"],
         }
     )
@@ -91,7 +93,60 @@ def test_diagnose_skin_profile_flags_unrecognized_skin_type():
     assert "oily" in diagnosis["invalid_fields"][0]["accepted"]
 
 
+def test_diagnose_skin_profile_maps_db_skin_type_aliases():
+    diagnosis = diagnose_skin_profile(
+        {
+            "age": 30,
+            "gender": "female",
+            "skinType": "very-oily",
+            "skinConcerns": ["acne"],
+        }
+    )
+    assert diagnosis["ready"] is True
+
+
+def test_map_merged_doc_oily_skin_db_taxonomy():
+    doc = {
+        "age": 30,
+        "gender": "female",
+        "skinType": "oily",
+        "skinConcerns": ["Oily Skin", "oily-skin"],
+    }
+    profile = map_merged_doc_to_user_profile("user-oily", doc)
+    assert profile is not None
+    assert SkinConcern.PORES in profile.skin_concerns
+
+
+def test_map_merged_doc_hair_taxonomy_labels():
+    doc = {
+        "age": 26,
+        "gender": "female",
+        "skinType": "normal",
+        "skinConcerns": ["acne"],
+        "hairType": "straight-thick",
+        "hairConcerns": ["split-ends", "Hair Thinning"],
+    }
+    profile = map_merged_doc_to_user_profile("user-hair", doc)
+    assert profile is not None
+    assert profile.hair_type == HairType.STRAIGHT
+    assert HairConcern.BREAKAGE in profile.hair_concerns
+    assert HairConcern.THINNING in profile.hair_concerns
+
+
 def test_diagnose_skin_profile_flags_unmapped_concerns():
+    diagnosis = diagnose_skin_profile(
+        {
+            "age": 30,
+            "gender": "female",
+            "skinType": "oily",
+            "skinConcerns": ["totally-unknown-concern-xyz"],
+        }
+    )
+    assert diagnosis["ready"] is False
+    assert diagnosis["invalid_fields"][0]["field"] == "skinConcerns"
+
+
+def test_diagnose_skin_profile_maps_wrinkles_concern():
     diagnosis = diagnose_skin_profile(
         {
             "age": 30,
@@ -100,5 +155,4 @@ def test_diagnose_skin_profile_flags_unmapped_concerns():
             "skinConcerns": ["wrinkles"],
         }
     )
-    assert diagnosis["ready"] is False
-    assert diagnosis["invalid_fields"][0]["field"] == "skinConcerns"
+    assert diagnosis["ready"] is True

@@ -24,6 +24,8 @@ from app.hlhp.models.scan import (
 )
 from app.hlhp.services.action_tap_service import run_action_tap
 from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
+from app.hlhp.core.local_date import calendar_date_key
+from app.hlhp.services.daily_log_store import upsert_user_log_day
 from app.hlhp.services.log_event_store import fetch_latest_log_for_date
 from app.hlhp.services.scan_service import run_scan, run_symptom_tap
 
@@ -77,6 +79,8 @@ async def hlhp_symptom_feeling(
             selected=req.selected,
             recorded_at=req.local_time,
         )
+        if req.selected:
+            await upsert_user_log_day(user_id=user_id, logged_at=req.local_time)
     except HlhpStoreError as exc:
         http_503_for_store_error(exc)
     active = sorted(await fetch_selected_symptoms(user_id))
