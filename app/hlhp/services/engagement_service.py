@@ -32,6 +32,7 @@ from app.hlhp.models.engagement import (
     WeeklyCardResponse,
     WeeklySeriesPoint,
 )
+from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.scan import ScanRequest
 from app.hlhp.services.action_tap_service import run_action_tap
 from app.hlhp.services.daily_log_store import fetch_daily_logs, upsert_user_log_day
@@ -49,6 +50,26 @@ from app.hlhp.db_errors import HlhpStoreError
 logger = logging.getLogger(__name__)
 
 NEEDS_AREA = {"breakout", "spots"}
+
+
+def _environment_for_log(body: UserLogRequest, when: datetime) -> EnvironmentalData | None:
+    """Use scan snapshot env from the client — avoids a second weather fetch on save."""
+    if (
+        body.raw_uvi is None
+        or body.raw_aqi is None
+        or body.raw_rh is None
+        or body.raw_temp is None
+    ):
+        return None
+    return EnvironmentalData(
+        uv_index=float(body.raw_uvi),
+        temperature_c=float(body.raw_temp),
+        aqi=int(body.raw_aqi),
+        humidity_pct=float(body.raw_rh),
+        location_name=(body.location_city or "Unknown").strip() or "Unknown",
+        fetched_at=when,
+        data_sources={"weather": "client_raw", "aqi": "client_raw", "uv": "client_raw"},
+    )
 
 
 def _parse_dt(value: datetime) -> datetime:
@@ -303,18 +324,20 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
     when = _parse_dt(body.local_time)
     date_key = calendar_date_key(when)
 
-    scan_req = ScanRequest(
-        user_id=body.user_id,
-        city=body.location_city,
-        local_time=when,
-        latitude=body.latitude,
-        longitude=body.longitude,
-        raw_uvi=body.raw_uvi,
-        raw_aqi=body.raw_aqi,
-        raw_rh=body.raw_rh,
-        raw_temp=body.raw_temp,
-    )
-    env = await resolve_environment(scan_req)
+    env = _environment_for_log(body, when)
+    if env is None:
+        scan_req = ScanRequest(
+            user_id=body.user_id,
+            city=body.location_city,
+            local_time=when,
+            latitude=body.latitude,
+            longitude=body.longitude,
+            raw_uvi=body.raw_uvi,
+            raw_aqi=body.raw_aqi,
+            raw_rh=body.raw_rh,
+            raw_temp=body.raw_temp,
+        )
+        env = await resolve_environment(scan_req)
     bands = bucketize_environment(env)
     band_fields = bands_snapshot(bands)
     score = calculate_skin_score(env)
@@ -387,8 +410,10 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         logger.warning("HLHP action_tap during log save skipped: %s", exc)
 
     dates = await counting_dates(body.user_id)
-    current = calendar_streak(dates, calendar_date(when))
+    today = calendar_date(when)
+    current = calendar_streak(dates, today)
     longest = max(longest_calendar_streak(dates), current)
+    grid = week_grid(dates, today)
 
     logged_out = LoggedEventOut(
         ts=when.isoformat(),
@@ -403,4 +428,9 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         aqi_band=band_fields["aqi_band"],
         humidity_band=band_fields["humidity_band"],
     )
-    return UserLogResponse(logged=logged_out, streak=current, longest_streak=longest)
+    return UserLogResponse(
+        logged=logged_out,
+        streak=current,
+        longest_streak=longest,
+        week_grid=grid,
+    )

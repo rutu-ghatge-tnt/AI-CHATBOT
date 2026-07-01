@@ -45,6 +45,8 @@ class UserLogResponse(BaseModel):
     logged: LoggedEventOut
     streak: int
     longest_streak: int
+    """Updated 7-day grid — lets clients skip a separate GET /streak after save."""
+    week_grid: list[WeekGridDay] = Field(default_factory=list)
 
 
 class StreakBadges(BaseModel):
