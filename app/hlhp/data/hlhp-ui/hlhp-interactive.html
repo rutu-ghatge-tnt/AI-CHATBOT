@@ -576,6 +576,7 @@ body{font-family:var(--font-sans);background:var(--secondary);min-height:100vh;d
   </div>
 
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 /* ============================================================
    HLHP interactive — single-file engine (v2: 7 tabs).
@@ -959,12 +960,15 @@ function animSP(){
 /* ============================================================
    SHARE (strong social copy)
    ============================================================ */
-const CAPTION="My skin read the weather all week 🌡️\n\nPune hit me with a heat wave AND a humidity spike — and my barrier held. Tracking my Skin Friendliness Index (SFI) with @skinbb so I actually know what my skin's up against each day.\n\nThis week: 69/100, up 4. 💪\n\n#SkinBB #SkinFriendlinessIndex #ApplyKnowledgeToTheSkin #IndianSkincare #SkinHealth";
+function buildCaption(weekAvg,delta,city){
+  const deltaLabel=delta>=0?("up "+delta):("down "+Math.abs(delta));
+  return "My skin read the weather all week 🌡️\n\n"+city+" threw changing conditions at me — and my barrier held. Tracking my Skin Friendliness Index (SFI) with @skinbb so I actually know what my skin's up against each day.\n\nThis week: "+weekAvg+"/100, "+deltaLabel+". 💪\n\n#SkinBB #SkinFriendlinessIndex #ApplyKnowledgeToTheSkin #IndianSkincare #SkinHealth";
+}
 function animSC(){
   const last7=TREND.slice(-7);const vals=last7.map(t=>t.sfi).filter(v=>v!=null);const weekAvg=Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
   const prev=TREND.slice(-14,-7).map(t=>t.sfi).filter(v=>v!=null);const prevAvg=prev.length?Math.round(prev.reduce((a,b)=>a+b,0)/prev.length):weekAvg-4;const delta=weekAvg-prevAvg;
   ["sc-num","sc-pill","sc-headline","sc-sub","sc-mascot"].forEach(id=>$(id).classList.remove("show"));
-  $("sc-delta").textContent=(delta>=0?"+":"")+delta;$("sc-caption").textContent=CAPTION;
+  $("sc-delta").textContent=(delta>=0?"+":"")+delta;$("sc-caption").textContent=buildCaption(weekAvg,delta,state.city||"My city");
   clearFx($("fx-sc"));sparkles($("fx-sc"),14);
   countTo("sc-num-val",weekAvg,900);
   setTimeout(()=>$("sc-num").classList.add("show"),150);
@@ -1025,6 +1029,62 @@ function animSL(){
 
 const ANIM={s0:animS0,s1:animS1,s2:animS2,s4:animS4,sp:animSP,sc:animSC,sl:animSL};
 
+async function captureShareCard(){
+  const card=$("sc-card");const toast=$("sc-toast");const fx=$("fx-sc");
+  const toastWasVisible=toast.classList.contains("show");const fxHtml=fx.innerHTML;
+  toast.classList.remove("show");fx.innerHTML="";
+  try{
+    const canvas=await html2canvas(card,{scale:2,useCORS:true,backgroundColor:null,logging:false});
+    return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("blob failed")),"image/png"));
+  }finally{fx.innerHTML=fxHtml;if(toastWasVisible)toast.classList.add("show");}
+}
+async function copyImageToClipboard(blob){
+  if(!navigator.clipboard||!navigator.clipboard.write||typeof ClipboardItem==="undefined")return false;
+  try{await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);return true;}catch{return false;}
+}
+function isMobileDevice(){return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);}
+function openWhatsApp(text){
+  const url=(isMobileDevice()?"https://wa.me/?text=":"https://web.whatsapp.com/send?text=")+encodeURIComponent(text);
+  window.open(url,"_blank","noopener,noreferrer");
+}
+async function shareCard(kind){
+  sfx("share");clearFx($("fx-sc"));sparkles($("fx-sc"),14);confetti($("fx-sc"),30);
+  const tt=$("sc-toast");const caption=$("sc-caption").textContent||"";
+  try{
+    const blob=await captureShareCard();
+    const file=new File([blob],"my-sfi-week.png",{type:"image/png"});
+    if(kind==="wa"){
+      const canShareFiles=navigator.share&&navigator.canShare&&navigator.canShare({files:[file],text:caption,title:"My SFI Week"});
+      if(canShareFiles&&isMobileDevice()){
+        await navigator.share({files:[file],text:caption,title:"My SFI Week"});
+        tt.textContent="Shared to WhatsApp with image";
+      }else{
+        const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="my-sfi-week.png";a.click();URL.revokeObjectURL(url);
+        const imageCopied=await copyImageToClipboard(blob);
+        openWhatsApp(caption);
+        tt.textContent=imageCopied?"WhatsApp opened — paste image (Ctrl+V), then send":"WhatsApp opened — attach my-sfi-week.png from Downloads";
+      }
+    }else if(kind==="save"){
+      const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="my-sfi-week.png";a.click();URL.revokeObjectURL(url);
+      if(navigator.clipboard)await navigator.clipboard.writeText(caption).catch(()=>{});
+      tt.textContent="Image saved — caption copied";
+    }else{
+      const canShareFiles=navigator.share&&navigator.canShare&&navigator.canShare({files:[file],text:caption,title:"My SFI Week"});
+      if(canShareFiles&&isMobileDevice()){
+        await navigator.share({files:[file],text:caption,title:"My SFI Week"});
+        tt.textContent="Shared to your Story with image";
+      }else{
+        const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="my-sfi-week.png";a.click();URL.revokeObjectURL(url);
+        if(navigator.clipboard)await navigator.clipboard.writeText(caption).catch(()=>{});
+        tt.textContent="Image saved — caption copied for your Story";
+      }
+    }
+  }catch{
+    tt.textContent="Could not export image — try again";
+  }
+  tt.classList.add("show");setTimeout(()=>tt.classList.remove("show"),2600);
+}
+
 /* ---------- nav ---------- */
 function go(id){
   state.tab=id;
@@ -1044,7 +1104,7 @@ window.HLHP={
   toggleSurge:function(){state.surge=!state.surge;refreshWeather();buildHistory();sfx(state.surge?"alert":"tap");if(ANIM[state.tab])ANIM[state.tab]();showCoach();},
   toggleAlert:function(){state.alertOpen=!state.alertOpen;$("alert-card").classList.toggle("open",state.alertOpen);sfx(state.alertOpen?"reveal":"tap");},
   saveLog:function(){if($("s1-save").disabled)return;state.saved=true;state.logCount++;sfx("save");const b=$("s1-save");b.classList.add("saved");b.innerHTML='<i class="ti ti-check"></i> Logged';$("s1-saved").classList.add("show");$("s1-learned").classList.add("show");burstAt($("fx-s1"),b);renderBadges();refreshStreakData();setTimeout(()=>$("s1-saved").classList.remove("show"),2200);},
-  share:function(kind){sfx("share");clearFx($("fx-sc"));sparkles($("fx-sc"),14);confetti($("fx-sc"),30);const msg=kind==="save"?"Saved to your device":kind==="wa"?"Ready for WhatsApp":"Ready for your Story";const tt=$("sc-toast");tt.textContent=msg;tt.classList.add("show");setTimeout(()=>tt.classList.remove("show"),1800);},
+  share:shareCard,
   copyCaption:function(){const txt=$("sc-caption").textContent;if(navigator.clipboard)navigator.clipboard.writeText(txt).catch(()=>{});sfx("pop");$("cap-copy-lbl").textContent="Copied!";setTimeout(()=>$("cap-copy-lbl").textContent="Copy",1600);}
 };
 

@@ -125,13 +125,20 @@ export const LEARN_ARTICLES: LearnArticle[] = [
   { tag: "BASICS", driver: "basics", title: "What is the Skin Friendliness Index?", blurb: "A plain-language guide to your daily 0–100 SFI and the six skin-weather modes.", read_min: 2 },
 ];
 
-/** Strong, ready-to-paste social caption for the Share card. */
-export const SHARE_CAPTION =
-  "My skin read the weather all week 🌡️\n\n" +
-  "Pune hit me with a heat wave AND a humidity spike — and my barrier held. " +
-  "Tracking my Skin Friendliness Index (SFI) with @skinbb so I actually know what my skin's up against each day.\n\n" +
-  "This week: 69/100, up 4. 💪\n\n" +
-  "#SkinBB #SkinFriendlinessIndex #ApplyKnowledgeToTheSkin #IndianSkincare #SkinHealth";
+/** Build a ready-to-paste social caption from live weekly stats. */
+export function buildShareCaption(weekAvg: number, delta: number, city = "My city") {
+  const deltaLabel = delta >= 0 ? `up ${delta}` : `down ${Math.abs(delta)}`;
+  return (
+    "My skin read the weather all week 🌡️\n\n" +
+    `${city} threw changing conditions at me — and my barrier held. ` +
+    "Tracking my Skin Friendliness Index (SFI) with @skinbb so I actually know what my skin's up against each day.\n\n" +
+    `This week: ${weekAvg}/100, ${deltaLabel}. 💪\n\n` +
+    "#SkinBB #SkinFriendlinessIndex #ApplyKnowledgeToTheSkin #IndianSkincare #SkinHealth"
+  );
+}
+
+/** Default caption used when weekly stats are not available yet. */
+export const SHARE_CAPTION = buildShareCaption(69, 4, "Pune");
 
 export const SHARE_HEADLINE = "My skin read the weather all week.";
 export const SHARE_SUB =
