@@ -61,6 +61,7 @@ _TAXONOMY_COLLECTIONS = (
     "product_skin_tones",
     "product_attributes",
     "product_attribute_values",
+    "benefits",
     "categories",
 )
 

@@ -6,9 +6,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from motor.motor_asyncio import AsyncIOMotorCollection
+from bson import ObjectId
+from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 
 from app.label_looker.core.errors import ScannerApiError
+from app.label_looker.core.taxonomy_lists import load_skin_bb_taxonomy
 from app.label_looker.core.settings import get_label_looker_settings
 from app.label_looker.modules.product_analysis.analysis_service_impl import (
     _best_product_type,
@@ -17,11 +19,7 @@ from app.label_looker.modules.product_analysis.analysis_service_impl import (
     _product_list_values,
     _resolve_analysis_mode,
 )
-from app.label_looker.services.product_marketing_signals import (
-    marketing_claim_tokens,
-    match_benefit_labels_from_marketing,
-    resolve_product_tag_names,
-)
+from app.label_looker.services.product_marketing_signals import resolve_product_tag_names
 
 _LIP_BENEFIT_IDS = frozenset(
     {
@@ -178,48 +176,99 @@ def _product_type_row(mode: str, type_key: str) -> dict[str, Any] | None:
     return None
 
 
-def _claim_tokens(
-    product: dict[str, Any],
+def _benefit_display_label(doc: dict[str, Any]) -> str | None:
+    for key in ("name", "label", "title", "value"):
+        val = doc.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+@lru_cache
+def _taxonomy_benefit_labels_by_id() -> dict[str, str]:
+    out: dict[str, str] = {}
+    taxonomy = load_skin_bb_taxonomy()
+    for key in ("product_attribute_values", "benefits"):
+        rows = taxonomy.get(key) or []
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            rid = str(row.get("id") or row.get("_id") or "").strip()
+            label = _benefit_display_label(row)
+            if rid and label:
+                out[rid] = label
+    return out
+
+
+def _benefit_rows_from_product(product: dict[str, Any]) -> list[Any]:
+    combined: list[Any] = []
+    for key in ("benefit", "benefits"):
+        raw = product.get(key)
+        if isinstance(raw, list):
+            combined.extend(raw)
+    return combined
+
+
+_BENEFIT_REF_COLLECTIONS = (
+    "product_attribute_values",
+    "benefits",
+    "skin_benefits",
+    "hair_benefits",
+)
+
+
+async def _resolve_benefit_object_ids(
+    db: AsyncIOMotorDatabase,
+    ids: list[ObjectId],
+) -> dict[ObjectId, str]:
+    resolved: dict[ObjectId, str] = {}
+    pending = list(ids)
+    for coll_name in _BENEFIT_REF_COLLECTIONS:
+        if not pending:
+            break
+        coll = db[coll_name]
+        cursor = coll.find(
+            {"_id": {"$in": pending}},
+            {"name": 1, "title": 1, "label": 1, "value": 1},
+        )
+        async for doc in cursor:
+            oid = doc.get("_id")
+            if not isinstance(oid, ObjectId):
+                continue
+            label = _benefit_display_label(doc)
+            if label:
+                resolved[oid] = label
+        pending = [oid for oid in pending if oid not in resolved]
+    snap = _taxonomy_benefit_labels_by_id()
+    for oid in pending:
+        label = snap.get(str(oid))
+        if label:
+            resolved[oid] = label
+    return resolved
+
+
+async def resolve_product_benefit_labels(
     *,
-    tag_names: list[str] | None = None,
-    mode: str = "skincare",
-) -> set[str]:
-    tokens = marketing_claim_tokens(product=product, tag_names=tag_names, mode=mode)
-    for value in _product_list_values(product, "benefit", "benefits", "claims", "claim"):
-        tokens.add(_norm_token(value))
-        for part in re.split(r"[,/&]+", str(value)):
-            t = _norm_token(part)
-            if t:
-                tokens.add(t)
-    primary = product.get("primaryConcern")
-    if isinstance(primary, str) and primary.strip():
-        tokens.add(_norm_token(primary))
-    return {t for t in tokens if t}
+    db: AsyncIOMotorDatabase,
+    product: dict[str, Any],
+) -> list[str]:
+    """Resolve product.benefit / product.benefits ObjectId refs to display labels."""
+    from app.label_looker.services.profile_taxonomy_resolver import (
+        _collect_object_ids,
+        _resolve_list_values,
+    )
 
-
-def _entry_matches_claim(entry: dict[str, Any], claim_tokens: set[str]) -> bool:
-    if not claim_tokens:
-        return False
-    keys = {_norm_token(entry.get("id")), _norm_token(entry.get("label"))}
-    keys.update(_norm_token(x) for x in entry.get("search_terms") or [])
-    return bool(keys & claim_tokens)
-
-
-def _entry_matches_product_type(entry: dict[str, Any], type_row: dict[str, Any] | None) -> bool:
-    if not type_row:
-        return True
-    related = {_norm_token(x) for x in (type_row.get("sub_types") or [])}
-    related.update(_norm_token(x) for x in (type_row.get("related_types") or []))
-    entry_id = _norm_token(entry.get("id"))
-    entry_label = _norm_token(entry.get("label"))
-    if entry_id in related or entry_label in related:
-        return True
-    # Sunscreen → sun protection benefits, etc.
-    type_category = _norm_token(type_row.get("category"))
-    entry_category = _norm_token(entry.get("category"))
-    if type_category and entry_category and type_category == entry_category:
-        return True
-    return False
+    combined = _benefit_rows_from_product(product)
+    if not combined:
+        return _product_list_values(product, "benefit", "benefits")
+    ids = _collect_object_ids(combined)
+    resolved = await _resolve_benefit_object_ids(db, ids) if ids else {}
+    labels = _resolve_list_values(combined, resolved)
+    if labels:
+        return labels
+    return _product_list_values(product, "benefit", "benefits")
 
 
 def _resolve_benefit_mode(*, product: dict[str, Any], mode: str | None) -> str:
@@ -243,76 +292,39 @@ def build_expected_benefit_options(
     product: dict[str, Any],
     mode: str | None = None,
     tag_names: list[str] | None = None,
+    benefit_labels: list[str] | None = None,
 ) -> dict[str, Any]:
     resolved_mode = _resolve_benefit_mode(product=product, mode=mode)
     type_key = _resolve_product_type_key(product, tag_names=tag_names)
     type_row = _product_type_row(resolved_mode, type_key)
-    claim_tokens = _claim_tokens(product, tag_names=tag_names, mode=resolved_mode)
-    catalog = _catalog_entries(resolved_mode)
-    max_options = 35 if resolved_mode == "haircare" else 20
+    product_benefits = (
+        benefit_labels
+        if benefit_labels is not None
+        else _product_list_values(product, "benefit", "benefits")
+    )
 
-    recommended: list[dict[str, Any]] = []
-    parents: list[dict[str, Any]] = []
-    others: list[dict[str, Any]] = []
+    options: list[dict[str, Any]] = []
     seen: set[str] = set()
-
-    def _option(entry: dict[str, Any], *, recommended_flag: bool, source: str) -> dict[str, Any]:
-        return {
-            "id": entry["id"],
-            "label": entry["label"],
-            "icon": entry.get("icon"),
-            "recommended": recommended_flag,
-            "source": source,
-        }
-
-    for entry in catalog:
-        if _entry_matches_claim(entry, claim_tokens):
-            key = entry["id"]
-            if key not in seen:
-                seen.add(key)
-                recommended.append(_option(entry, recommended_flag=True, source="product_claim"))
-
-    if not recommended:
-        for entry in catalog:
-            if not _entry_matches_product_type(entry, type_row):
-                continue
-            if entry.get("is_parent"):
-                key = entry["id"]
-                if key not in seen:
-                    seen.add(key)
-                    recommended.append(_option(entry, recommended_flag=True, source="product_type"))
-
-    for entry in catalog:
-        if not entry.get("is_parent"):
-            continue
-        key = entry["id"]
-        if key in seen:
-            continue
-        if resolved_mode != "haircare" and type_row is not None and not _entry_matches_product_type(entry, type_row):
-            continue
-        seen.add(key)
-        parents.append(_option(entry, recommended_flag=False, source="catalog_parent"))
-
-    for entry in catalog:
-        if entry.get("is_parent"):
-            continue
-        if type_row is not None and not _entry_matches_product_type(entry, type_row):
-            continue
-        key = entry["id"]
+    for label in product_benefits:
+        key = _norm_token(label)
         if key in seen:
             continue
         seen.add(key)
-        others.append(_option(entry, recommended_flag=False, source="catalog"))
-
-    options = recommended + parents + others
-    if not options and catalog:
-        options = [_option(e, recommended_flag=False, source="catalog_fallback") for e in catalog[:max_options]]
+        options.append(
+            {
+                "id": key,
+                "label": label,
+                "icon": None,
+                "recommended": True,
+                "source": "product",
+            }
+        )
 
     return {
         "mode": resolved_mode,
         "productType": type_key or None,
         "productTypeLabel": (type_row or {}).get("label"),
-        "expectedBenefitOptions": options[:max_options],
+        "expectedBenefitOptions": options,
         "selectionRules": {"min": 1, "max": 3, "requiredEachScan": True},
         "tagNames": list(tag_names or []),
     }
@@ -333,7 +345,12 @@ async def get_expected_benefit_options_for_product_id(
     tag_names: list[str] | None = None
     if tags_coll is not None:
         tag_names = await resolve_product_tag_names(product=product, tags_coll=tags_coll)
-    out = build_expected_benefit_options(product=product, tag_names=tag_names)
+    benefit_labels = await resolve_product_benefit_labels(db=products_coll.database, product=product)
+    out = build_expected_benefit_options(
+        product=product,
+        tag_names=tag_names,
+        benefit_labels=benefit_labels,
+    )
     out["productId"] = str(product_ref)
     return out
 
@@ -358,53 +375,14 @@ def _resolve_desired_benefit_label(
     product: dict[str, Any] | None = None,
     tag_names: list[str] | None = None,
 ) -> str | None:
+    del mode, product, tag_names
     token = _norm_token(raw)
     if token in allowed:
         return allowed[token]
-
     raw_lower = str(raw or "").strip().lower()
-    if product is not None:
-        tag_candidates = list(tag_names or [])
-        if raw_lower:
-            tag_candidates.append(raw)
-        for tag in tag_candidates:
-            if not str(tag).strip():
-                continue
-            if _norm_token(tag) != token and raw_lower != str(tag).strip().lower():
-                continue
-            for label in match_benefit_labels_from_marketing(
-                product=product,
-                tag_names=[str(tag)],
-                mode=mode,
-            ):
-                normalized = _norm_token(label)
-                if normalized in allowed:
-                    return allowed[normalized]
-        for label in match_benefit_labels_from_marketing(
-            product=product,
-            tag_names=tag_candidates,
-            mode=mode,
-        ):
-            normalized = _norm_token(label)
-            if normalized in allowed and normalized in token:
-                return allowed[normalized]
-
-    for entry in _catalog_entries(mode):
-        label = str(entry.get("label") or "").strip()
-        if not label:
-            continue
-        candidates = {_norm_token(label), _norm_token(str(entry.get("id") or ""))}
-        candidates.update(_norm_token(str(x)) for x in entry.get("search_terms") or [])
-        if token in candidates:
-            normalized = _norm_token(label)
-            if normalized in allowed:
-                return allowed[normalized]
-        for term in entry.get("search_terms") or []:
-            term_lower = str(term).strip().lower()
-            if len(term_lower) >= 4 and term_lower in raw_lower:
-                normalized = _norm_token(label)
-                if normalized in allowed:
-                    return allowed[normalized]
+    for label in allowed.values():
+        if label.lower() == raw_lower:
+            return label
     return None
 
 
