@@ -22,6 +22,7 @@ from app.label_looker.services.common_flow import (
 )
 from app.label_looker.services.expected_benefit_options import (
     build_expected_benefit_options,
+    resolve_product_benefit_labels,
     validate_desired_benefits,
 )
 from app.label_looker.services.product_marketing_signals import (
@@ -640,7 +641,13 @@ async def _score_product_impl(
     age = _first_present(details.get("age"), body.get("age"))
     gender = _safe_scalar(_first_present(details.get("gender"), body.get("gender")))
     benefits_from_body = _extract_desired_benefits_from_body(body=body, mode=mode)
-    benefit_options = build_expected_benefit_options(product=product, mode=mode, tag_names=tag_names)
+    benefit_labels = await resolve_product_benefit_labels(db=db, product=product)
+    benefit_options = build_expected_benefit_options(
+        product=product,
+        mode=mode,
+        tag_names=tag_names,
+        benefit_labels=benefit_labels,
+    )
     life_stages = _safe_list(details.get("lifeStages") or details.get("life_stages"))
     conditions = _safe_list(details.get("conditions"))
 
