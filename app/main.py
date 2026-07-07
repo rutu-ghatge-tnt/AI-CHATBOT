@@ -113,8 +113,6 @@ except ImportError as e:
 from fastapi.middleware.cors import CORSMiddleware
 from app.ai_ingredient_intelligence.db.collections import distributor_col
 from fastapi.openapi.utils import get_openapi
-from app.ai_ingredient_intelligence.middleware import TimingMiddleware
-
 app = FastAPI(
     title="SkinBB API Documentation",
     description="API documentation for SkinBB - An AI assistant for skincare queries with document retrieval and web search fallback",
@@ -265,10 +263,6 @@ def custom_openapi():
 # Override the default OpenAPI function
 app.openapi = custom_openapi
 
-# ✅ Timing Middleware - Track execution time for all endpoints
-# This must be added BEFORE CORS middleware to ensure it wraps all requests
-app.add_middleware(TimingMiddleware)
-
 # ✅ CORS - Configuration loaded from .env
 # Parse CORS settings from environment variables
 cors_allow_origins_str = os.getenv("CORS_ALLOW_ORIGINS", "")
@@ -414,14 +408,6 @@ except ImportError as e:
     print(f"Warning: Could not import QMS router: {e}")
     print("   QMS API will not be available.")
 
-# ✅ Add Timing Statistics API
-try:
-    from app.ai_ingredient_intelligence.api.timing_stats import router as timing_stats_router
-    app.include_router(timing_stats_router, prefix="/api")
-except ImportError as e:
-    print(f"Warning: Could not import timing_stats router: {e}")
-    print("   Timing Statistics API will not be available.")
-
 # ✅ Credits API: Using third-party API via CREDITS_API_BASE_URL (paths in credit_service.py)
 # credit_service.py handles all credit deduction calls to external API
 
@@ -486,17 +472,6 @@ async def create_indexes():
 
         await ensure_hlhp_indexes()
         print("HLHP Mongo indexes ensured")
-        
-        # Initialize endpoint timing Excel file if it doesn't exist
-        from app.ai_ingredient_intelligence.middleware.timing_middleware import TIMING_EXCEL_FILE
-        if not TIMING_EXCEL_FILE.exists():
-            import pandas as pd
-            df = pd.DataFrame(columns=[
-                "timestamp", "method", "path", "feature", 
-                "execution_time", "status_code", "user_id", "error"
-            ])
-            df.to_excel(TIMING_EXCEL_FILE, index=False, engine='openpyxl')
-            print(f"Created endpoint timing Excel file: {TIMING_EXCEL_FILE}")
     except Exception as e:
         print(f"Warning: Could not create indexes: {e}")
         # Don't fail startup if indexes already exist
