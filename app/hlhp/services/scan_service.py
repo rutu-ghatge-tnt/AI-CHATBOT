@@ -1,4 +1,4 @@
-"""HLHP v2 scan orchestration — live env + v3.4 scenario library."""
+"""HLHP v2 scan orchestration — live env + v3.5 scenario library."""
 
 from __future__ import annotations
 
@@ -6,11 +6,10 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from app.hlhp.core.bands import bucketize_environment
-from app.hlhp.core.phase import DayPhase, phase_used_label, resolve_day_phase
+from app.hlhp.core.phase import DayPhase, resolve_day_phase
 from app.hlhp.core.profile_mode import resolve_mode
 from app.hlhp.core.season import indian_season
 from app.hlhp.evidence.scenario_store import ScenarioStore, get_scenario_store
-from app.hlhp.evidence.voice import apply_lay_voice
 from app.hlhp.coach.models import CoachWrap
 from app.hlhp.coach.state_store import (
     fetch_selected_symptoms,
@@ -40,9 +39,6 @@ from app.hlhp.services.scenario_engine import (
     points_to_level,
     severity_for_risk,
 )
-from app.hlhp.services.alert_generator import generate_alert
-from app.hlhp.services.profile_personalizer import personalize_alert
-from app.hlhp.services.scoring_engine import calculate_skin_score
 from app.hlhp.services.profile_loader import (
     diagnose_skin_profile,
     load_merged_profile_doc,
@@ -50,15 +46,8 @@ from app.hlhp.services.profile_loader import (
     load_user_profile,
 )
 from app.hlhp.services.concern_resolver import concern_slug_from_profile
-from app.hlhp.services.severity import severity_for_finding
 from app.hlhp.services.weather_fetcher import fetch_environmental_data
 from app.hlhp.services.weather_visuals import extract_weather_visuals
-from app.hlhp.composition.alert_copy import (
-    compose_alert_title,
-    compose_how_routine,
-    pick_alert_body,
-    pick_did_you_know_for_tile,
-)
 from app.hlhp.composition.vocabulary import mood_headline, symptom_chips
 from app.hlhp.composition.lane_state import resolve_lane_states
 from app.hlhp.composition.feeds import seasonal_tags_for_city
@@ -174,7 +163,7 @@ def _scenario_alert_tile(
         mood_verdict_tag=_mood_for_band(scenario.band),
         engagement_archetype=archetype,
         how_text=scenario.flash_alert.tip,
-        source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.4",
+        source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.5",
         factor=factor,
     )
 
@@ -220,6 +209,7 @@ def _scenario_scan_fields(store: ScenarioStore, scenario: ScenarioEvaluation) ->
             else None
         ),
         "scenario_library_version": store.version,
+        "time_window": scenario.time_window,
         "outdoor_ok_score": scenario.sfi,
         "outdoor_ok_band_text": scenario.band,
     }
@@ -448,71 +438,6 @@ def _build_env_snapshot(
     )
 
 
-def _finding_to_tile(
-    finding,
-    *,
-    guest_mode: bool,
-    day_phase: DayPhase,
-    bands,
-    glossary: list[dict],
-    coach_wrap: CoachWrap | None = None,
-    profile: UserProfile | None = None,
-    routine_framework: list[dict] | None = None,
-) -> AlertTile:
-    """Legacy helper — used by alert-quality unit tests only."""
-    body = apply_lay_voice(
-        pick_alert_body(finding, guest_mode=guest_mode, day_phase=day_phase),
-        glossary,
-    )
-    title = compose_alert_title(finding) or body.split(".")[0].strip() or body
-    phase_label = phase_used_label(finding.time_of_day_phase, day_phase)
-    how = compose_how_routine(
-        routine_framework or [],
-        finding,
-        profile=profile,
-        day_phase=day_phase,
-    )
-    did_you_know = pick_did_you_know_for_tile(finding, body=body)
-    return AlertTile(
-        rule_id=finding.id,
-        severity=severity_for_finding(finding, bands),
-        l1=title,
-        l2=body,
-        phase_used=phase_label,  # type: ignore[arg-type]
-        mood_verdict_tag=finding.mood_verdict_tag or "",
-        engagement_archetype=finding.engagement_archetype or "",
-        symptom_keyword=finding.symptom_keyword or None,
-        routine_action=finding.routine_action or "",
-        how_text=how,
-        did_you_know=did_you_know,
-        visual_icon_hint=finding.visual_icon_hint or "",
-        physical_analogy=finding.physical_analogy or None,
-        body_sensation_decode=finding.body_sensation_decode or None,
-        source_citation=finding.science_citation,
-        factor=finding.factor,
-        coach_wrap=coach_wrap,
-    )
-
-
-def _build_legacy_alert(
-    env: EnvironmentalData,
-    profile: UserProfile | None,
-    *,
-    guest_mode: bool,
-):
-    score = calculate_skin_score(env)
-    generic = generate_alert(env, score)
-    if profile is None or guest_mode:
-        return generic
-    mode = resolve_mode(profile).value
-    if mode in ("personalised", "partial_personalised"):
-        try:
-            return personalize_alert(generic, profile, env, score)
-        except Exception:
-            pass
-    return generic
-
-
 def _baseline_alert_tile(
     *,
     mood: str,
@@ -563,6 +488,7 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
         profile=profile,
         guest_mode=guest_mode,
         force_surge=req.force_surge,
+        local_time=req.local_time,
     )
     env_snapshot = _build_env_snapshot(env, user_id=req.user_id, city=req.city, local_time=req.local_time)
     ui = await _scan_ui_enrichment(
@@ -598,7 +524,6 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
         mood_verdict_today=mood,
         alerts=[alert],
         candidate_alerts=[],
-        legacy_alert=_build_legacy_alert(env, profile, guest_mode=guest_mode),
         science_nugget=nugget_out,
         strip_headline=strip_line,
         profile_nudge=profile_nudge,
@@ -637,6 +562,7 @@ async def run_symptom_tap(req: SymptomTapRequest) -> SymptomTapResponse:
         city=req.city,
         profile=profile,
         guest_mode=guest_mode,
+        local_time=req.local_time,
     )
     tile = _scenario_alert_tile(scenario, day_phase=day_phase)
     decode = _SYMPTOM_SCENARIO_HINTS.get(

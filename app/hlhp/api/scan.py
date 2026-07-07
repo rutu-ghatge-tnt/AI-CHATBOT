@@ -9,10 +9,10 @@ from app.hlhp.api.deps_auth import (
 from app.hlhp.api.store_http import http_503_for_store_error
 from app.hlhp.db_errors import HlhpStoreError
 
-from app.hlhp.evidence.loader import get_evidence_store
 from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.coach.models import ActionTapRequest, ActionTapResponse
 from app.hlhp.models.scan import (
+    FeelingLogStatusOut,
     HealthResponse,
     ScanRequest,
     ScanResponse,
@@ -24,9 +24,7 @@ from app.hlhp.models.scan import (
 )
 from app.hlhp.services.action_tap_service import run_action_tap
 from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
-from app.hlhp.core.local_date import calendar_date_key
-from app.hlhp.services.daily_log_store import upsert_user_log_day
-from app.hlhp.services.log_event_store import fetch_latest_log_for_date
+from app.hlhp.services.log_event_store import fetch_feeling_log_status, fetch_latest_log_for_date
 from app.hlhp.services.scan_service import run_scan, run_symptom_tap
 
 router = APIRouter(prefix="/hlhp", tags=["HLHP v2 — Flash Alerts"])
@@ -67,7 +65,7 @@ async def hlhp_symptom_feeling(
     req: SymptomFeelingRequest,
     user: dict = Depends(hlhp_authenticated_user),
 ) -> SymptomFeelingResponse:
-    """Log how the user feels today — only logged selections are highlighted in UI."""
+    """Toggle symptom chips while drafting a feeling log — does not commit a session."""
     user_id = verify_client_user_id(user, req.user_id)
     keyword = req.symptom_keyword.strip().lower()
     if not keyword:
@@ -79,8 +77,6 @@ async def hlhp_symptom_feeling(
             selected=req.selected,
             recorded_at=req.local_time,
         )
-        if req.selected:
-            await upsert_user_log_day(user_id=user_id, logged_at=req.local_time)
     except HlhpStoreError as exc:
         http_503_for_store_error(exc)
     active = sorted(await fetch_selected_symptoms(user_id))
@@ -118,7 +114,13 @@ async def hlhp_selected_symptoms(
         latest = await fetch_latest_log_for_date(uid, date.strip())
         if latest:
             areas = _display_areas(list(latest.get("areas") or []))
-    return SymptomSelectedResponse(user_id=uid, selected_keywords=active, areas=areas)
+    log_status = await fetch_feeling_log_status(uid)
+    return SymptomSelectedResponse(
+        user_id=uid,
+        selected_keywords=active,
+        areas=areas,
+        feeling_log=FeelingLogStatusOut(**log_status),
+    )
 
 
 @router.post("/action_tap", response_model=ActionTapResponse)
@@ -156,18 +158,13 @@ async def hlhp_health() -> HealthResponse:
             scenario_master_cells=0,
             scenario_compound_cells=0,
         )
-    legacy_store = None
-    try:
-        legacy_store = get_evidence_store()
-    except FileNotFoundError:
-        pass
     return HealthResponse(
         ok=True,
         snapshot_version=scenario_store.version,
         workbook_version=scenario_store.source,
         rule_count=scenario_store.master_cell_count,
         composition_row_count=scenario_store.compound_cell_count,
-        generated_at=legacy_store.generated_at if legacy_store else str(scenario_store.source),
+        generated_at=str(scenario_store.meta.get("generated_at") or scenario_store.source),
         scenario_library_version=scenario_store.version,
         scenario_master_cells=scenario_store.master_cell_count,
         scenario_compound_cells=scenario_store.compound_cell_count,

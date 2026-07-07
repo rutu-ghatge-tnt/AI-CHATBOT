@@ -1,6 +1,7 @@
-"""Tests for v3.4 scenario library engine."""
+"""Tests for scenario library engine."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.environmental import EnvironmentalData
@@ -12,6 +13,7 @@ from app.hlhp.services.scenario_engine import (
     lookup_master_cell,
     driver_states,
     resolve_library_concerns,
+    time_window_for_datetime,
 )
 from app.hlhp.models.profile import AgeBracket, Gender, SkinConcern, SkinType, UserProfile
 
@@ -30,12 +32,15 @@ def _env(**kwargs):
     return EnvironmentalData(**defaults)
 
 
-def test_scenario_store_loads_v34():
+def test_scenario_store_loads_v35():
     store = get_scenario_store()
-    assert store.version == "3.4"
-    assert store.master_cell_count == 880
-    assert store.compound_cell_count == 670
+    assert store.version == "3.5"
+    assert store.master_cell_count == 1140
+    assert store.compound_cell_count == 940
     assert store.guest_cell_count >= 200
+    assert len(store.gender_states) == 9
+    assert len(store.gender_rules) == 40
+    assert len(store.time_overlay) == 25
 
 
 def test_guest_mode_uses_none_concern_cells():
@@ -99,7 +104,7 @@ def test_run_scan_includes_scenario_fields():
     assert resp.flash_alert is not None
     assert resp.flash_alert.l0
     assert resp.evidence_cell is not None
-    assert resp.scenario_library_version == "3.4"
+    assert resp.scenario_library_version == "3.5"
 
 
 def test_lookup_master_cell_key_format():
@@ -147,3 +152,66 @@ def test_personalised_scan_uses_profile_concern_cell():
     assert "humid" in result.flash_alert.l0.lower()
     assert result.evidence_cell is not None
     assert result.evidence_cell.confidence in {"HIGH", "MODERATE", "LOW"}
+
+
+def test_gender_rule_lowers_sfi_for_pcos_acne():
+    store = get_scenario_store()
+    env = _env(uv_index=4.0, temperature_c=28, humidity_pct=52, aqi=80)
+    profile = UserProfile(
+        user_id="u1",
+        skin_type=SkinType.OILY,
+        skin_concerns=[SkinConcern.ACNE],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_25_30,
+        life_stage="Female + PCOS",
+    )
+    adjusted = evaluate_scenario(
+        store, env, city="Pune", profile=profile, guest_mode=False
+    )
+    baseline = evaluate_scenario(
+        store,
+        env,
+        city="Pune",
+        profile=UserProfile(
+            user_id="u1",
+            skin_type=SkinType.OILY,
+            skin_concerns=[SkinConcern.ACNE],
+            gender=Gender.FEMALE,
+            age_bracket=AgeBracket.AGE_25_30,
+            life_stage="Female",
+        ),
+        guest_mode=False,
+    )
+    assert adjusted.sfi == baseline.sfi - 8
+    assert "testosterone" in adjusted.flash_alert.l1.lower() or adjusted.flash_alert.tip
+
+
+def test_time_overlay_appends_morning_clause():
+    store = get_scenario_store()
+    env = _env(uv_index=4.0, temperature_c=28, humidity_pct=52, aqi=80)
+    morning = evaluate_scenario(
+        store,
+        env,
+        city="Pune",
+        profile=None,
+        guest_mode=True,
+        local_time=datetime(2026, 6, 18, 8, 0, tzinfo=ZoneInfo("Asia/Kolkata")),
+    )
+    midday = evaluate_scenario(
+        store,
+        env,
+        city="Pune",
+        profile=None,
+        guest_mode=True,
+        local_time=datetime(2026, 6, 18, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata")),
+    )
+    assert morning.time_window == "morning"
+    assert midday.time_window == "daytime"
+    assert len(morning.flash_alert.l1) > len(midday.flash_alert.l1)
+    assert "afternoon" in morning.flash_alert.l1.lower()
+
+
+def test_time_window_for_datetime_matches_three_window_model():
+    assert time_window_for_datetime(datetime(2026, 6, 18, 8, 0)) == "morning"
+    assert time_window_for_datetime(datetime(2026, 6, 18, 12, 0)) == "daytime"
+    assert time_window_for_datetime(datetime(2026, 6, 18, 18, 0)) == "evening"

@@ -1,4 +1,4 @@
-"""Read SkinBB_HLHP_Scenario_Library_v3_4.xlsx into a JSON-serialisable snapshot."""
+"""Read SkinBB_HLHP_Scenario_Library workbook into a JSON-serialisable snapshot."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 import openpyxl
 
 DEFAULT_XLSX = (
-    Path(__file__).resolve().parents[1] / "data" / "SkinBB_HLHP_Scenario_Library_v3_4.xlsx"
+    Path(__file__).resolve().parents[1] / "data" / "SkinBB_HLHP_Scenario_Library_v3.5.xlsx"
 )
 
 
@@ -40,10 +40,19 @@ def _sheet_rows(wb: openpyxl.Workbook, name: str) -> list[list[Any]]:
     return [list(r) for r in ws.iter_rows(values_only=True)]
 
 
+def _library_version(path: Path) -> str:
+    name = path.name.lower()
+    if "v3.5" in name or "v3_5" in name:
+        return "3.5"
+    return "3.5"
+
+
 def build_scenario_snapshot(xlsx_path: Path | str = DEFAULT_XLSX) -> dict[str, Any]:
-    """Flatten the v3.4 scenario library workbook into one snapshot dict."""
+    """Flatten the scenario library workbook into one snapshot dict."""
     path = Path(xlsx_path)
+    version = _library_version(path)
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    sheet_names = set(wb.sheetnames)
 
     bands: dict[str, list[dict[str, Any]]] = {}
     cur: str | None = None
@@ -232,18 +241,88 @@ def build_scenario_snapshot(xlsx_path: Path | str = DEFAULT_XLSX) -> dict[str, A
                 )
         return out
 
+    gender_states: list[dict[str, Any]] = []
+    gender_rules: dict[str, dict[str, Any]] = {}
+    sheet_gender = "13. Gender + Life-Stage"
+    if sheet_gender in sheet_names:
+        sec: str | None = None
+        for r in _sheet_rows(wb, sheet_gender):
+            c0 = norm(r[0])
+            if c0 == "State" and norm(r[1]) == "Description":
+                sec = "ref"
+                continue
+            if c0 == "State" and norm(r[1]) == "Concern":
+                sec = "rules"
+                continue
+            if not c0:
+                continue
+            if sec == "ref":
+                if c0.startswith("State x Concern") or c0.startswith("State × Concern"):
+                    sec = None
+                    continue
+                if c0 not in ("Gender + Life-Stage State Reference",) and norm(r[1]):
+                    gender_states.append({"state": c0, "description": norm(r[1])})
+            elif sec == "rules":
+                concern = norm(r[1])
+                if not concern:
+                    continue
+                delta_raw = norm(r[2]).replace("Δ", "").replace("+", "")
+                try:
+                    delta = int(float(delta_raw))
+                except (TypeError, ValueError):
+                    delta = 0
+                gender_rules[f"{slug(c0)}|{slug(concern)}"] = {
+                    "state": c0,
+                    "concern": concern,
+                    "risk_delta": delta,
+                    "direction": norm(r[3]),
+                    "action": norm(r[4]),
+                    "addendum": norm(r[5]),
+                    "anchor": norm(r[6]),
+                }
+
+    label_to_key: dict[tuple[str, str], str] = {}
+    for fac, bl in bands.items():
+        for b in bl:
+            label_to_key[(fac, b["label"].lower())] = b["key"]
+    time_overlay: dict[str, dict[str, str]] = {}
+    sheet_time = "Time Overlay"
+    if sheet_time in sheet_names:
+        started = False
+        for r in _sheet_rows(wb, sheet_time):
+            if norm(r[0]) == "Type" and "Factor" in norm(r[1]):
+                started = True
+                continue
+            fac = norm(r[0])
+            if started and fac in ("UV", "AQI", "Temperature", "Humidity"):
+                band_label = norm(r[2])
+                key = label_to_key.get((fac, band_label.lower()))
+                if not key:
+                    continue
+                morning = norm(r[3])
+                if morning.startswith("—"):
+                    morning = ""
+                time_overlay[f"{slug(fac)}|{key}"] = {
+                    "morning": morning,
+                    "evening": norm(r[4]),
+                }
+
     return {
         "meta": {
             "source": path.name,
             "source_path": str(path),
-            "version": "3.4",
+            "version": version,
             "note": (
                 "Scenario library export — L0/L1/L2 alert text, risk, confidence, "
-                "PMID anchors. Product-free; 'advice' not used."
+                "PMID anchors, gender/life-stage modifiers, time-of-day overlay. "
+                "Product-free; 'advice' not used."
             ),
             "master_cell_count": len(master),
             "compound_cell_count": len(compound_cells),
             "guest_cell_count": len(guest),
+            "gender_state_count": len(gender_states),
+            "gender_rule_count": len(gender_rules),
+            "time_overlay_count": len(time_overlay),
         },
         "bands": bands,
         "skins": skins,
@@ -259,4 +338,7 @@ def build_scenario_snapshot(xlsx_path: Path | str = DEFAULT_XLSX) -> dict[str, A
         "nuggets": nuggets,
         "nutrition": modifiers("14. Nutrition Modifiers"),
         "lifestyle": modifiers("15. Lifestyle Modifiers"),
+        "gender_states": gender_states,
+        "gender_rules": gender_rules,
+        "time_overlay": time_overlay,
     }

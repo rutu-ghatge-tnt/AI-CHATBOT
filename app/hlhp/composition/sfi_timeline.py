@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.engine_models import EnvironmentalData as EngineEnv
 from app.hlhp.models.engine_models import SkinConcern as EngineConcern
 from app.hlhp.models.engine_models import SkinType as EngineSkinType
@@ -170,7 +170,7 @@ async def assemble_sfi_timeline(
     days_back: int = 3,
     days_ahead: int = 3,
 ) -> SfiTimelineResponse:
-    store = get_evidence_store()
+    store = get_scenario_store()
     readings, tz_id, location_name = await fetch_timeline_hourly_readings(
         latitude,
         longitude,

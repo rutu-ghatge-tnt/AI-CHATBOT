@@ -55,3 +55,21 @@ def profile_incomplete_detail(diagnosis: dict[str, Any]) -> dict[str, Any]:
 
 def service_unavailable_detail(*, code: str, message: str, reason: str | None = None) -> dict[str, Any]:
     return http_error_detail(code=code, message=message, reason=reason)
+
+
+def feeling_log_cooldown_detail(
+    *,
+    next_log_at: str,
+    retry_after_seconds: int,
+    cooldown_hours: int,
+) -> dict[str, Any]:
+    return http_error_detail(
+        code="feeling_log_cooldown",
+        message=(
+            f"Wait {cooldown_hours} hours between feeling logs so each entry reflects "
+            "a distinct moment."
+        ),
+        next_log_at=next_log_at,
+        retry_after_seconds=retry_after_seconds,
+        cooldown_hours=cooldown_hours,
+    )

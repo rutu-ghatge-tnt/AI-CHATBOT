@@ -121,6 +121,98 @@ _SKIN_TONE_TO_FITZ: dict[str, int] = {
     "6": 6,
 }
 
+# Scenario library sheet 13 — exact state labels
+_LIBRARY_LIFE_STAGES = (
+    "Male",
+    "Female",
+    "Female + Pregnancy",
+    "Female + Lactation",
+    "Female + Perimenopause",
+    "Female + Menopause",
+    "Female + Menstrual Cycle",
+    "Female + PCOS",
+    "Adolescent / Puberty",
+)
+
+_LIFE_STAGE_ALIASES: dict[str, str] = {
+    "male": "Male",
+    "female": "Female",
+    "pregnancy": "Female + Pregnancy",
+    "pregnant": "Female + Pregnancy",
+    "female_pregnancy": "Female + Pregnancy",
+    "female + pregnancy": "Female + Pregnancy",
+    "lactation": "Female + Lactation",
+    "nursing": "Female + Lactation",
+    "breastfeeding": "Female + Lactation",
+    "female_lactation": "Female + Lactation",
+    "female + lactation": "Female + Lactation",
+    "perimenopause": "Female + Perimenopause",
+    "female_perimenopause": "Female + Perimenopause",
+    "female + perimenopause": "Female + Perimenopause",
+    "menopause": "Female + Menopause",
+    "postmenopause": "Female + Menopause",
+    "postmenopausal": "Female + Menopause",
+    "female_menopause": "Female + Menopause",
+    "female + menopause": "Female + Menopause",
+    "menstrual_cycle": "Female + Menstrual Cycle",
+    "menstrual cycle": "Female + Menstrual Cycle",
+    "female_menstrual_cycle": "Female + Menstrual Cycle",
+    "female + menstrual cycle": "Female + Menstrual Cycle",
+    "pcos": "Female + PCOS",
+    "female_pcos": "Female + PCOS",
+    "female + pcos": "Female + PCOS",
+    "adolescent": "Adolescent / Puberty",
+    "puberty": "Adolescent / Puberty",
+    "adolescent_puberty": "Adolescent / Puberty",
+    "adolescent / puberty": "Adolescent / Puberty",
+}
+
+_LIFE_STAGE_PRIORITY = {
+    "Female + PCOS": 90,
+    "Female + Pregnancy": 85,
+    "Female + Lactation": 80,
+    "Female + Menopause": 75,
+    "Female + Perimenopause": 70,
+    "Female + Menstrual Cycle": 65,
+    "Adolescent / Puberty": 60,
+    "Female": 10,
+    "Male": 10,
+}
+
+
+def _map_life_stage_alias(raw: str) -> str | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if text in _LIBRARY_LIFE_STAGES:
+        return text
+    key = _norm_key(text).replace("-", "_")
+    key2 = text.strip().lower()
+    return _LIFE_STAGE_ALIASES.get(key) or _LIFE_STAGE_ALIASES.get(key2)
+
+
+def _map_life_stage(doc: dict, *, gender: Gender | None) -> str | None:
+    for field in ("gender_state", "genderState", "life_stage", "lifeStage"):
+        scalar = _scalar(doc.get(field))
+        if scalar:
+            mapped = _map_life_stage_alias(str(scalar))
+            if mapped:
+                return mapped
+
+    from_list: list[str] = []
+    for item in _list_values(doc.get("lifeStages") or doc.get("life_stages") or []):
+        mapped = _map_life_stage_alias(str(item))
+        if mapped:
+            from_list.append(mapped)
+    if from_list:
+        return max(from_list, key=lambda s: _LIFE_STAGE_PRIORITY.get(s, 0))
+
+    if gender == Gender.MALE:
+        return "Male"
+    if gender in {Gender.FEMALE, Gender.NON_BINARY, Gender.OTHER, Gender.PREFER_NOT_TO_SAY}:
+        return "Female"
+    return None
+
 
 def _norm_key(value: str) -> str:
     return re.sub(r"[\s_]+", "-", value.strip().lower())
@@ -389,6 +481,7 @@ def map_merged_doc_to_user_profile(user_id: str, doc: dict) -> UserProfile | Non
         skin_concerns=skin_concerns,
         gender=gender,
         age_bracket=age_bracket,
+        life_stage=_map_life_stage(doc, gender=gender),
         skin_goal=_map_skin_goal(doc),
         smoking_status=_map_optional_enum(
             doc.get("smokingStatus") or doc.get("smoking_status"), _SMOKING_MAP

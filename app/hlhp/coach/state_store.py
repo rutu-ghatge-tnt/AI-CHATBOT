@@ -326,17 +326,19 @@ async def record_symptom_feeling(
     *,
     selected: bool,
     recorded_at: datetime,
+    session_id: str | None = None,
 ) -> None:
     await ensure_hlhp_indexes()
+    doc: dict = {
+        "user_id": user_id,
+        "symptom_keyword": symptom_keyword.strip().lower(),
+        "selected": selected,
+        "recorded_at": recorded_at,
+    }
+    if session_id:
+        doc["session_id"] = session_id
     try:
-        await hl_db[_FEELINGS].insert_one(
-            {
-                "user_id": user_id,
-                "symptom_keyword": symptom_keyword.strip().lower(),
-                "selected": selected,
-                "recorded_at": recorded_at,
-            }
-        )
+        await hl_db[_FEELINGS].insert_one(doc)
     except Exception as exc:
         fail_write(_FEELINGS, "insert", exc)
 

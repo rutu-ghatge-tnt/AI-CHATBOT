@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export SkinBB_HLHP_Scenario_Library_v3_4.xlsx to a versioned JSON snapshot."""
+"""Export SkinBB_HLHP_Scenario_Library workbook to a versioned JSON snapshot."""
 
 from __future__ import annotations
 
@@ -13,16 +13,13 @@ sys.path.insert(0, str(ROOT))
 
 from app.hlhp.evidence.scenario_workbook import DEFAULT_XLSX, build_scenario_snapshot
 
-OUT_PATH = ROOT / "app" / "hlhp" / "data" / "scenario_snapshot_v3_4.json"
-UI_OUT_PATH = ROOT / "app" / "hlhp" / "data" / "hlhp-ui" / "public" / "hlhp-evidence.json"
+OUT_PATH = ROOT / "app" / "hlhp" / "data" / "scenario_snapshot_v3_5.json"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build HLHP scenario library JSON snapshot")
     parser.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX)
     parser.add_argument("--out", type=Path, default=OUT_PATH)
-    parser.add_argument("--ui-out", type=Path, default=UI_OUT_PATH, help="Also refresh hlhp-ui public JSON")
-    parser.add_argument("--skip-ui", action="store_true")
     args = parser.parse_args()
 
     if not args.xlsx.exists():
@@ -37,12 +34,10 @@ def main() -> int:
     print(f"  master cells   : {snapshot['meta']['master_cell_count']}")
     print(f"  compound cells : {snapshot['meta']['compound_cell_count']}")
     print(f"  guest cells    : {snapshot['meta'].get('guest_cell_count', 0)}")
+    print(f"  gender states  : {snapshot['meta'].get('gender_state_count', 0)}")
+    print(f"  gender rules   : {snapshot['meta'].get('gender_rule_count', 0)}")
+    print(f"  time overlays  : {snapshot['meta'].get('time_overlay_count', 0)}")
     print(f"  cities mapped  : {len(snapshot['city_zone'])}")
-
-    if not args.skip_ui:
-        args.ui_out.parent.mkdir(parents=True, exist_ok=True)
-        args.ui_out.write_text(payload, encoding="utf-8")
-        print(f"Wrote {args.ui_out}")
 
     return 0
 

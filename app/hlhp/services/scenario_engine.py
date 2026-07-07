@@ -1,14 +1,16 @@
-"""SFI scoring and Master-cell lookup from the v3.4 scenario library."""
+"""SFI scoring and Master-cell lookup from the scenario library."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from app.hlhp.evidence.scenario_store import ScenarioStore
 from app.hlhp.evidence.scenario_workbook import slug
 from app.hlhp.models.environmental import EnvironmentalData
-from app.hlhp.models.profile import SkinConcern, SkinType, UserProfile
+from app.hlhp.models.profile import SkinConcern, SkinType, UserProfile, Gender
 
 SeverityBandName = Literal[
     "Paradise Mode",
@@ -20,6 +22,9 @@ SeverityBandName = Literal[
 ]
 
 ImpactLevel = Literal["Low", "Medium", "High"]
+TimeWindow = Literal["morning", "daytime", "evening"]
+
+RISK_TO_SFI_SCALE = 4
 
 DRIVER_DEFS = (
     {"factor": "Temperature", "key": "temp", "name": "Heat"},
@@ -50,7 +55,7 @@ CONCERN_TO_LIBRARY: dict[SkinConcern, str] = {
     SkinConcern.DEHYDRATION: "Dryness",
     SkinConcern.REDNESS: "Eczema",
     SkinConcern.SENSITIVITY: "Eczema",
-    SkinConcern.DARK_CIRCLES: "Uneven Skin Tone / Tan",
+    SkinConcern.DARK_CIRCLES: "Dark Circles (Periorbital)",
     SkinConcern.PORES: "Oily Skin",
     SkinConcern.TEXTURE: "Dark Marks (Post-Acne / PIH)",
     SkinConcern.FUNGAL: "Fungal Infection (Sweat & Folds)",
@@ -134,6 +139,8 @@ class ScenarioEvaluation:
     sudden_event_tags: list[str]
     cell_kind: str = "master"
     compound_name: str | None = None
+    time_window: TimeWindow | None = None
+    life_stage: str | None = None
 
 
 def value_in_band(range_str: str, val: float) -> bool:
@@ -208,6 +215,71 @@ def points_to_level(points: int) -> ImpactLevel:
     if points >= 10:
         return "Medium"
     return "High"
+
+
+def clamp_sfi(value: int) -> int:
+    return max(0, min(100, value))
+
+
+def time_window_for_datetime(when: datetime | None, tz: str = "Asia/Kolkata") -> TimeWindow:
+    """3-window model from the Time Overlay sheet (hour < 9 / 9–16 / ≥16 local)."""
+    dt = when or datetime.now(ZoneInfo(tz))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo(tz))
+    else:
+        dt = dt.astimezone(ZoneInfo(tz))
+    hour = dt.hour
+    if hour < 9:
+        return "morning"
+    if hour < 16:
+        return "daytime"
+    return "evening"
+
+
+def resolve_life_stage(profile: UserProfile | None) -> str | None:
+    if profile is None:
+        return None
+    if profile.life_stage:
+        return profile.life_stage
+    if profile.gender == Gender.MALE:
+        return "Male"
+    if profile.gender in {Gender.FEMALE, Gender.NON_BINARY, Gender.OTHER, Gender.PREFER_NOT_TO_SAY}:
+        return "Female"
+    return None
+
+
+def lookup_gender_rule(
+    store: ScenarioStore,
+    life_stage: str | None,
+    concern: str,
+) -> dict[str, Any] | None:
+    if not life_stage or not concern or concern == GUEST_CONCERN:
+        return None
+    return store.gender_rules.get(f"{slug(life_stage)}|{slug(concern)}")
+
+
+def time_overlay_clause(
+    store: ScenarioStore,
+    dom: DriverState,
+    window: TimeWindow,
+) -> str:
+    if window == "daytime":
+        return ""
+    overlay = store.time_overlay.get(f"{slug(dom.factor)}|{dom.band_key}")
+    if not overlay:
+        return ""
+    if window == "morning":
+        return str(overlay.get("morning", "") or "")
+    return str(overlay.get("evening", "") or "")
+
+
+def apply_gender_rule_to_sfi(sfi: int, rule: dict[str, Any] | None) -> int:
+    if not rule:
+        return sfi
+    delta = rule.get("risk_delta")
+    if not isinstance(delta, (int, float)) or delta <= 0:
+        return sfi
+    return clamp_sfi(sfi - int(delta) * RISK_TO_SFI_SCALE)
 
 
 def dominant_driver(drivers: list[DriverState]) -> DriverState:
@@ -402,10 +474,17 @@ def build_flash_alert(
     *,
     band: SeverityBandName,
     surge: bool,
+    time_clause: str = "",
+    gender_rule: dict[str, Any] | None = None,
 ) -> FlashAlert:
     if cell:
-        l1 = str(cell.get("l2" if surge else "l1", ""))
-        tip = f"Action focus: {cell.get('action', 'Maintain')}."
+        l1_base = str(cell.get("l2" if surge else "l1", ""))
+        l1_parts = [part for part in (l1_base, time_clause, str(gender_rule.get("addendum", "")) if gender_rule else "") if part]
+        l1 = " ".join(l1_parts)
+        if gender_rule and gender_rule.get("action"):
+            tip = str(gender_rule["action"])
+        else:
+            tip = f"Action focus: {cell.get('action', 'Maintain')}."
         return FlashAlert(
             level="L1" if surge else "L0",
             mode=band,
@@ -413,11 +492,12 @@ def build_flash_alert(
             l1=l1,
             tip=tip,
         )
+    l1_parts = [part for part in ("Environmental stress is elevated for your area right now.", time_clause) if part]
     return FlashAlert(
         level="L1" if surge else "L0",
         mode=band,
         l0="Weather shift — check your skin today.",
-        l1="Environmental stress is elevated for your area right now.",
+        l1=" ".join(l1_parts),
         tip="Stay shaded, hydrated, and keep your routine light.",
     )
 
@@ -430,10 +510,10 @@ def evaluate_scenario(
     profile: UserProfile | None = None,
     guest_mode: bool = True,
     force_surge: bool = False,
+    local_time: datetime | None = None,
 ) -> ScenarioEvaluation:
     drivers = driver_states(store, env)
     sfi = sum(d.points for d in drivers)
-    band = band_for_sfi(sfi)
     dom = dominant_driver(drivers)
     skin = resolve_skin(profile, guest_mode)
     library_concerns = resolve_library_concerns(profile, guest_mode)
@@ -449,9 +529,22 @@ def evaluate_scenario(
         concern_candidates=library_concerns,
     )
 
+    life_stage = None if guest_mode else resolve_life_stage(profile)
+    gender_rule = lookup_gender_rule(store, life_stage, concern)
+    sfi = apply_gender_rule_to_sfi(sfi, gender_rule)
+    band = band_for_sfi(sfi)
+    time_window = time_window_for_datetime(local_time)
+    time_clause = time_overlay_clause(store, dom, time_window)
+
     risk = _risk_int(cell, surge=force_surge)
-    personal_sfi = max(0, sfi - risk * 4) if cell else None
-    flash = build_flash_alert(cell, band=band, surge=force_surge)
+    personal_sfi = clamp_sfi(sfi - risk * RISK_TO_SFI_SCALE) if cell else None
+    flash = build_flash_alert(
+        cell,
+        band=band,
+        surge=force_surge,
+        time_clause=time_clause,
+        gender_rule=gender_rule,
+    )
     impacts = [
         ImpactLine(driver=d.key, name=d.name, level=points_to_level(d.points), value=d.value)
         for d in drivers
@@ -496,6 +589,8 @@ def evaluate_scenario(
         sudden_event_tags=sudden,
         cell_kind=cell_kind,
         compound_name=compound_name,
+        time_window=time_window,
+        life_stage=life_stage,
     )
 
 

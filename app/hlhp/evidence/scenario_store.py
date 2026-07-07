@@ -1,4 +1,4 @@
-"""Runtime loader for the v3.4 scenario library JSON snapshot."""
+"""Runtime loader for the scenario library JSON snapshot."""
 
 from __future__ import annotations
 
@@ -7,15 +7,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-_SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / "data" / "scenario_snapshot_v3_4.json"
+_SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / "data" / "scenario_snapshot_v3_5.json"
 
 
 class ScenarioStore:
-    """In-memory view of SkinBB_HLHP_Scenario_Library_v3_4."""
+    """In-memory view of SkinBB_HLHP_Scenario_Library."""
 
     def __init__(self, snapshot: dict[str, Any]) -> None:
         self.meta = snapshot.get("meta", {})
-        self.version = str(self.meta.get("version", "3.4"))
+        self.version = str(self.meta.get("version", "3.5"))
         self.source = self.meta.get("source", "")
         self.bands: dict[str, list[dict[str, Any]]] = snapshot.get("bands", {})
         self.skins: list[str] = snapshot.get("skins", [])
@@ -31,6 +31,9 @@ class ScenarioStore:
         self.nuggets = snapshot.get("nuggets", [])
         self.nutrition = snapshot.get("nutrition", [])
         self.lifestyle = snapshot.get("lifestyle", [])
+        self.gender_states = snapshot.get("gender_states", [])
+        self.gender_rules: dict[str, dict[str, Any]] = snapshot.get("gender_rules", {})
+        self.time_overlay: dict[str, dict[str, str]] = snapshot.get("time_overlay", {})
 
     @property
     def master_cell_count(self) -> int:
@@ -43,6 +46,10 @@ class ScenarioStore:
     @property
     def compound_cell_count(self) -> int:
         return len(self.compound_cells)
+
+    @property
+    def workbook_version(self) -> str:
+        return self.source or self.version
 
 
 @lru_cache(maxsize=1)

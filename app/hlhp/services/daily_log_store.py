@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from app.hlhp.core.local_date import calendar_date_key
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
-from app.hlhp.core.sfi_driver import bands_snapshot, driver_key_from_env
+from app.hlhp.core.sfi_driver import bands_snapshot, driver_key_for_day
 from app.hlhp.models.environmental import EnvironmentalData
 
 from app.hlhp.db import hl_db
@@ -19,6 +19,49 @@ logger = logging.getLogger(__name__)
 
 _DAILY_LOG = "hlhp_daily_log"
 RETENTION_DAYS = 30
+
+
+def _avg_env_readings(
+    existing: dict[str, Any] | None,
+    prev_count: int,
+    *,
+    uvi: float,
+    temp_c: float,
+    aqi: int,
+    rh_pct: float,
+) -> tuple[float, float, int, float]:
+    """Running mean of env readings across scans on the same calendar day."""
+    if not existing or prev_count <= 0:
+        return float(uvi), float(temp_c), int(aqi), float(rh_pct)
+    n = float(prev_count)
+    return (
+        round((float(existing.get("uvi", uvi)) * n + float(uvi)) / (n + 1), 2),
+        round((float(existing.get("temp_c", temp_c)) * n + float(temp_c)) / (n + 1), 2),
+        int(round((int(existing.get("aqi", aqi)) * n + int(aqi)) / (n + 1))),
+        round((float(existing.get("rh_pct", rh_pct)) * n + float(rh_pct)) / (n + 1), 2),
+    )
+
+
+def _apply_day_driver(doc: dict[str, Any]) -> None:
+    """Set bands + recap driver from daily SFI average and day-mean env."""
+    city = str(doc.get("city") or "")
+    env = EnvironmentalData(
+        uv_index=float(doc.get("uvi", 0)),
+        temperature_c=float(doc.get("temp_c", 0)),
+        aqi=int(doc.get("aqi", 0)),
+        humidity_pct=float(doc.get("rh_pct", 0)),
+        location_name=city,
+    )
+    doc.update(bands_snapshot(bucketize_environment(env)))
+    avg = doc.get("outdoor_score_avg")
+    driver = driver_key_for_day(
+        outdoor_score_avg=float(avg) if avg is not None else None,
+        env=env,
+    )
+    if driver is not None:
+        doc["driver"] = driver
+    else:
+        doc.pop("driver", None)
 
 
 def _parse_dt(value) -> datetime:
@@ -65,11 +108,20 @@ async def upsert_from_scan(
             prev_avg = float(existing.get("outdoor_score_avg") or existing.get("outdoor_ok_score") or 0)
             count = prev_count + 1
             avg = round((prev_avg * prev_count + int(outdoor_ok_score)) / count, 1)
+            avg_uvi, avg_temp, avg_aqi, avg_rh = _avg_env_readings(
+                existing,
+                prev_count,
+                uvi=uvi,
+                temp_c=temp_c,
+                aqi=aqi,
+                rh_pct=rh_pct,
+            )
             prior_tags = list(existing.get("sudden_event_tags") or [])
             merged_tags = list(dict.fromkeys(prior_tags + tags))
         else:
             count = 1
             avg = float(int(outdoor_ok_score))
+            avg_uvi, avg_temp, avg_aqi, avg_rh = float(uvi), float(temp_c), int(aqi), float(rh_pct)
             merged_tags = tags
 
         doc = {
@@ -80,23 +132,14 @@ async def upsert_from_scan(
             "mood_verdict": mood_verdict,
             "sudden_event_tags": merged_tags,
             "sudden_event": bool(merged_tags),
-            "uvi": float(uvi),
-            "temp_c": float(temp_c),
-            "aqi": int(aqi),
-            "rh_pct": float(rh_pct),
+            "uvi": avg_uvi,
+            "temp_c": avg_temp,
+            "aqi": avg_aqi,
+            "rh_pct": avg_rh,
             "city": city,
             "updated_at": datetime.now(timezone.utc),
         }
-        env = EnvironmentalData(
-            uv_index=float(uvi),
-            temperature_c=float(temp_c),
-            aqi=int(aqi),
-            humidity_pct=float(rh_pct),
-            location_name=city,
-        )
-        bands = bucketize_environment(env)
-        doc.update(bands_snapshot(bands))
-        doc["driver"] = driver_key_from_env(env)
+        _apply_day_driver(doc)
         await col.update_one(
             {"user_id": user_id, "date": date_key},
             {"$set": doc},
@@ -137,6 +180,7 @@ async def upsert_user_log_day(
         if existing:
             prev_count = int(existing.get("scan_count") or 1)
             prev_avg = existing.get("outdoor_score_avg")
+            has_new_env = bool(uvi or temp_c or aqi or rh_pct)
             if outdoor_ok_score is not None:
                 if prev_avg is not None:
                     count = prev_count + 1
@@ -147,12 +191,29 @@ async def upsert_user_log_day(
             else:
                 count = prev_count
                 avg = float(prev_avg) if prev_avg is not None else None
+
+            if has_new_env and outdoor_ok_score is not None:
+                avg_uvi, avg_temp, avg_aqi, avg_rh = _avg_env_readings(
+                    existing,
+                    prev_count if prev_avg is not None else max(prev_count - 1, 0),
+                    uvi=uvi,
+                    temp_c=temp_c,
+                    aqi=aqi,
+                    rh_pct=rh_pct,
+                )
+            else:
+                avg_uvi = float(uvi if uvi else existing.get("uvi", 0))
+                avg_temp = float(temp_c if temp_c else existing.get("temp_c", 0))
+                avg_aqi = int(aqi if aqi else existing.get("aqi", 0))
+                avg_rh = float(rh_pct if rh_pct else existing.get("rh_pct", 0))
+
             prior_tags = list(existing.get("sudden_event_tags") or [])
             merged_tags = list(dict.fromkeys(prior_tags + tags))
             mood = str(mood_verdict or existing.get("mood_verdict") or "")
         else:
             count = 1
             avg = float(int(outdoor_ok_score)) if outdoor_ok_score is not None else None
+            avg_uvi, avg_temp, avg_aqi, avg_rh = float(uvi), float(temp_c), int(aqi), float(rh_pct)
             merged_tags = tags
             mood = str(mood_verdict or "")
 
@@ -163,10 +224,10 @@ async def upsert_user_log_day(
             "mood_verdict": mood,
             "sudden_event_tags": merged_tags,
             "sudden_event": bool(merged_tags),
-            "uvi": float(uvi if uvi else (existing or {}).get("uvi", 0)),
-            "temp_c": float(temp_c if temp_c else (existing or {}).get("temp_c", 0)),
-            "aqi": int(aqi if aqi else (existing or {}).get("aqi", 0)),
-            "rh_pct": float(rh_pct if rh_pct else (existing or {}).get("rh_pct", 0)),
+            "uvi": avg_uvi,
+            "temp_c": avg_temp,
+            "aqi": avg_aqi,
+            "rh_pct": avg_rh,
             "city": str(city or (existing or {}).get("city") or ""),
             "user_logged": True,
             "updated_at": datetime.now(timezone.utc),
@@ -175,26 +236,7 @@ async def upsert_user_log_day(
             doc["outdoor_score_avg"] = avg
         if bands is not None:
             doc.update(bands_snapshot(bands))
-        elif uvi or temp_c or aqi or rh_pct:
-            env = EnvironmentalData(
-                uv_index=float(uvi),
-                temperature_c=float(temp_c),
-                aqi=int(aqi),
-                humidity_pct=float(rh_pct),
-                location_name=city,
-            )
-            doc.update(bands_snapshot(bucketize_environment(env)))
-        if driver:
-            doc["driver"] = driver
-        elif not existing or not existing.get("driver"):
-            env = EnvironmentalData(
-                uv_index=float(doc["uvi"]),
-                temperature_c=float(doc["temp_c"]),
-                aqi=int(doc["aqi"]),
-                humidity_pct=float(doc["rh_pct"]),
-                location_name=str(doc["city"]),
-            )
-            doc["driver"] = driver_key_from_env(env)
+        _apply_day_driver(doc)
         if areas is not None:
             doc["areas"] = list(areas)
 
@@ -252,6 +294,11 @@ async def backfill_from_scans(user_id: str, scans: list[dict[str, Any]]) -> None
             tags.extend(s.get("sudden_event_tags") or [])
         merged_tags = list(dict.fromkeys(str(t) for t in tags if t))
         avg = round(sum(scores) / len(scores), 1)
+        n = len(day_scans)
+        avg_uvi = round(sum(float(s.get("uvi", 0)) for s in day_scans) / n, 2)
+        avg_temp = round(sum(float(s.get("temp_c", 0)) for s in day_scans) / n, 2)
+        avg_aqi = int(round(sum(int(s.get("aqi", 0)) for s in day_scans) / n))
+        avg_rh = round(sum(float(s.get("rh_pct", 0)) for s in day_scans) / n, 2)
         doc = {
             "user_id": user_id,
             "date": date_key,
@@ -260,13 +307,14 @@ async def backfill_from_scans(user_id: str, scans: list[dict[str, Any]]) -> None
             "mood_verdict": str(last.get("mood_verdict") or ""),
             "sudden_event_tags": merged_tags,
             "sudden_event": bool(merged_tags),
-            "uvi": float(last.get("uvi", 0)),
-            "temp_c": float(last.get("temp_c", 0)),
-            "aqi": int(last.get("aqi", 0)),
-            "rh_pct": float(last.get("rh_pct", 0)),
+            "uvi": avg_uvi,
+            "temp_c": avg_temp,
+            "aqi": avg_aqi,
+            "rh_pct": avg_rh,
             "city": str(last.get("city") or ""),
             "updated_at": datetime.now(timezone.utc),
         }
+        _apply_day_driver(doc)
         try:
             await col.update_one(
                 {"user_id": user_id, "date": date_key},

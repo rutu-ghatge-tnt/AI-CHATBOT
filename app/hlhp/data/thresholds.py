@@ -1,7 +1,7 @@
 """
 Score thresholds, severity bands, scenario cut-points.
 
-Calibration sourced from SkinBB_HLHP_Evidence_Base.xlsx.
+Calibration sourced from SkinBB_HLHP_Scenario_Library_v3.5.xlsx.
 
 Tuple layouts
 -------------

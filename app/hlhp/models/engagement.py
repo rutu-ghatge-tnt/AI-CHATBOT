@@ -41,10 +41,18 @@ class LoggedEventOut(BaseModel):
     humidity_band: str
 
 
+class FeelingLogStatus(BaseModel):
+    can_log: bool = True
+    cooldown_hours: int = 5
+    next_log_at: Optional[str] = None
+    retry_after_seconds: Optional[int] = None
+
+
 class UserLogResponse(BaseModel):
     logged: LoggedEventOut
     streak: int
     longest_streak: int
+    feeling_log: FeelingLogStatus = Field(default_factory=FeelingLogStatus)
 
 
 class StreakBadges(BaseModel):

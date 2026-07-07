@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.services.outdoor_ok import compute_outdoor_ok, pick_mood_verdict
 
@@ -59,7 +59,7 @@ def forecast_oneliner(
     concern_id: str | None = None,
     mood: str = "",
 ) -> str:
-    store = get_evidence_store()
+    store = get_composition_store()
     templates = store.composition.get("forecast_day_templates") or []
     hit = _match_template(templates, bands=bands, concern_id=concern_id, mood=mood)
     if hit and hit.get("forecast_one_liner"):
@@ -76,7 +76,7 @@ def assemble_week_ahead(
     start: datetime | None = None,
 ) -> list[dict[str, Any]]:
     """Simple week-ahead using today's env as baseline (forecast API upgrade later)."""
-    store = get_evidence_store()
+    store = get_composition_store()
     templates = store.composition.get("forecast_day_templates") or []
     when = start or base_env.fetched_at
     out: list[dict[str, Any]] = []

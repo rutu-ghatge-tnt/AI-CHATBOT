@@ -3,6 +3,7 @@ import os
 import sys
 import warnings
 import logging
+from pathlib import Path
 
 # Limit BLAS/OpenMP threads before numpy/scipy/torch are imported downstream
 for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -28,7 +29,6 @@ warnings.filterwarnings('ignore', message='.*Feedback manager.*')
 warnings.filterwarnings('ignore', category=UserWarning, module='langchain')
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 # Import chatbot router (with error handling for missing dependencies)
 try:
@@ -66,10 +66,6 @@ from app.hlhp.api.personalized_alerts import router as hl_personalized_alerts_ro
 from app.hlhp.api.scan import router as hlhp_scan_router
 from app.hlhp.api.composition import router as hlhp_composition_router
 from app.hlhp.api.weather import router as hlhp_weather_router
-from pathlib import Path
-
-HLHP_UI_PUBLIC = Path(__file__).resolve().parent / "hlhp" / "data" / "hlhp-ui" / "public"
-
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
     from app.ai_ingredient_intelligence.api.trend_insights import router as trend_insights_router
@@ -350,13 +346,6 @@ app.include_router(hl_personalized_alerts_router, prefix="/api")
 app.include_router(hlhp_scan_router, prefix="/api")
 app.include_router(hlhp_composition_router, prefix="/api")
 app.include_router(hlhp_weather_router, prefix="/api")
-
-if HLHP_UI_PUBLIC.is_dir():
-    app.mount(
-        "/hlhp-ui",
-        StaticFiles(directory=str(HLHP_UI_PUBLIC), html=False),
-        name="hlhp-ui-static",
-    )
 
 # ✅ Add trend insights API
 if trend_insights_router is not None:

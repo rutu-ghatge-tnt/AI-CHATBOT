@@ -25,8 +25,10 @@ from app.hlhp.composition.forecast import assemble_week_ahead
 from app.hlhp.composition.plan_week import assemble_plan_week
 from app.hlhp.composition.sfi_timeline import assemble_sfi_timeline
 from app.hlhp.composition.symptom import assemble_symptom_explainer
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
+from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.engagement import (
+    FeelingLogStatus,
     LearnResponse,
     StreakResponse,
     UserLogRequest,
@@ -43,6 +45,7 @@ from app.hlhp.services.engagement_service import (
     assemble_weekly_card,
     run_user_log,
 )
+from app.hlhp.services.log_event_store import fetch_feeling_log_status
 from app.hlhp.services.history_service import assemble_catchup, assemble_history
 from app.hlhp.services.patterns_service import assemble_patterns
 from app.hlhp.services.profile_loader import load_user_profile
@@ -155,7 +158,7 @@ async def week_ahead(
         "concern_id": concern_id,
         "days": week_days,
         "forecast_source": "synthetic",
-        "workbook_version": get_evidence_store().workbook_version,
+        "workbook_version": get_scenario_store().workbook_version,
     }
 
 
@@ -235,6 +238,16 @@ async def catchup_lane(
 ):
     uid = verify_client_user_id(user, user_id)
     return await assemble_catchup(uid, days=days)
+
+
+@router.get("/log/status", response_model=FeelingLogStatus)
+async def feeling_log_status_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> FeelingLogStatus:
+    uid = verify_client_user_id(user, user_id)
+    status = await fetch_feeling_log_status(uid)
+    return FeelingLogStatus(**status)
 
 
 @router.post("/log", response_model=UserLogResponse)

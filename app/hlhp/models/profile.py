@@ -112,6 +112,10 @@ class UserProfile(BaseModel):
     hair_type: Optional[HairType] = None
     hair_concerns: list[HairConcern] = Field(default_factory=list, max_length=3)
     skin_tone_fitzpatrick: Optional[int] = Field(None, ge=1, le=6)
+    life_stage: Optional[str] = Field(
+        None,
+        description="Gender + life-stage state from scenario library sheet 13 (e.g. Female + PCOS).",
+    )
 
     @property
     def fitzpatrick_type(self) -> int:

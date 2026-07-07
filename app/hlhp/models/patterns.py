@@ -30,8 +30,17 @@ class PatternInsight(BaseModel):
 class PatternsResponse(BaseModel):
     user_id: str
     days: int
+    window_days: int = 30
+    journey_day: int = 0
     log_count: int
     min_logs_required: int = 30
+    min_logs_to_mine: int = 25
+    ready: bool = False
+    can_mine: bool = False
+    logs_needed: int = 0
+    mining_logs_needed: int = 0
+    unlock_headline: Optional[str] = None
+    unlock_detail: Optional[str] = None
     patterns: list[PatternInsight] = Field(default_factory=list)
     message: Optional[str] = None
     workbook_version: Optional[str] = None

@@ -9,7 +9,7 @@ from typing import Any
 from app.hlhp.composition.feeds import festival_situation_tags
 from app.hlhp.composition.vocabulary import symptom_chips
 from app.hlhp.core.bands import EnvironmentBands, science_condition_tags
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.services.concern_resolver import (
     nugget_audience_slugs,
@@ -123,7 +123,7 @@ def _month_matches(month_window: str, when: datetime) -> bool:
 
 
 def assemble_event_guides(city: str, when: datetime | None = None) -> list[dict[str, Any]]:
-    store = get_evidence_store()
+    store = get_composition_store()
     rows = store.composition.get("event_guides") or []
     now = when or datetime.now()
     by_guide: dict[str, list[dict]] = {}
@@ -346,7 +346,7 @@ def assemble_explore(
     when: datetime | None = None,
     bands: EnvironmentBands | None = None,
 ) -> dict[str, Any]:
-    store = get_evidence_store()
+    store = get_composition_store()
     now = when or datetime.now()
     resolved_concern = resolve_concern_id(profile=profile, client_concern_id=concern_id)
     all_guides = assemble_event_guides(city, now)
@@ -372,5 +372,5 @@ def assemble_explore(
         "science_nugget": science_nugget,
         "knowledge_feed": [],
         "symptom_keywords": symptom_chips(resolved_concern, selected=selected_symptoms or set()),
-        "snapshot_version": store.workbook_version,
+        "snapshot_version": store.version,
     }

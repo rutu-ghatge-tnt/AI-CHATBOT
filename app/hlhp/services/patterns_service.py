@@ -1,4 +1,4 @@
-"""Mine symptom–environment patterns from real user logs (rule-based statistics, no ML)."""
+"""Mine symptom–environment patterns from committed feeling sessions (rule-based statistics)."""
 
 from __future__ import annotations
 
@@ -7,16 +7,21 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
-from app.hlhp.coach.state_store import fetch_daily_feeling_keywords
-from app.hlhp.evidence.loader import get_evidence_store
+from datetime import date
+
+from app.hlhp.core.local_date import today_local
+from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.patterns import PatternInsight, PatternsResponse
-from app.hlhp.services.daily_log_store import RETENTION_DAYS, fetch_daily_logs
+from app.hlhp.services.daily_log_store import RETENTION_DAYS
+from app.hlhp.services.log_event_store import fetch_log_event_dates, fetch_log_events
 
 logger = logging.getLogger(__name__)
 
-MIN_LOGS_REQUIRED = 30
-MIN_SYMPTOM_DAYS = 3
-MIN_CO_DAYS = 3
+PATTERNS_UNLOCK_DAYS = 30
+MIN_LOGS_TO_MINE = 25
+PATTERNS_WINDOW_DAYS = 30
+MIN_SYMPTOM_SESSIONS = 3
+MIN_CO_SESSIONS = 3
 MIN_MATCH_PCT = 60
 MIN_LIFT = 1.25
 MAX_PATTERNS = 2
@@ -34,15 +39,15 @@ _CTA_BY_DRIVER: dict[str, tuple[str, str]] = {
 }
 
 _DRIVER_SHORT: dict[str, str] = {
-    "humidity_surge": "humidity surge days",
-    "heat_surge": "heat surge days",
-    "uv_surge": "UV surge days",
-    "pollution_surge": "poor-air spike days",
-    "humidity_high": "high-humidity days",
-    "uv_high": "high-UV days",
-    "aqi_poor": "poor-air days",
-    "hot_day": "hot days",
-    "low_sfi": "low SFI days",
+    "humidity_surge": "humidity surge",
+    "heat_surge": "heat surge",
+    "uv_surge": "UV surge",
+    "pollution_surge": "poor-air spikes",
+    "humidity_high": "high humidity",
+    "uv_high": "high UV",
+    "aqi_poor": "poor air quality",
+    "hot_day": "hot outdoor conditions",
+    "low_sfi": "low skin-friendliness",
 }
 
 
@@ -59,7 +64,9 @@ def _parse_dt(value: Any) -> datetime:
 
 
 @dataclass
-class DayRecord:
+class SessionRecord:
+    session_id: str
+    ts: datetime
     date: str
     feelings: set[str] = field(default_factory=set)
     rh_pct: Optional[float] = None
@@ -69,190 +76,147 @@ class DayRecord:
     sfi: Optional[int] = None
     sudden_tags: set[str] = field(default_factory=set)
     weekday: int = 0
-    feeling_hours: list[int] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class DriverRule:
     key: str
     label: str
-    test: Callable[[DayRecord], bool]
+    test: Callable[[SessionRecord], bool]
 
 
 def _driver_rules() -> list[DriverRule]:
     return [
         DriverRule(
             "humidity_surge",
-            "humidity surge days",
-            lambda d: "humidity_surge" in d.sudden_tags,
+            "humidity surge",
+            lambda s: "humidity_surge" in s.sudden_tags,
         ),
         DriverRule(
             "heat_surge",
-            "heat surge days",
-            lambda d: "heat_surge" in d.sudden_tags,
+            "heat surge",
+            lambda s: "heat_surge" in s.sudden_tags,
         ),
         DriverRule(
             "uv_surge",
-            "UV surge days",
-            lambda d: "uv_surge" in d.sudden_tags,
+            "UV surge",
+            lambda s: "uv_surge" in s.sudden_tags,
         ),
         DriverRule(
             "pollution_surge",
-            "pollution spike days",
-            lambda d: "pollution_surge" in d.sudden_tags,
+            "pollution spike",
+            lambda s: "pollution_surge" in s.sudden_tags,
         ),
         DriverRule(
             "humidity_high",
             "high humidity (RH above 75%)",
-            lambda d: d.rh_pct is not None and d.rh_pct > 75,
+            lambda s: s.rh_pct is not None and s.rh_pct > 75,
         ),
         DriverRule(
             "uv_high",
             "high UV (index 8 or above)",
-            lambda d: d.uvi is not None and d.uvi >= 8,
+            lambda s: s.uvi is not None and s.uvi >= 8,
         ),
         DriverRule(
             "aqi_poor",
             "poor air quality (AQI above 100)",
-            lambda d: d.aqi is not None and d.aqi > 100,
+            lambda s: s.aqi is not None and s.aqi > 100,
         ),
         DriverRule(
             "hot_day",
-            "hot outdoor days (32°C or above)",
-            lambda d: d.temp_c is not None and d.temp_c >= 32,
+            "hot outdoor conditions (32°C or above)",
+            lambda s: s.temp_c is not None and s.temp_c >= 32,
         ),
         DriverRule(
             "low_sfi",
             "low skin-friendliness (SFI below 50)",
-            lambda d: d.sfi is not None and d.sfi < 50,
+            lambda s: s.sfi is not None and s.sfi < 50,
         ),
     ]
 
 
-async def _feeling_hours_by_day(user_id: str, since: datetime) -> dict[str, list[int]]:
-    from app.hlhp.db import hl_db
-
-    out: dict[str, list[int]] = {}
+def _session_from_event(doc: dict[str, Any]) -> SessionRecord | None:
+    ts = doc.get("ts")
+    if ts is None:
+        return None
+    when = _parse_dt(ts)
+    date_key = str(doc.get("date") or when.date().isoformat())
     try:
-        cursor = hl_db["hlhp_symptom_feeling_log"].find(
-            {"user_id": user_id, "recorded_at": {"$gte": since}, "selected": True},
-        )
-        async for doc in cursor:
-            recorded = _parse_dt(doc.get("recorded_at"))
-            day = recorded.date().isoformat()
-            out.setdefault(day, []).append(recorded.hour)
-    except Exception as exc:
-        logger.warning("HLHP pattern feeling hours fetch failed: %s", exc)
+        wd = datetime.strptime(date_key, "%Y-%m-%d").date().weekday()
+    except ValueError:
+        wd = when.weekday()
+    feelings = {
+        str(kw).strip().lower().replace(" ", "_")
+        for kw in (doc.get("symptoms") or [])
+        if str(kw).strip()
+    }
+    if not feelings:
+        return None
+    sfi_val = doc.get("sfi")
+    return SessionRecord(
+        session_id=str(doc.get("session_id") or ""),
+        ts=when,
+        date=date_key,
+        feelings=feelings,
+        rh_pct=float(doc["rh_pct"]) if doc.get("rh_pct") is not None else None,
+        uvi=float(doc["uvi"]) if doc.get("uvi") is not None else None,
+        aqi=int(doc["aqi"]) if doc.get("aqi") is not None else None,
+        temp_c=float(doc["temp_c"]) if doc.get("temp_c") is not None else None,
+        sfi=int(sfi_val) if sfi_val is not None else None,
+        sudden_tags={str(t) for t in (doc.get("sudden_event_tags") or []) if t},
+        weekday=wd,
+    )
+
+
+def _sessions_from_events(docs: list[dict[str, Any]]) -> list[SessionRecord]:
+    out: list[SessionRecord] = []
+    for doc in docs:
+        rec = _session_from_event(doc)
+        if rec is not None:
+            out.append(rec)
     return out
 
 
-def _build_day_records(
-    daily_docs: list[dict[str, Any]],
-    feelings_by_day: dict[str, list[str]],
-    hours_by_day: dict[str, list[int]],
-    *,
-    span_days: int,
-    now: datetime,
-) -> list[DayRecord]:
-    by_date: dict[str, DayRecord] = {}
-    for doc in daily_docs:
-        date_key = str(doc.get("date") or "")
-        if not date_key:
-            continue
-        try:
-            wd = datetime.strptime(date_key, "%Y-%m-%d").date().weekday()
-        except ValueError:
-            wd = 0
-        avg = doc.get("outdoor_score_avg")
-        by_date[date_key] = DayRecord(
-            date=date_key,
-            feelings=set(),
-            rh_pct=float(doc["rh_pct"]) if doc.get("rh_pct") is not None else None,
-            uvi=float(doc["uvi"]) if doc.get("uvi") is not None else None,
-            aqi=int(doc["aqi"]) if doc.get("aqi") is not None else None,
-            temp_c=float(doc["temp_c"]) if doc.get("temp_c") is not None else None,
-            sfi=int(round(float(avg))) if avg is not None else None,
-            sudden_tags={str(t) for t in (doc.get("sudden_event_tags") or []) if t},
-            weekday=wd,
-        )
-
-    for date_key, keywords in feelings_by_day.items():
-        rec = by_date.setdefault(
-            date_key,
-            DayRecord(
-                date=date_key,
-                weekday=datetime.strptime(date_key, "%Y-%m-%d").date().weekday()
-                if _valid_date(date_key)
-                else 0,
-            ),
-        )
-        for kw in keywords:
-            rec.feelings.add(kw.strip().lower().replace(" ", "_"))
-
-    for date_key, hours in hours_by_day.items():
-        rec = by_date.setdefault(
-            date_key,
-            DayRecord(
-                date=date_key,
-                weekday=datetime.strptime(date_key, "%Y-%m-%d").date().weekday()
-                if _valid_date(date_key)
-                else 0,
-            ),
-        )
-        rec.feeling_hours = hours
-
-    # Fill calendar window so weekday rates are fair
+def _calendar_days(span_days: int, now: datetime) -> list[str]:
     end = now.date()
     start = end - timedelta(days=span_days - 1)
-    records: list[DayRecord] = []
+    days: list[str] = []
     cursor = start
     while cursor <= end:
-        key = cursor.isoformat()
-        records.append(
-            by_date.get(key)
-            or DayRecord(date=key, weekday=cursor.weekday())
-        )
+        days.append(cursor.isoformat())
         cursor += timedelta(days=1)
-    return records
+    return days
 
 
-def _valid_date(key: str) -> bool:
-    try:
-        datetime.strptime(key, "%Y-%m-%d")
-        return True
-    except ValueError:
-        return False
-
-
-def _symptom_days(records: list[DayRecord], symptom: str) -> list[DayRecord]:
-    return [r for r in records if symptom in r.feelings]
+def _symptom_sessions(sessions: list[SessionRecord], symptom: str) -> list[SessionRecord]:
+    return [s for s in sessions if symptom in s.feelings]
 
 
 def _evaluate(
-    records: list[DayRecord],
+    sessions: list[SessionRecord],
     symptom: str,
     rule: DriverRule,
 ) -> Optional[dict[str, Any]]:
-    symptom_days = _symptom_days(records, symptom)
-    n_symptom = len(symptom_days)
-    if n_symptom < MIN_SYMPTOM_DAYS:
+    symptom_sessions = _symptom_sessions(sessions, symptom)
+    n_symptom = len(symptom_sessions)
+    if n_symptom < MIN_SYMPTOM_SESSIONS:
         return None
 
-    n_days = len(records)
-    n_driver_all = sum(1 for d in records if rule.test(d))
-    n_both = sum(1 for d in symptom_days if rule.test(d))
+    n_sessions = len(sessions)
+    n_driver_all = sum(1 for s in sessions if rule.test(s))
+    n_both = sum(1 for s in symptom_sessions if rule.test(s))
 
     if n_both == 0:
         return None
 
     p_given_symptom = n_both / n_symptom
-    baseline = n_driver_all / n_days if n_days else 0
+    baseline = n_driver_all / n_sessions if n_sessions else 0
     match_pct = round(100 * p_given_symptom)
     baseline_pct = round(100 * baseline)
 
     if match_pct < MIN_MATCH_PCT:
         return None
-    if n_both < MIN_CO_DAYS:
+    if n_both < MIN_CO_SESSIONS:
         return None
     if baseline > 0 and p_given_symptom / baseline < MIN_LIFT:
         return None
@@ -268,16 +232,25 @@ def _evaluate(
         "match_pct": min(99, match_pct),
         "baseline_pct": baseline_pct,
         "score": score,
-        "symptom_days": symptom_days,
     }
 
 
-def _timeline_series(records: list[DayRecord], symptom: str, rule: DriverRule) -> list[int]:
+def _timeline_series(
+    calendar: list[str],
+    sessions: list[SessionRecord],
+    symptom: str,
+    rule: DriverRule,
+) -> list[int]:
+    by_date: dict[str, list[SessionRecord]] = {}
+    for session in sessions:
+        by_date.setdefault(session.date, []).append(session)
+
     series: list[int] = []
-    for day in records:
-        has_symptom = symptom in day.feelings
-        has_driver = rule.test(day)
-        if has_symptom and has_driver:
+    for day in calendar:
+        day_sessions = by_date.get(day, [])
+        has_symptom = any(symptom in s.feelings for s in day_sessions)
+        has_both = any(symptom in s.feelings and rule.test(s) for s in day_sessions)
+        if has_both:
             series.append(2)
         elif has_symptom:
             series.append(1)
@@ -296,44 +269,126 @@ def _body(symptom: str, rule: DriverRule, *, n_both: int, n_symptom: int) -> str
     sym = _humanize(symptom).lower()
     driver = _DRIVER_SHORT.get(rule.key, rule.label)
     if n_both >= n_symptom:
-        return f"All {n_symptom} days you logged {sym} lined up with {driver}."
-    return f"{n_both} of {n_symptom} {sym} log days lined up with {driver}."
+        return f"All {n_symptom} times you logged {sym} lined up with {driver}."
+    return f"{n_both} of {n_symptom} {sym} logs lined up with {driver}."
+
+
+def _days_between_inclusive(start_iso: str, end_iso: str) -> int:
+    start = date.fromisoformat(start_iso)
+    end = date.fromisoformat(end_iso)
+    return (end - start).days + 1
+
+
+def _journey_day(all_log_dates: set[str], *, today_iso: str | None = None) -> int:
+    if not all_log_dates:
+        return 0
+    first = min(all_log_dates)
+    end = today_iso or today_local().isoformat()
+    return _days_between_inclusive(first, end)
+
+
+def _pattern_unlock_copy(
+    journey_day: int,
+    *,
+    unlock_days: int = PATTERNS_UNLOCK_DAYS,
+) -> tuple[bool, int, str, str]:
+    """Unlock the Patterns tab after enough days on track from the first feeling log."""
+    days_needed = max(0, unlock_days - journey_day)
+    ready = days_needed == 0
+    if ready:
+        return True, 0, "Patterns unlocked", ""
+    day_word = "day" if days_needed == 1 else "days"
+    headline = f"Patterns unlock after {unlock_days} days on your track"
+    detail = (
+        f"You're on day {journey_day} of your track — "
+        f"{days_needed} more {day_word} to go."
+    )
+    return False, days_needed, headline, detail
+
+
+def _mining_gate_copy(
+    logged_days: int,
+    *,
+    min_logs: int = MIN_LOGS_TO_MINE,
+    window_days: int = PATTERNS_WINDOW_DAYS,
+) -> tuple[bool, int, str]:
+    """Mine relevant patterns only after enough distinct feeling-log days in the window."""
+    logs_needed = max(0, min_logs - logged_days)
+    can_mine = logs_needed == 0
+    if can_mine:
+        return True, 0, ""
+    day_word = "day" if logs_needed == 1 else "days"
+    message = (
+        f"Log feelings on at least {min_logs} days in your last {window_days} days "
+        f"for personalized patterns — you have {logged_days} of {min_logs} "
+        f"({logs_needed} more log {day_word} to go)."
+    )
+    return False, logs_needed, message
 
 
 async def assemble_patterns(user_id: str, *, days: int = RETENTION_DAYS) -> PatternsResponse:
-    store = get_evidence_store()
+    store = get_scenario_store()
     now = datetime.now(timezone.utc)
     span = min(max(1, days), RETENTION_DAYS)
     since = now - timedelta(days=span)
 
-    feelings_by_day = await fetch_daily_feeling_keywords(user_id, since=since)
-    hours_by_day = await _feeling_hours_by_day(user_id, since)
-    daily_docs = await fetch_daily_logs(user_id, since=since, limit=span)
+    all_log_dates = await fetch_log_event_dates(user_id)
+    journey_day = _journey_day(all_log_dates)
 
-    records = _build_day_records(
-        daily_docs,
-        feelings_by_day,
-        hours_by_day,
-        span_days=span,
-        now=now,
+    event_docs = await fetch_log_events(user_id, since=since)
+    sessions = _sessions_from_events(event_docs)
+    calendar = _calendar_days(span, now)
+
+    logged_days = len({s.date for s in sessions})
+    all_symptoms: set[str] = set()
+    for session in sessions:
+        all_symptoms.update(session.feelings)
+
+    ready, logs_needed, unlock_headline, unlock_detail = _pattern_unlock_copy(journey_day)
+    can_mine, mining_logs_needed, mining_message = _mining_gate_copy(
+        logged_days, window_days=span
     )
 
-    logged_days = sum(1 for r in records if r.feelings)
-    all_symptoms: set[str] = set()
-    for r in records:
-        all_symptoms.update(r.feelings)
-
-    if logged_days < MIN_LOGS_REQUIRED:
+    if not ready:
         return PatternsResponse(
             user_id=user_id,
             days=span,
+            window_days=span,
+            journey_day=journey_day,
             log_count=logged_days,
-            min_logs_required=MIN_LOGS_REQUIRED,
+            min_logs_required=PATTERNS_UNLOCK_DAYS,
+            min_logs_to_mine=MIN_LOGS_TO_MINE,
+            ready=False,
+            can_mine=False,
+            logs_needed=logs_needed,
+            mining_logs_needed=mining_logs_needed,
+            unlock_headline=unlock_headline,
+            unlock_detail=unlock_detail,
             patterns=[],
             message=(
-                f"Patterns unlock after {MIN_LOGS_REQUIRED} days of log. "
-                "Keep logging daily to build your track."
+                f"Patterns unlock after {PATTERNS_UNLOCK_DAYS} days on your track. "
+                "Keep logging daily to build your month."
             ),
+            workbook_version=store.workbook_version,
+        )
+
+    if not can_mine:
+        return PatternsResponse(
+            user_id=user_id,
+            days=span,
+            window_days=span,
+            journey_day=journey_day,
+            log_count=logged_days,
+            min_logs_required=PATTERNS_UNLOCK_DAYS,
+            min_logs_to_mine=MIN_LOGS_TO_MINE,
+            ready=True,
+            can_mine=False,
+            logs_needed=0,
+            mining_logs_needed=mining_logs_needed,
+            unlock_headline="Patterns unlocked",
+            unlock_detail=None,
+            patterns=[],
+            message=mining_message,
             workbook_version=store.workbook_version,
         )
 
@@ -342,7 +397,7 @@ async def assemble_patterns(user_id: str, *, days: int = RETENTION_DAYS) -> Patt
 
     for symptom in sorted(all_symptoms):
         for rule in rules:
-            hit = _evaluate(records, symptom, rule)
+            hit = _evaluate(sessions, symptom, rule)
             if hit:
                 candidates.append(hit)
 
@@ -373,7 +428,7 @@ async def assemble_patterns(user_id: str, *, days: int = RETENTION_DAYS) -> Patt
                 n_symptom_days=hit["n_symptom"],
                 baseline_pct=hit["baseline_pct"],
                 chart=chart,  # type: ignore[arg-type]
-                timeline=_timeline_series(records, symptom, rule),
+                timeline=_timeline_series(calendar, sessions, symptom, rule),
                 weekgrid=[],
                 hours=[],
                 cta_label=cta_label,
@@ -393,8 +448,17 @@ async def assemble_patterns(user_id: str, *, days: int = RETENTION_DAYS) -> Patt
     return PatternsResponse(
         user_id=user_id,
         days=span,
+        window_days=span,
+        journey_day=journey_day,
         log_count=logged_days,
-        min_logs_required=MIN_LOGS_REQUIRED,
+        min_logs_required=PATTERNS_UNLOCK_DAYS,
+        min_logs_to_mine=MIN_LOGS_TO_MINE,
+        ready=True,
+        can_mine=True,
+        logs_needed=0,
+        mining_logs_needed=0,
+        unlock_headline="Patterns unlocked",
+        unlock_detail=None,
         patterns=patterns,
         message=message,
         workbook_version=store.workbook_version,

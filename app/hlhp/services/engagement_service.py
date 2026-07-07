@@ -17,8 +17,10 @@ from app.hlhp.composition.vocabulary import symptom_chips
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
 from app.hlhp.services.concern_resolver import resolve_concern_id
 from app.hlhp.core.sfi_driver import bands_snapshot, driver_key_from_env
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
+from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.engagement import (
+    FeelingLogStatus,
     LearnExplainerOut,
     LearnNuggetOut,
     LearnResponse,
@@ -36,7 +38,11 @@ from app.hlhp.models.scan import ScanRequest
 from app.hlhp.services.action_tap_service import run_action_tap
 from app.hlhp.services.daily_log_store import fetch_daily_logs, upsert_user_log_day
 from app.hlhp.services.log_event_store import (
+    FeelingLogCooldownError,
+    assert_feeling_log_allowed,
     count_log_events,
+    fetch_feeling_log_status,
+    fetch_latest_log_session,
     fetch_log_event_dates,
     insert_log_event,
 )
@@ -231,9 +237,10 @@ async def assemble_learn(
             )
         )
 
-    store = get_evidence_store()
+    comp_store = get_composition_store()
+    scenario_store = get_scenario_store()
     now = datetime.now().astimezone()
-    rotation_rows = store.composition.get("daily_nuggets_rotation") or []
+    rotation_rows = comp_store.composition.get("daily_nuggets_rotation") or []
     ranked = pick_learn_nuggets(
         rotation_rows,
         city=resolved_city,
@@ -264,13 +271,13 @@ async def assemble_learn(
         )
 
     if not nuggets:
-        for row in (store.nuggets or [])[:6]:
-            text = getattr(row, "text", None) or (row.get("text") if isinstance(row, dict) else "")
+        for row in (scenario_store.nuggets or [])[:6]:
+            text = row.get("text") if isinstance(row, dict) else ""
             if not str(text).strip():
                 continue
-            nid = int(getattr(row, "id", 0) or (row.get("id") if isinstance(row, dict) else 0) or 0)
-            factor = str(getattr(row, "factor", "") or (row.get("factor") if isinstance(row, dict) else "") or "")
-            source = str(getattr(row, "source", "") or (row.get("source") if isinstance(row, dict) else "") or "")
+            nid = int(row.get("n", 0) or 0)
+            factor = str(row.get("factor") or "")
+            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.5")
             nuggets.append(LearnNuggetOut(id=nid, text=str(text), factor=factor, source=source))
 
     symptom_keywords = [
@@ -303,6 +310,23 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
     when = _parse_dt(body.local_time)
     date_key = calendar_date_key(when)
 
+    latest = await fetch_latest_log_session(body.user_id)
+    last_ts = latest.get("ts") if latest else None
+    try:
+        assert_feeling_log_allowed(last_ts, when)
+    except FeelingLogCooldownError as exc:
+        from app.hlhp.api.errors import feeling_log_cooldown_detail
+        from app.hlhp.services.log_event_store import FEELING_LOG_COOLDOWN_HOURS
+
+        raise HTTPException(
+            status_code=429,
+            detail=feeling_log_cooldown_detail(
+                next_log_at=exc.next_log_at.isoformat(),
+                retry_after_seconds=exc.retry_after_seconds,
+                cooldown_hours=FEELING_LOG_COOLDOWN_HOURS,
+            ),
+        ) from exc
+
     scan_req = ScanRequest(
         user_id=body.user_id,
         city=body.location_city,
@@ -320,6 +344,28 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
     score = calculate_skin_score(env)
     sfi = int(body.outdoor_ok_score if body.outdoor_ok_score is not None else score.total)
     driver = driver_key_from_env(env)
+    sudden_tags = [str(t) for t in (body.sudden_event_tags or []) if t]
+
+    session_id = await insert_log_event(
+        {
+            "ts": when,
+            "date": date_key,
+            "user_id": body.user_id,
+            "symptoms": symptoms,
+            "areas": areas,
+            "sfi": sfi,
+            "action_cluster": body.routine_action.strip() or "Maintain",
+            **band_fields,
+            "driver": driver,
+            "uvi": float(env.uv_index),
+            "temp_c": float(env.temperature_c),
+            "aqi": int(env.aqi),
+            "rh_pct": float(env.humidity_pct),
+            "city": str(body.location_city or env.location_name or ""),
+            "mood_verdict": str(body.mood_verdict or ""),
+            "sudden_event_tags": sudden_tags,
+        }
+    )
 
     for kw in symptoms:
         await record_symptom_feeling(
@@ -327,25 +373,8 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
             kw,
             selected=True,
             recorded_at=when,
+            session_id=session_id,
         )
-
-    logged_doc = {
-        "ts": when,
-        "date": date_key,
-        "user_id": body.user_id,
-        "symptoms": symptoms,
-        "areas": areas,
-        "sfi": sfi,
-        "action_cluster": body.routine_action.strip() or "Maintain",
-        **band_fields,
-        "driver": driver,
-        "uvi": float(env.uv_index),
-        "temp_c": float(env.temperature_c),
-        "aqi": int(env.aqi),
-        "rh_pct": float(env.humidity_pct),
-        "city": str(body.location_city or env.location_name or ""),
-    }
-    await insert_log_event(logged_doc)
 
     await upsert_user_log_day(
         user_id=body.user_id,
@@ -397,10 +426,16 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         symptoms=symptoms,
         areas=areas,
         sfi=sfi,
-        action_cluster=logged_doc["action_cluster"],
+        action_cluster=body.routine_action.strip() or "Maintain",
         temp_band=band_fields["temp_band"],
         uv_band=band_fields["uv_band"],
         aqi_band=band_fields["aqi_band"],
         humidity_band=band_fields["humidity_band"],
     )
-    return UserLogResponse(logged=logged_out, streak=current, longest_streak=longest)
+    log_status = await fetch_feeling_log_status(body.user_id, at=when)
+    return UserLogResponse(
+        logged=logged_out,
+        streak=current,
+        longest_streak=longest,
+        feeling_log=FeelingLogStatus(**log_status),
+    )

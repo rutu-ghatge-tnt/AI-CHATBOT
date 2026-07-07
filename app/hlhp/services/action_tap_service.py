@@ -26,10 +26,10 @@ async def run_action_tap(req: ActionTapRequest) -> ActionTapResponse:
         outdoor_ok_score=req.outdoor_ok_score,
         mood_verdict=str(req.mood_verdict or ""),
         sudden_event_tags=req.sudden_event_tags,
-        uvi=float(env.uvi),
-        temp_c=float(env.temp_c),
+        uvi=float(env.uv_index),
+        temp_c=float(env.temperature_c),
         aqi=int(env.aqi),
-        rh_pct=float(env.rh_pct),
+        rh_pct=float(env.humidity_pct),
         city=str(req.location_city or ""),
     )
     phase = resolve_day_phase(req.current_time)
