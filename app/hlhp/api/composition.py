@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -47,7 +48,20 @@ from app.hlhp.services.engagement_service import (
 )
 from app.hlhp.services.log_event_store import fetch_feeling_log_status
 from app.hlhp.services.history_service import assemble_catchup, assemble_history
-from app.hlhp.services.patterns_service import assemble_patterns
+from app.hlhp.models.patterns_v2 import (
+    PatternAlertToggleRequest,
+    PatternAlertToggleResponse,
+    PatternPushTokenRequest,
+    PatternsNarrationResponse,
+    PatternsPayloadV2,
+    PatternsStateResponseV2,
+)
+from app.hlhp.services.patterns_engine_service import (
+    assemble_patterns_state,
+    recompute_patterns_for_user,
+    toggle_pattern_alert,
+)
+from app.hlhp.services.patterns_narration_service import get_patterns_narration
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.scan_service import resolve_environment
 
@@ -220,14 +234,57 @@ async def history_lane(
     return await assemble_history(uid, days=days)
 
 
-@router.get("/patterns")
+@router.get("/patterns", response_model=PatternsPayloadV2)
 async def patterns_lane(
     user_id: str = Query(...),
-    days: int = Query(30, ge=1, le=30),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternsPayloadV2:
+    """Full Patterns tab payload (v4 UI contract): state, meter, cards, emerging."""
+    uid = verify_client_user_id(user, user_id)
+    payload = await recompute_patterns_for_user(uid)
+    return PatternsPayloadV2(**payload)
+
+
+@router.get("/patterns/state", response_model=PatternsStateResponseV2)
+async def patterns_state_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternsStateResponseV2:
+    uid = verify_client_user_id(user, user_id)
+    payload = await assemble_patterns_state(uid)
+    return PatternsStateResponseV2(**payload)
+
+
+@router.get("/patterns/narration", response_model=PatternsNarrationResponse)
+async def patterns_narration_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternsNarrationResponse:
+    uid = verify_client_user_id(user, user_id)
+    cached = await get_patterns_narration(uid)
+    return PatternsNarrationResponse(**cached)
+
+
+@router.post("/patterns/alert", response_model=PatternAlertToggleResponse)
+async def patterns_alert_lane(
+    body: PatternAlertToggleRequest,
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternAlertToggleResponse:
+    uid = verify_client_user_id(user, body.user_id)
+    result = await toggle_pattern_alert(uid, body.pattern_id, on=body.on)
+    return PatternAlertToggleResponse(**result)
+
+
+@router.post("/patterns/push-token")
+async def patterns_push_token_lane(
+    body: PatternPushTokenRequest,
     user: dict = Depends(hlhp_authenticated_user),
 ):
-    uid = verify_client_user_id(user, user_id)
-    return await assemble_patterns(uid, days=days)
+    uid = verify_client_user_id(user, body.user_id)
+    from app.hlhp.services.pattern_push_store import save_push_token
+
+    await save_push_token(uid, body.token, platform=body.platform)
+    return {"saved": True}
 
 
 @router.get("/catchup")

@@ -65,6 +65,26 @@ async def ensure_hlhp_indexes() -> None:
         nuggets = hl_db["hlhp_nugget_log"]
         await nuggets.create_index([("user_id", 1), ("shown_at", -1)])
 
+        pattern_state = hl_db["hlhp_pattern_state"]
+        await pattern_state.create_index("user_id", unique=True)
+
+        patterns = hl_db["hlhp_patterns"]
+        await patterns.create_index([("user_id", 1), ("driver", 1), ("symptom", 1)])
+
+        narration = hl_db["hlhp_narration_cache"]
+        await narration.create_index([("user_id", 1), ("kind", 1), ("pattern_id", 1)])
+
+        pattern_alerts = hl_db["hlhp_pattern_alerts"]
+        await pattern_alerts.create_index([("user_id", 1), ("pattern_id", 1)], unique=True)
+
+        outbox = hl_db["hlhp_pattern_notification_outbox"]
+        await outbox.create_index([("user_id", 1), ("created_at", -1)])
+        await outbox.create_index([("delivered", 1), ("created_at", -1)])
+
+        push_tokens = hl_db["hlhp_push_tokens"]
+        await push_tokens.create_index([("user_id", 1), ("token", 1)], unique=True)
+        await push_tokens.create_index("updated_at")
+
         _INDEXEnsured = True
         logger.info("HLHP Mongo indexes ensured")
     except Exception as exc:

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>HLHP — Patterns Lifecycle (SkinBB)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<style>
+:root{
+  color-scheme:dark;
+  --background:oklch(0.1650 0.018 265);--foreground:oklch(0.9020 0.012 265);
+  --card:oklch(0.2250 0.020 265);
+  --secondary:oklch(0.1250 0.015 265);--secondary-foreground:oklch(0.8600 0.012 265);
+  --muted:oklch(0.2850 0.018 265);--muted-foreground:oklch(0.6600 0.020 265);
+  --border:oklch(0.3050 0.016 265);
+  --primary:oklch(0.8850 0.045 266);--primary-foreground:oklch(0.9700 0.010 265);
+  --brand:oklch(0.3400 0.075 265);--brand-2:oklch(0.4600 0.090 264);
+  --accent-primary-light:oklch(0.3400 0.055 266);--accent-primary:oklch(0.7050 0.100 266);--accent-primary-dark:oklch(0.8250 0.090 266);
+  --accent-secondary-light:oklch(0.3200 0.045 286);--accent-secondary:oklch(0.7450 0.070 286);--accent-secondary-dark:oklch(0.8550 0.060 286);
+  --accent-tertiary-light:oklch(0.3400 0.060 122);--accent-tertiary:oklch(0.8250 0.150 122);--accent-tertiary-dark:oklch(0.8850 0.170 122);
+  --destructive:oklch(0.6350 0.220 25);
+  --drv-humidity:oklch(0.6850 0.150 250);--drv-uv:oklch(0.6650 0.215 25);--drv-temp:oklch(0.7650 0.150 60);--drv-aqi:oklch(0.6800 0.170 300);--drv-comfort:oklch(0.7500 0.150 145);
+  --hlhp-flame:oklch(0.80 0.15 75);--hlhp-flame-mid:oklch(0.70 0.16 55);
+  --spring:cubic-bezier(0.34,1.56,0.64,1);
+  --font-holiday:"Proxima Nova",ui-sans-serif,system-ui,sans-serif;
+  --font-sans:"Glacial Indifference",ui-sans-serif,system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--secondary);min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 16px 60px;color:var(--foreground);-webkit-font-smoothing:antialiased}
+.holiday{font-family:var(--font-holiday)}
+
+/* state switcher */
+.switcher{width:100%;max-width:460px;background:var(--card);border:.5px solid var(--border);border-radius:16px;padding:12px 14px}
+.switcher-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground);font-weight:700;margin-bottom:8px}
+.switcher-btns{display:flex;flex-wrap:wrap;gap:6px}
+.sw-btn{border:.5px solid var(--border);background:var(--background);color:var(--muted-foreground);font-size:11px;padding:7px 11px;border-radius:999px;cursor:pointer;font-family:inherit;transition:all 180ms}
+.sw-btn:hover{color:var(--primary)}
+.sw-btn.on{background:var(--accent-primary-light);border-color:var(--accent-primary);color:var(--accent-primary-dark);font-weight:600}
+.sw-note{font-size:10.5px;color:var(--muted-foreground);line-height:1.5;margin-top:9px;padding-top:9px;border-top:.5px solid var(--border)}
+
+/* phone frame */
+.frame{width:100%;max-width:440px;background:var(--background);border-radius:28px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden;border:.5px solid var(--border);position:relative;min-height:640px}
+.toolbar{display:flex;padding:11px 16px;border-bottom:.5px solid var(--border);justify-content:space-between;align-items:center}
+.brand{font-size:13px;font-weight:600;color:var(--primary);display:flex;align-items:center;gap:5px}
+.brand i{color:var(--accent-primary-dark)}
+.chip-sfi{background:var(--accent-primary-light);color:var(--accent-primary-dark);font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em}
+.tabs{display:flex;padding:8px 6px 0;gap:2px;border-bottom:.5px solid var(--border);overflow-x:auto}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:1;min-width:52px;padding:8px 4px;text-align:center;font-size:10px;font-weight:500;color:var(--muted-foreground);border-radius:8px 8px 0 0;letter-spacing:.02em}
+.tab.active{background:var(--card);color:var(--primary)}
+.tab i{display:block;font-size:17px;margin-bottom:2px}
+.screen{padding:18px 20px 26px;position:relative;min-height:560px}
+
+/* ==== shared bits ==== */
+.replay-bar{display:flex;justify-content:space-between;align-items:center;padding:2px 0 14px}
+.replay-label{font-size:11px;color:var(--muted-foreground);letter-spacing:.08em;font-weight:500;text-transform:uppercase}
+.sec-lbl{font-size:10px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin:16px 2px 9px}
+
+/* ===== progress / locked ===== */
+.lock-hero{background:linear-gradient(135deg,var(--brand),var(--brand-2));border-radius:16px;padding:16px;color:#fff;text-align:center;position:relative;overflow:hidden}
+.lock-ic{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;margin:2px auto 8px;font-size:24px}
+.lock-title{font-size:16px;font-weight:600}
+.lock-sub{font-size:12px;opacity:.9;line-height:1.5;margin-top:5px}
+.meter-wrap{margin-top:14px;background:var(--card);border:.5px solid var(--border);border-radius:14px;padding:13px 15px}
+.meter-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--secondary-foreground);margin-bottom:7px}
+.meter-row b{color:var(--accent-primary-dark);font-size:13px}
+.meter-track{height:9px;border-radius:5px;background:var(--muted);overflow:hidden}
+.meter-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--accent-primary),var(--accent-primary-dark));transition:width 900ms var(--spring)}
+.meter-fill.full{background:linear-gradient(90deg,var(--accent-tertiary),var(--accent-tertiary-dark))}
+.meter-legend{display:flex;justify-content:space-between;margin-top:8px;font-size:10px;color:var(--muted-foreground)}
+.gate-row{display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:.5px solid var(--border)}
+.gate-row:last-child{border-bottom:none}
+.gate-ic{width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+.gate-ic.done{background:color-mix(in oklch,var(--accent-tertiary) 22%,transparent);color:var(--accent-tertiary-dark)}
+.gate-ic.wait{background:var(--muted);color:var(--muted-foreground)}
+.gate-t{font-size:12px;color:var(--primary);font-weight:500}
+.gate-s{font-size:10.5px;color:var(--muted-foreground);margin-top:1px}
+.generic-card{background:var(--card);border:.5px dashed var(--border);border-radius:14px;padding:13px 15px;margin-top:12px}
+.gc-kick{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);font-weight:700;display:flex;gap:5px;align-items:center}
+.gc-body{font-size:12px;color:var(--secondary-foreground);line-height:1.5;margin-top:5px}
+
+/* ===== unlock celebration overlay ===== */
+.celebrate{position:absolute;inset:0;z-index:40;background:linear-gradient(160deg,var(--brand-2),var(--brand) 60%,color-mix(in oklch,var(--brand) 75%,black));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px 26px;color:#fff;overflow:hidden}
+.cel-burst{position:absolute;width:9px;height:14px;pointer-events:none}
+.cel-badge{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:46px;position:relative;animation:pop 800ms var(--spring) both}
+.cel-badge::after{content:'';position:absolute;inset:-8px;border-radius:50%;border:2px solid rgba(255,255,255,.35);animation:ring 2.4s ease-out infinite}
+.cel-kick{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.8;margin-top:20px;font-weight:600}
+.cel-title{font-size:27px;font-weight:700;margin-top:8px;line-height:1.1}
+.cel-stats{font-size:13.5px;opacity:.92;line-height:1.55;margin-top:12px;max-width:280px}
+.cel-cta{margin-top:24px;padding:13px 30px;background:#fff;color:var(--brand);border:none;border-radius:999px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;gap:8px;align-items:center}
+.cel-skip{margin-top:12px;font-size:11px;opacity:.6;cursor:pointer}
+
+/* ===== hero (post-unlock identity) ===== */
+.id-hero{background:linear-gradient(135deg,var(--brand),var(--brand-2));border-radius:16px;padding:15px 16px;color:#fff;position:relative;overflow:hidden}
+.id-hero.first::before{content:'NEW';position:absolute;top:12px;right:-26px;background:var(--accent-tertiary-dark);color:#fff;font-size:9px;font-weight:800;letter-spacing:.1em;padding:3px 30px;transform:rotate(45deg)}
+.id-kick{font-size:9px;letter-spacing:.1em;text-transform:uppercase;opacity:.85;font-weight:700}
+.id-line{font-size:15.5px;font-weight:600;line-height:1.35;margin-top:5px}
+.id-ai{font-size:9px;opacity:.7;margin-top:9px;display:flex;gap:4px;align-items:center}
+.freshness{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;text-transform:uppercase}
+.fresh-active{background:color-mix(in oklch,var(--accent-tertiary) 18%,transparent);color:var(--accent-tertiary-dark)}
+.fresh-fading{background:color-mix(in oklch,var(--drv-temp) 20%,transparent);color:var(--drv-temp)}
+.fresh-paused{background:var(--muted);color:var(--muted-foreground)}
+
+/* pattern card */
+.pcard{background:var(--card);border:.5px solid var(--border);border-radius:15px;padding:14px 15px;margin-top:11px;position:relative;overflow:hidden;transition:opacity 400ms,filter 400ms}
+.pcard.dim{opacity:.5;filter:grayscale(.6)}
+.ribbon{position:absolute;top:0;right:0;color:#fff;font-size:10px;padding:3px 11px;border-radius:0 15px 0 12px;font-weight:700}
+.pc-title{font-size:13.5px;font-weight:600;color:var(--primary);padding-right:74px;line-height:1.3}
+.pc-narr{font-size:11.5px;color:var(--secondary-foreground);line-height:1.55;margin-top:7px}
+.pc-narr b{color:var(--primary)}
+.timeline{display:flex;gap:3px;height:26px;margin:10px 0 4px}
+.tdot{flex:1;border-radius:3px;background:var(--muted);transform:scaleY(.35);transform-origin:bottom;transition:transform 500ms var(--spring)}
+.tdot.hit{transform:scaleY(1)}
+.tdot.hum{background:linear-gradient(180deg,var(--drv-humidity),color-mix(in oklch,var(--drv-humidity) 65%,black))}
+.tdot.aqi{background:linear-gradient(180deg,var(--drv-aqi),color-mix(in oklch,var(--drv-aqi) 65%,black))}
+.tdot.uv{background:linear-gradient(180deg,var(--drv-uv),color-mix(in oklch,var(--drv-uv) 65%,black))}
+.pc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.pc-meta{font-size:10px;color:var(--muted-foreground);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pc-pmid{color:var(--accent-secondary-dark);font-size:9.5px;border:.5px solid color-mix(in oklch,var(--accent-secondary) 40%,transparent);border-radius:5px;padding:1px 5px}
+.pc-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:999px;color:#fff;font-size:10.5px;border:none;cursor:pointer;font-weight:600;font-family:inherit}
+
+/* emerging list */
+.emerge{background:var(--card);border:.5px solid var(--border);border-radius:12px;padding:11px 13px;margin-top:9px;display:flex;gap:9px;align-items:flex-start}
+.emerge i{color:var(--accent-secondary-dark);font-size:15px;margin-top:1px}
+.emerge-t{font-size:11.5px;color:var(--secondary-foreground);line-height:1.45}
+.emerge-t b{color:var(--primary)}
+
+/* weekly digest strip (regular users) */
+.digest{background:linear-gradient(135deg,var(--accent-tertiary-light),color-mix(in oklch,var(--accent-secondary-light) 60%,var(--card)));border:.5px solid var(--border);border-radius:14px;padding:12px 14px;display:flex;gap:11px;align-items:center}
+.digest-ic{width:34px;height:34px;border-radius:10px;background:var(--accent-tertiary-dark);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.digest-t{font-size:12.5px;font-weight:600;color:var(--primary)}
+.digest-s{font-size:11px;color:var(--secondary-foreground);line-height:1.4;margin-top:2px}
+
+/* fading / paused banner */
+.decay-banner{border-radius:13px;padding:12px 14px;display:flex;gap:11px;align-items:center;margin-bottom:4px}
+.decay-fading{background:color-mix(in oklch,var(--drv-temp) 14%,var(--card));border:.5px solid color-mix(in oklch,var(--drv-temp) 40%,transparent)}
+.decay-paused{background:var(--card);border:.5px solid var(--border)}
+.decay-ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;color:#fff}
+.decay-t{font-size:12.5px;font-weight:600;color:var(--primary)}
+.decay-s{font-size:11px;color:var(--secondary-foreground);line-height:1.45;margin-top:2px}
+
+/* reactivation challenge */
+.react-card{background:linear-gradient(135deg,var(--brand),var(--brand-2));border-radius:16px;padding:15px 16px;color:#fff;text-align:center}
+.react-title{font-size:15px;font-weight:600}
+.react-sub{font-size:11.5px;opacity:.9;line-height:1.5;margin-top:5px}
+.react-dots{display:flex;justify-content:center;gap:10px;margin:14px 0 4px}
+.rdot{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;border:2px solid rgba(255,255,255,.4)}
+.rdot.done{background:#fff;color:var(--brand);border-color:#fff}
+.rdot.todo{background:rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
+.react-foot{font-size:11px;opacity:.85;margin-top:8px}
+.react-cta{margin-top:13px;padding:11px 26px;background:#fff;color:var(--brand);border:none;border-radius:999px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+
+@keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.5);opacity:0}}
+@keyframes fall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(560px) rotate(680deg);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="switcher">
+  <div class="switcher-lbl">Patterns lifecycle — pick a state</div>
+  <div class="switcher-btns" id="sw"></div>
+  <div class="sw-note" id="sw-note"></div>
+</div>
+
+<div class="frame">
+  <div class="toolbar">
+    <div class="brand"><i class="ti ti-sparkles"></i><span class="holiday">HLHP</span><span class="chip-sfi">Patterns</span></div>
+    <div class="freshness" id="fresh" style="display:none"></div>
+  </div>
+  <div class="tabs">
+    <div class="tab"><i class="ti ti-sun"></i>Hello</div>
+    <div class="tab"><i class="ti ti-mood-smile"></i>Log</div>
+    <div class="tab"><i class="ti ti-flame"></i>Streak</div>
+    <div class="tab"><i class="ti ti-calendar-stats"></i>Recap</div>
+    <div class="tab active"><i class="ti ti-bulb"></i>Patterns</div>
+    <div class="tab"><i class="ti ti-book-2"></i>Learn</div>
+  </div>
+  <div class="screen" id="screen"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const STATES=[
+  {k:"locked",   label:"1 · New user (locked)"},
+  {k:"early",    label:"2 · Early signals"},
+  {k:"behind",   label:"3 · Behind pace"},
+  {k:"unlock",   label:"4 · Unlock moment"},
+  {k:"first",    label:"5 · First reveal"},
+  {k:"active",   label:"6 · Regular (active)"},
+  {k:"fading",   label:"7 · Fading"},
+  {k:"paused",   label:"8 · Paused + reactivate"}
+];
+const NOTES={
+  locked:"Days 0–4. Tab is never dead — shows the gate checklist, a live meter, and one generic city pattern so every visit pays something.",
+  early:"≥5 logs, pre-unlock. Candidate patterns appear but are ribboned 'early signal' — honest about low confidence.",
+  behind:"Irregular logger nearing day 30, data short. Copy is no-blame: the rolling window delays, never resets. Nudge capped at 1/week.",
+  unlock:"Fires once, only after the 30-day floor AND 25/30 logs AND 5 exposure days. Identity moment, treated like the 30-day streak.",
+  first:"First view after unlocking. AI narrates the computed stats into a personal story. 'NEW' flag on the hero.",
+  active:"≥20 logs in the rolling window. Weekly digest, sharpening confidence, a new pattern on watch — the healthy steady state.",
+  fading:"12–19 logs. Confidence greys, NEW detection pauses, one 'fading' nudge. Data is never deleted.",
+  paused:"<12 logs. Patterns dimmed but visible. Hero becomes a 3-of-5 reactivation challenge — cheap by design."
+};
+
+/* demo dataset (all numbers would come from the deterministic engine) */
+const P_HUM={driver:"Humidity",band:"High",sym:"breakout",E:12,H:10,match:83,label:"HIGH",col:"var(--drv-humidity)",cls:"hum",pmid:"PMID 31284694",
+  narr:"Your skin telegraphs humidity. In <b>10 of 12</b> sticky days it broke out within a day — <b>cheeks first</b>, and hardest on workdays. Same-weather weekends barely registered.",
+  tl:[0,1,0,1,1,0,1,1,0,1,1,1]};
+const P_SLEEP={driver:"Recovery",band:"Weekend",sym:"calm",E:8,H:7,match:71,label:"MODERATE",col:"var(--accent-tertiary-dark)",cls:"",pmid:"PMID 28869823",
+  narr:"Sleep is your quiet defender. On <b>7 of 8</b> weekends your skin read calm — averaging <b>7.5h</b> vs 5.8h on weekdays.",
+  tl:[1,1,0,1,1,1,0,1]};
+const P_AQI={driver:"Air quality",band:"High",sym:"dullness",E:9,H:6,match:68,label:"MODERATE",col:"var(--drv-aqi)",cls:"aqi",pmid:"PMID 30776417",
+  narr:"Morning dust hits harder than afternoon UV. The <b>9am PM2.5</b> spike explains most of your dullness logs.",
+  tl:[1,0,1,1,0,1,0,1,0]};
+
+function tl(pat,dim){return '<div class="timeline">'+pat.tl.map(h=>'<div class="tdot '+pat.cls+' '+(h?"hit":"")+'"></div>').join('')+'</div>';}
+function pcard(pat,opt){
+  opt=opt||{};
+  return '<div class="pcard'+(opt.dim?" dim":"")+'">'+
+    '<div class="ribbon" style="background:linear-gradient(135deg,'+pat.col+',color-mix(in oklch,'+pat.col+' 70%,black))">'+(opt.ribbon||pat.match+"% match")+'</div>'+
+    '<div class="pc-title">'+pat.title+'</div>'+
+    (opt.narr!==false?'<div class="pc-narr">'+pat.narr+'</div>':'')+
+    tl(pat)+
+    '<div class="pc-foot"><div class="pc-meta"><span style="color:'+pat.col+';font-weight:700">'+pat.label+'</span> · '+pat.H+'/'+pat.E+' days · <span class="pc-pmid">'+pat.pmid+'</span></div>'+
+    (opt.btn!==false?'<button class="pc-btn" style="background:'+pat.col+'"><i class="ti ti-bell-ringing"></i> Alert me</button>':'')+'</div></div>';
+}
+P_HUM.title="Humidity spikes precede your breakouts";
+P_SLEEP.title="Your best window: weekends at home";
+P_AQI.title="Morning dust outweighs afternoon UV";
+
+function setFresh(kind){
+  const f=$("fresh");
+  if(!kind){f.style.display="none";return;}
+  f.style.display="";
+  const map={active:["fresh-active","ti-flame","Live"],fading:["fresh-fading","ti-flame","Fading"],paused:["fresh-paused","ti-player-pause","Paused"]};
+  const m=map[kind];f.className="freshness "+m[0];f.innerHTML='<i class="ti '+m[1]+'"></i>'+m[2];
+}
+
+function burst(host){for(let i=0;i<34;i++){const s=document.createElement("span");s.className="cel-burst";const cols=["var(--accent-tertiary)","var(--accent-secondary)","var(--accent-primary-dark)","var(--hlhp-flame)","#fff"];s.style.background=cols[i%cols.length];s.style.left=(Math.random()*100)+"%";s.style.top="-20px";s.style.animation="fall "+(1.4+Math.random()*1.4)+"s linear "+(Math.random()*0.5)+"s forwards";s.style.borderRadius=Math.random()>.5?"50%":"2px";host.appendChild(s);}}
+
+const RENDER={
+  locked(){
+    setFresh(null);
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="lock-hero"><div class="lock-ic"><i class="ti ti-lock"></i></div>
+      <div class="lock-title">This screen learns you</div>
+      <div class="lock-sub">Log most days for a month — <b>25 of 30</b> — and your personal skin patterns unlock.</div></div>
+    <div class="meter-wrap">
+      <div class="meter-row"><span>Your progress</span><b>3 of 25 logs</b></div>
+      <div class="meter-track"><div class="meter-fill" style="width:12%"></div></div>
+      <div class="meter-legend"><span>Day 4 of your first 30</span><span>Est. unlock: ~26 days</span></div>
+    </div>
+    <div class="sec-lbl">What unlocks it</div>
+    <div class="meter-wrap" style="padding:4px 15px">
+      <div class="gate-row"><div class="gate-ic wait"><i class="ti ti-calendar"></i></div><div><div class="gate-t">30 days of history</div><div class="gate-s">Counts from your first log · 26 to go</div></div></div>
+      <div class="gate-row"><div class="gate-ic wait"><i class="ti ti-checklist"></i></div><div><div class="gate-t">25 logging days</div><div class="gate-s">Within any 30-day window · 22 to go</div></div></div>
+      <div class="gate-row"><div class="gate-ic wait"><i class="ti ti-cloud-storm"></i></div><div><div class="gate-t">A few rough-weather days</div><div class="gate-s">So there's something to learn · 0 of 5</div></div></div>
+    </div>
+    <div class="sec-lbl">Meanwhile, from your city</div>
+    <div class="generic-card"><div class="gc-kick"><i class="ti ti-map-pin"></i> Pune · general</div>
+      <div class="gc-body">Across Pune, humidity spikes tend to precede breakout reports within a day. We'll confirm whether <b>your</b> skin does this as you log.</div></div>`;
+  },
+  early(){
+    setFresh(null);
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="meter-wrap">
+      <div class="meter-row"><span>You're ahead of pace</span><b>18 of 25 logs</b></div>
+      <div class="meter-track"><div class="meter-fill" style="width:72%"></div></div>
+      <div class="meter-legend"><span>Day 21 of 30</span><span>Unlocks ~12 July</span></div>
+    </div>
+    <div class="sec-lbl">Early signals — settling as you log</div>
+    ${pcard(P_HUM,{ribbon:"Early signal",narr:false,btn:false})}
+    ${pcard(P_AQI,{ribbon:"Early signal",narr:false,btn:false})}
+    <div class="generic-card" style="margin-top:12px"><div class="gc-kick"><i class="ti ti-sparkles"></i> Almost there</div>
+      <div class="gc-body">Seven more logging days and these become <b>your</b> confirmed patterns — with the full story behind each.</div></div>`;
+  },
+  behind(){
+    setFresh(null);
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="lock-hero" style="background:linear-gradient(135deg,var(--muted),var(--card))">
+      <div class="lock-ic" style="background:rgba(255,255,255,.08)"><i class="ti ti-clock-pause"></i></div>
+      <div class="lock-title" style="color:var(--primary)">No reset. No penalty.</div>
+      <div class="lock-sub" style="color:var(--secondary-foreground)">You're at <b>14 of 25</b> logs. Your window moves with you — <b>11</b> more logging days and this unlocks.</div></div>
+    <div class="meter-wrap">
+      <div class="meter-row"><span>Rolling 30-day window</span><b>14 of 25 logs</b></div>
+      <div class="meter-track"><div class="meter-fill" style="width:56%"></div></div>
+      <div class="meter-legend"><span>Missed days just stretch the wait</span><span>Tonight's log counts now</span></div>
+    </div>
+    <div class="generic-card" style="margin-top:14px"><div class="gc-kick"><i class="ti ti-heart-handshake"></i> Coach</div>
+      <div class="gc-body">Missed days don't erase progress — they just push the finish line. Save a log tonight and you're one closer, instantly.</div></div>
+    <div class="generic-card"><div class="gc-kick"><i class="ti ti-map-pin"></i> Pune · general</div>
+      <div class="gc-body">While we wait: in your city, morning air quality is the usual culprit behind dull-skin days.</div></div>`;
+  },
+  unlock(){
+    setFresh(null);
+    setTimeout(()=>{const c=document.querySelector(".celebrate");if(c)burst(c);},60);
+    return `<div class="celebrate">
+      <div class="cel-badge"><i class="ti ti-bulb"></i></div>
+      <div class="cel-kick">30 days · 26 logs</div>
+      <div class="cel-title holiday">Your skin<br>has patterns.</div>
+      <div class="cel-stats">We found <b>3</b>. Most people never learn this much about their own skin.</div>
+      <button class="cel-cta" onclick="pick('first')">Meet them <i class="ti ti-arrow-right"></i></button>
+      <div class="cel-skip" onclick="pick('first')">See later</div>
+    </div>
+    <div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>`;
+  },
+  first(){
+    setFresh("active");
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="id-hero first"><div class="id-kick">Your skin, in a sentence</div>
+      <div class="id-line">Humidity-reactive, recovery-strong. Heat and UV barely touch you — but humidity keeps score, and sleep pays you back.</div>
+      <div class="id-ai"><i class="ti ti-sparkles"></i> Written from your 26 logs · updates weekly</div></div>
+    <div class="sec-lbl">3 patterns found</div>
+    ${pcard(P_HUM,{})}
+    ${pcard(P_SLEEP,{})}
+    ${pcard(P_AQI,{})}
+    <div class="sec-lbl">Emerging</div>
+    <div class="emerge"><i class="ti ti-eye-search"></i><div class="emerge-t"><b>Temperature swings → dryness</b> — a faint signal in your logs. Two more confirmations and we can name it.</div></div>`;
+  },
+  active(){
+    setFresh("active");
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="digest"><div class="digest-ic"><i class="ti ti-trending-up"></i></div>
+      <div><div class="digest-t">This week sharpened your patterns</div><div class="digest-s">Humidity confirmed twice more (now 83%), and a new one's on watch.</div></div></div>
+    <div class="id-hero" style="margin-top:11px"><div class="id-kick">Still true this week</div>
+      <div class="id-line">Humidity-reactive, recovery-strong.</div>
+      <div class="id-ai"><i class="ti ti-sparkles"></i> 22 logs in your last 30 days · patterns live</div></div>
+    <div class="sec-lbl">Your confirmed patterns</div>
+    ${pcard(P_HUM,{})}
+    ${pcard(P_SLEEP,{})}
+    ${pcard(P_AQI,{})}
+    <div class="sec-lbl">On watch</div>
+    <div class="emerge"><i class="ti ti-eye-search"></i><div class="emerge-t"><b>Temperature swings → dryness</b> — 3 of 5 confirmations. One good cold snap and this graduates.</div></div>`;
+  },
+  fading(){
+    setFresh("fading");
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="decay-banner decay-fading"><div class="decay-ic" style="background:var(--drv-temp)"><i class="ti ti-flame"></i></div>
+      <div><div class="decay-t">Your patterns are fading</div><div class="decay-s">Only 15 logs this month — <b>4 logs this week</b> keeps them live. Nothing's lost meanwhile.</div></div></div>
+    <div class="id-hero" style="margin-top:11px;opacity:.85"><div class="id-kick">Last confirmed 9 days ago</div>
+      <div class="id-line">Humidity-reactive, recovery-strong.</div>
+      <div class="id-ai"><i class="ti ti-player-pause"></i> New-pattern detection paused until you're back to 20 logs</div></div>
+    <div class="sec-lbl">Frozen at last reading</div>
+    ${pcard(P_HUM,{btn:false})}
+    ${pcard(P_SLEEP,{dim:true,btn:false,narr:false})}
+    ${pcard(P_AQI,{dim:true,btn:false,narr:false})}`;
+  },
+  paused(){
+    setFresh("paused");
+    return `<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="react-card">
+      <div class="react-title">Your patterns are paused — not lost</div>
+      <div class="react-sub">Everything you built is saved. Log <b>3 of the next 5 days</b> to bring them back to life.</div>
+      <div class="react-dots"><div class="rdot done"><i class="ti ti-check"></i></div><div class="rdot done"><i class="ti ti-check"></i></div><div class="rdot todo">3</div><div class="rdot todo">4</div><div class="rdot todo">5</div></div>
+      <div class="react-foot">2 of 3 done · one more day reactivates</div>
+      <button class="react-cta" onclick="pick('active')">Log today</button>
+    </div>
+    <div class="sec-lbl">Paused patterns</div>
+    ${pcard(P_HUM,{dim:true,btn:false,narr:false})}
+    ${pcard(P_SLEEP,{dim:true,btn:false,narr:false})}
+    ${pcard(P_AQI,{dim:true,btn:false,narr:false})}`;
+  }
+};
+
+let cur="locked";
+function pick(k){
+  cur=k;
+  document.querySelectorAll(".sw-btn").forEach(b=>b.classList.toggle("on",b.dataset.k===k));
+  $("sw-note").textContent=NOTES[k];
+  $("screen").innerHTML=RENDER[k]();
+  $("screen").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+(function init(){
+  const sw=$("sw");
+  STATES.forEach(s=>{const b=document.createElement("button");b.className="sw-btn";b.dataset.k=s.k;b.textContent=s.label;b.onclick=()=>pick(s.k);sw.appendChild(b);});
+  pick("locked");
+})();
+</script>
+</body>
+</html>

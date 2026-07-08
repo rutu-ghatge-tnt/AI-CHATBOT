@@ -60,6 +60,31 @@ _CITY_REGION_ALIASES: dict[str, frozenset[str]] = {
     "coastal": frozenset(
         {"goa", "mumbai", "chennai", "kochi", "kerala", "mangalore", "visakhapatnam", "puducherry"}
     ),
+    "north_india": frozenset(
+        {"delhi", "ncr", "new delhi", "gurgaon", "gurugram", "noida", "faridabad", "ghaziabad",
+         "chandigarh", "punjab", "haryana", "himachal", "shimla", "jammu", "lucknow", "jaipur"}
+    ),
+}
+
+# Macro regions implied by primary city keys (used for workbook scopes like "north_india").
+_CITY_MACRO_REGIONS: dict[str, frozenset[str]] = {
+    "delhi": frozenset({"north_india", "ncr"}),
+    "mumbai": frozenset({"coastal", "maharashtra"}),
+    "pune": frozenset({"deccan", "maharashtra"}),
+    "bangalore": frozenset({"deccan", "south_india"}),
+    "hyderabad": frozenset({"deccan", "south_india"}),
+    "chennai": frozenset({"coastal", "south_india"}),
+    "kolkata": frozenset({"east_india"}),
+    "goa": frozenset({"coastal"}),
+}
+
+_SCOPE_TOKEN_ALIASES: dict[str, str] = {
+    "north india": "north_india",
+    "north_india": "north_india",
+    "ncr": "delhi",
+    "pan-india": "pan_india",
+    "pan_india": "pan_india",
+    "pan-india urban": "pan_india",
 }
 
 
@@ -73,7 +98,10 @@ def _user_city_regions(city: str) -> set[str]:
             continue
         if any(alias in blob or alias in tokens for alias in aliases):
             regions.add(region)
-    return regions
+    expanded = set(regions)
+    for region in regions:
+        expanded |= _CITY_MACRO_REGIONS.get(region, frozenset())
+    return expanded
 
 
 def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
@@ -82,7 +110,7 @@ def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
     if scope and "pan-india" not in scope.lower() and scope.lower() != "any":
         regions: set[str] = set()
         for part in scope.lower().replace(";", ",").split(","):
-            key = part.strip()
+            key = _SCOPE_TOKEN_ALIASES.get(part.strip(), part.strip())
             if key in _CITY_REGION_ALIASES:
                 regions.add(key)
             elif key:
@@ -92,10 +120,20 @@ def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
     text = str(row.get("nugget_text") or "").lower()
     if text.startswith("mumbai ") or "mumbai monsoon" in text:
         return {"mumbai"}
-    if text.startswith("delhi ") or "skin in ncr" in text:
-        return {"delhi"}
+    if text.startswith("delhi ") or "skin in ncr" in text or " in ncr " in text:
+        return {"delhi", "north_india"}
+    if "north india" in text:
+        return {"north_india", "delhi"}
     if "goa, mumbai, chennai" in text or "coastal karnataka" in text:
         return {"coastal", "mumbai", "chennai", "goa"}
+    if text.startswith("pune ") or " in pune " in text:
+        return {"pune"}
+    if text.startswith("bangalore ") or "bengaluru" in text:
+        return {"bangalore"}
+    if text.startswith("hyderabad ") or " in hyderabad " in text:
+        return {"hyderabad"}
+    if text.startswith("chennai ") or " in chennai " in text:
+        return {"chennai"}
     return None
 
 

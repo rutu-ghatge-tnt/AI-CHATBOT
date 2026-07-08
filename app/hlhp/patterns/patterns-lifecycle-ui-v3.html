@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>HLHP — Patterns (simple + motion + sound)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<style>
+:root{
+  color-scheme:dark;
+  --background:oklch(0.1650 0.018 265);--foreground:oklch(0.9020 0.012 265);
+  --card:oklch(0.2250 0.020 265);
+  --secondary:oklch(0.1250 0.015 265);--secondary-foreground:oklch(0.8600 0.012 265);
+  --muted:oklch(0.2850 0.018 265);--muted-foreground:oklch(0.6600 0.020 265);
+  --border:oklch(0.3050 0.016 265);
+  --primary:oklch(0.8850 0.045 266);--primary-foreground:oklch(0.9700 0.010 265);
+  --brand:oklch(0.3400 0.075 265);--brand-2:oklch(0.4600 0.090 264);
+  --accent-primary-light:oklch(0.3400 0.055 266);--accent-primary:oklch(0.7050 0.100 266);--accent-primary-dark:oklch(0.8250 0.090 266);
+  --accent-secondary-light:oklch(0.3200 0.045 286);--accent-secondary:oklch(0.7450 0.070 286);--accent-secondary-dark:oklch(0.8550 0.060 286);
+  --accent-tertiary-light:oklch(0.3400 0.060 122);--accent-tertiary:oklch(0.8250 0.150 122);--accent-tertiary-dark:oklch(0.8850 0.170 122);
+  --destructive:oklch(0.6350 0.220 25);
+  --drv-humidity:oklch(0.6850 0.150 250);--drv-uv:oklch(0.6650 0.215 25);--drv-temp:oklch(0.7650 0.150 60);--drv-aqi:oklch(0.6800 0.170 300);--drv-comfort:oklch(0.7500 0.150 145);
+  --hlhp-flame:oklch(0.80 0.15 75);--hlhp-flame-mid:oklch(0.70 0.16 55);
+  --spring:cubic-bezier(0.34,1.56,0.64,1);
+  --font-holiday:"Proxima Nova",ui-sans-serif,system-ui,sans-serif;
+  --font-sans:"Glacial Indifference",ui-sans-serif,system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--secondary);min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 16px 60px;color:var(--foreground);-webkit-font-smoothing:antialiased}
+.holiday{font-family:var(--font-holiday)}
+
+.switcher{width:100%;max-width:460px;background:var(--card);border:.5px solid var(--border);border-radius:16px;padding:12px 14px}
+.switcher-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground);font-weight:700;margin-bottom:8px}
+.switcher-btns{display:flex;flex-wrap:wrap;gap:6px}
+.sw-btn{border:.5px solid var(--border);background:var(--background);color:var(--muted-foreground);font-size:11px;padding:7px 11px;border-radius:999px;cursor:pointer;font-family:inherit;transition:all 180ms}
+.sw-btn:hover{color:var(--primary)}
+.sw-btn.on{background:var(--accent-primary-light);border-color:var(--accent-primary);color:var(--accent-primary-dark);font-weight:600}
+.sw-note{font-size:10.5px;color:var(--muted-foreground);line-height:1.5;margin-top:9px;padding-top:9px;border-top:.5px solid var(--border)}
+
+.frame{width:100%;max-width:440px;background:var(--background);border-radius:28px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden;border:.5px solid var(--border);position:relative;min-height:640px}
+.toolbar{display:flex;padding:11px 16px;border-bottom:.5px solid var(--border);justify-content:space-between;align-items:center}
+.brand{font-size:13px;font-weight:600;color:var(--primary);display:flex;align-items:center;gap:5px}
+.brand i{color:var(--accent-primary-dark)}
+.chip-sfi{background:var(--accent-primary-light);color:var(--accent-primary-dark);font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em}
+.tb-right{display:flex;gap:6px;align-items:center}
+.sound-toggle{background:transparent;border:.5px solid var(--border);padding:5px 9px;border-radius:8px;cursor:pointer;font-size:11px;color:var(--primary);display:flex;align-items:center;gap:4px;font-family:inherit}
+.sound-toggle.muted{color:var(--muted-foreground)}
+.freshness{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;text-transform:uppercase}
+.fresh-active{background:color-mix(in oklch,var(--accent-tertiary) 18%,transparent);color:var(--accent-tertiary-dark)}
+.fresh-fading{background:color-mix(in oklch,var(--drv-temp) 20%,transparent);color:var(--drv-temp)}
+.fresh-paused{background:var(--muted);color:var(--muted-foreground)}
+.tabs{display:flex;padding:8px 6px 0;gap:2px;border-bottom:.5px solid var(--border);overflow-x:auto}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:1;min-width:52px;padding:8px 4px;text-align:center;font-size:10px;font-weight:500;color:var(--muted-foreground);border-radius:8px 8px 0 0}
+.tab.active{background:var(--card);color:var(--primary)}
+.tab i{display:block;font-size:17px;margin-bottom:2px}
+.screen{padding:18px 20px 26px;position:relative;min-height:560px;overflow:hidden}
+
+/* entrance animation utility — elements get .rise then JS adds .in staggered */
+.rise{opacity:0;transform:translateY(16px);transition:opacity 520ms var(--spring),transform 520ms var(--spring)}
+.rise.in{opacity:1;transform:translateY(0)}
+
+.replay-bar{display:flex;justify-content:space-between;align-items:center;padding:2px 0 12px}
+.replay-label{font-size:11px;color:var(--muted-foreground);letter-spacing:.08em;font-weight:500;text-transform:uppercase}
+.sec-lbl{font-size:10px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin:16px 2px 9px}
+
+/* ===== simple hero ===== */
+.hero{border-radius:18px;padding:16px;color:#fff;position:relative;overflow:hidden;text-align:center}
+.hero-brand{background:linear-gradient(135deg,var(--brand),var(--brand-2))}
+.hero-emoji{font-size:34px;line-height:1}
+.hero-title{font-size:17px;font-weight:700;margin-top:7px;line-height:1.2}
+.hero-sub{font-size:12.5px;opacity:.92;line-height:1.5;margin-top:6px}
+
+/* ===== big simple meter (ring style, easier to read than a bar) ===== */
+.big-meter{display:flex;flex-direction:column;align-items:center;margin-top:14px}
+.bm-ring{position:relative;width:150px;height:150px}
+.bm-ring svg{transform:rotate(-90deg)}
+.bm-track{fill:none;stroke:var(--muted);stroke-width:13}
+.bm-prog{fill:none;stroke-width:13;stroke-linecap:round;stroke:var(--accent-primary-dark);stroke-dasharray:0 999;transition:stroke-dasharray 1400ms var(--spring)}
+.bm-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.bm-num{font-size:38px;font-weight:800;color:var(--primary);line-height:1}
+.bm-of{font-size:11px;color:var(--muted-foreground);margin-top:2px}
+.bm-cap{font-size:12px;color:var(--secondary-foreground);margin-top:10px;text-align:center;line-height:1.5}
+.bm-cap b{color:var(--accent-primary-dark)}
+
+/* ===== 3-step checklist, plain ===== */
+.steps{background:var(--card);border:.5px solid var(--border);border-radius:16px;padding:5px 15px;margin-top:14px}
+.step{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:.5px solid var(--border)}
+.step:last-child{border-bottom:none}
+.step-ic{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all 300ms var(--spring)}
+.step-ic.done{background:var(--accent-tertiary-dark);color:#fff}
+.step-ic.wait{background:var(--muted);color:var(--muted-foreground)}
+.step-t{font-size:13px;color:var(--primary);font-weight:600}
+.step-s{font-size:11px;color:var(--muted-foreground);margin-top:1px}
+.step-chk{margin-left:auto;font-size:18px}
+.step-chk.done{color:var(--accent-tertiary-dark)}
+.step-chk.wait{color:var(--muted-foreground);opacity:.4}
+
+/* ===== the plain-language "equation" pattern card ===== */
+.pat{background:var(--card);border:.5px solid var(--border);border-radius:18px;padding:0 0 14px;margin-top:12px;position:relative;overflow:hidden;transition:opacity 400ms,filter 400ms;border-top:3px solid var(--patCol,var(--accent-primary))}
+.pat.dim{opacity:.5;filter:grayscale(.6)}
+/* colourful driver-tinted header */
+.pat-head{padding:13px 15px 12px;background:linear-gradient(180deg,color-mix(in oklch,var(--patCol) 16%,var(--card)),var(--card))}
+.pat-body{padding:12px 15px 0}
+.pat-eq{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:4px}
+.eq-box{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;max-width:98px}
+.eq-ic{width:48px;height:48px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:23px;color:#fff;transition:transform 400ms var(--spring);box-shadow:0 4px 12px color-mix(in oklch,var(--patCol) 40%,transparent)}
+.eq-ic.skin{background:linear-gradient(135deg,var(--accent-secondary),var(--accent-secondary-dark))!important;box-shadow:0 4px 12px color-mix(in oklch,var(--accent-secondary) 35%,transparent)}
+.eq-lbl{font-size:10.5px;color:var(--secondary-foreground);text-align:center;line-height:1.25;font-weight:600}
+.eq-op{font-size:22px;color:var(--patCol);font-weight:400;flex-shrink:0}
+.pat-say{font-size:13.5px;font-weight:700;color:var(--primary);text-align:center;margin-top:10px;line-height:1.35}
+/* the bar graph — day-by-day, animated */
+.bars-wrap{margin-top:12px}
+.bars-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.bars-cap{font-size:9.5px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.bars-score{font-size:11px;font-weight:800;color:var(--patCol)}
+.bars{display:flex;align-items:flex-end;gap:3px;height:44px}
+.bar{flex:1;border-radius:3px 3px 0 0;transform:scaleY(0);transform-origin:bottom;transition:transform 480ms var(--spring)}
+.bar.hit{background:linear-gradient(180deg,var(--patCol),color-mix(in oklch,var(--patCol) 62%,black))}
+.bar.miss{background:var(--muted)}
+.bar.grow{transform:scaleY(1)}
+.bars-axis{display:flex;justify-content:space-between;margin-top:4px;font-size:8.5px;color:var(--muted-foreground)}
+.pat-plain{font-size:11.5px;color:var(--secondary-foreground);line-height:1.55;margin-top:11px;text-align:center}
+.pat-plain b{color:var(--primary)}
+/* confidence as simple dots, coloured to the driver */
+.conf{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:12px}
+.conf-dots{display:flex;gap:4px}
+.cdot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:all 300ms var(--spring);transform:scale(1)}
+.cdot.on{background:var(--patCol);transform:scale(1.15)}
+.conf-lbl{font-size:10px;color:var(--muted-foreground);font-weight:600}
+.conf-tag{font-size:10px;font-weight:800;color:var(--patCol)}
+.pat-foot{display:flex;justify-content:center;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.pat-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:999px;color:#fff;font-size:11.5px;border:none;cursor:pointer;font-weight:700;font-family:inherit;transition:transform 150ms;box-shadow:0 4px 12px color-mix(in oklch,var(--patCol) 35%,transparent)}
+.pat-btn:active{transform:scale(.94)}
+.pat-src{font-size:9px;color:var(--muted-foreground);opacity:.7}
+
+/* emerging */
+.emerge{background:var(--card);border:.5px dashed var(--border);border-radius:14px;padding:12px 14px;margin-top:10px;display:flex;gap:10px;align-items:center}
+.emerge i{color:var(--accent-secondary-dark);font-size:18px}
+.emerge-t{font-size:11.5px;color:var(--secondary-foreground);line-height:1.45}
+.emerge-t b{color:var(--primary)}
+
+/* digest */
+.digest{background:linear-gradient(135deg,var(--accent-tertiary-light),color-mix(in oklch,var(--accent-secondary-light) 55%,var(--card)));border:.5px solid var(--border);border-radius:15px;padding:13px 15px;display:flex;gap:12px;align-items:center}
+.digest-ic{width:36px;height:36px;border-radius:11px;background:var(--accent-tertiary-dark);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.digest-t{font-size:13px;font-weight:700;color:var(--primary)}
+.digest-s{font-size:11px;color:var(--secondary-foreground);line-height:1.4;margin-top:2px}
+
+/* decay banners */
+.decay{border-radius:15px;padding:13px 15px;display:flex;gap:12px;align-items:center;margin-bottom:4px}
+.decay-fading{background:color-mix(in oklch,var(--drv-temp) 14%,var(--card));border:.5px solid color-mix(in oklch,var(--drv-temp) 40%,transparent)}
+.decay-ic{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#fff}
+.decay-t{font-size:13px;font-weight:700;color:var(--primary)}
+.decay-s{font-size:11px;color:var(--secondary-foreground);line-height:1.45;margin-top:2px}
+
+/* reactivation */
+.react{background:linear-gradient(135deg,var(--brand),var(--brand-2));border-radius:18px;padding:16px;color:#fff;text-align:center}
+.react-title{font-size:16px;font-weight:700}
+.react-sub{font-size:12px;opacity:.92;line-height:1.5;margin-top:6px}
+.react-dots{display:flex;justify-content:center;gap:11px;margin:16px 0 6px}
+.rdot{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;border:2px solid rgba(255,255,255,.4);transition:all 400ms var(--spring)}
+.rdot.done{background:#fff;color:var(--brand);border-color:#fff}
+.rdot.pulse{animation:pulseRing 1.6s ease-in-out infinite}
+.rdot.todo{background:rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
+.react-cta{margin-top:14px;padding:12px 30px;background:#fff;color:var(--brand);border:none;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;transition:transform 150ms}
+.react-cta:active{transform:scale(.95)}
+
+/* celebration */
+.celebrate{position:absolute;inset:0;z-index:40;background:linear-gradient(160deg,var(--brand-2),var(--brand) 60%,color-mix(in oklch,var(--brand) 75%,black));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:34px 26px;color:#fff;overflow:hidden}
+.cel-burst{position:absolute;width:9px;height:14px;pointer-events:none}
+.cel-badge{width:104px;height:104px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:50px;position:relative;animation:pop 800ms var(--spring) both}
+.cel-badge::after{content:'';position:absolute;inset:-9px;border-radius:50%;border:2px solid rgba(255,255,255,.35);animation:ring 2.4s ease-out infinite}
+.cel-kick{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.85;margin-top:22px;font-weight:600}
+.cel-title{font-size:28px;font-weight:800;margin-top:8px;line-height:1.08}
+.cel-stats{font-size:14px;opacity:.94;line-height:1.55;margin-top:12px;max-width:280px}
+.cel-cta{margin-top:26px;padding:14px 32px;background:#fff;color:var(--brand);border:none;border-radius:999px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:inline-flex;gap:8px;align-items:center;animation:breathe 2.2s ease-in-out infinite}
+.cel-skip{margin-top:13px;font-size:11px;opacity:.6;cursor:pointer}
+
+@keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.14)}100%{transform:scale(1);opacity:1}}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.55);opacity:0}}
+@keyframes fall{0%{transform:translateY(-24px) rotate(0);opacity:1}100%{transform:translateY(580px) rotate(700deg);opacity:0}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes pulseRing{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.4)}50%{box-shadow:0 0 0 9px rgba(255,255,255,0)}}
+@keyframes wob{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.rise{transition:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<div class="switcher">
+  <div class="switcher-lbl">Patterns lifecycle — pick a state</div>
+  <div class="switcher-btns" id="sw"></div>
+  <div class="sw-note" id="sw-note"></div>
+</div>
+
+<div class="frame">
+  <div class="toolbar">
+    <div class="brand"><i class="ti ti-sparkles"></i><span class="holiday">HLHP</span><span class="chip-sfi">Patterns</span></div>
+    <div class="tb-right">
+      <span class="freshness" id="fresh" style="display:none"></span>
+      <button class="sound-toggle" id="sound-btn"><i class="ti ti-volume" id="sound-ico"></i> <span id="sound-lbl">sound</span></button>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab"><i class="ti ti-sun"></i>Hello</div>
+    <div class="tab"><i class="ti ti-mood-smile"></i>Log</div>
+    <div class="tab"><i class="ti ti-flame"></i>Streak</div>
+    <div class="tab"><i class="ti ti-calendar-stats"></i>Recap</div>
+    <div class="tab active"><i class="ti ti-bulb"></i>Patterns</div>
+    <div class="tab"><i class="ti ti-book-2"></i>Learn</div>
+  </div>
+  <div class="screen" id="screen"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+/* ---------- sound engine (Web Audio, no files) ---------- */
+let ac=null,muted=false;
+function actx(){if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return null;}}return ac;}
+function tone(f,d,type,g,when,glideTo){const c=actx();if(!c)return;const t=c.currentTime+(when||0);
+  const o=c.createOscillator(),ga=c.createGain();o.type=type||"sine";o.frequency.setValueAtTime(f,t);
+  if(glideTo)o.frequency.exponentialRampToValueAtTime(glideTo,t+d);
+  ga.gain.setValueAtTime(0,t);ga.gain.linearRampToValueAtTime(g||0.05,t+0.012);ga.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(ga);ga.connect(c.destination);o.start(t);o.stop(t+d+0.02);}
+function chord(fs,d,type,g){fs.forEach((f,i)=>tone(f,d,type||"sine",g||0.04,i*0.02));}
+function sfx(name){
+  if(muted)return;const c=actx();if(c&&c.state==="suspended")c.resume();
+  if(name==="tap")tone(420,0.08,"sine",0.05);
+  else if(name==="reveal")tone(560,0.16,"sine",0.05,0,780);
+  else if(name==="pop")tone(700,0.1,"triangle",0.06,0,1040);
+  else if(name==="count")tone(880,0.05,"sine",0.03);
+  else if(name==="chime"){chord([523,659,784],0.5,"sine",0.05);}                 /* pattern confirmed */
+  else if(name==="unlock"){chord([392,523,659,784],0.7,"sine",0.06);setTimeout(()=>chord([523,659,784,1047],0.9,"sine",0.05),260);}
+  else if(name==="fade")tone(360,0.3,"sine",0.05,0,240);
+  else if(name==="wake"){tone(440,0.14,"sine",0.05,0,660);tone(660,0.16,"sine",0.05,0.1,880);}
+}
+$("sound-btn").onclick=()=>{muted=!muted;$("sound-btn").classList.toggle("muted",muted);$("sound-ico").className="ti "+(muted?"ti-volume-off":"ti-volume");$("sound-lbl").textContent=muted?"muted":"sound";if(!muted)sfx("tap");};
+
+/* ---------- staggered reveal ---------- */
+function reveal(root,gap,startSound){
+  const items=[...root.querySelectorAll(".rise")];
+  items.forEach((el,i)=>setTimeout(()=>{el.classList.add("in");
+    if(el.dataset.sfx)sfx(el.dataset.sfx);
+  },140+i*(gap||110)));
+}
+function ringDash(sel,pct){const el=document.querySelector(sel);if(!el)return;const C=2*Math.PI*67;el.style.strokeDasharray="0 "+C;setTimeout(()=>el.style.strokeDasharray=(C*pct/100)+" "+C,180);}
+function countUp(sel,target,dur){const el=document.querySelector(sel);if(!el)return;const s=performance.now();
+  function step(now){const t=Math.min(1,(now-s)/dur);const e=1-Math.pow(1-t,3);el.textContent=Math.round(target*e);
+    if(!muted&&Math.round(target*e)%6===0)sfx("count");if(t<1)requestAnimationFrame(step);else el.textContent=target;}requestAnimationFrame(step);}
+function fillConf(root){root.querySelectorAll(".conf").forEach(c=>{const n=+c.dataset.on;const dots=c.querySelectorAll(".cdot");
+  dots.forEach((d,i)=>setTimeout(()=>{if(i<n){d.classList.add("on");}},700+i*90));});}
+
+function burst(host){for(let i=0;i<36;i++){const s=document.createElement("span");s.className="cel-burst";const cols=["var(--accent-tertiary)","var(--accent-secondary)","var(--accent-primary-dark)","var(--hlhp-flame)","#fff"];s.style.background=cols[i%cols.length];s.style.left=(Math.random()*100)+"%";s.style.top="-24px";s.style.animation="fall "+(1.5+Math.random()*1.5)+"s linear "+(Math.random()*0.5)+"s forwards";s.style.borderRadius=Math.random()>.5?"50%":"2px";host.appendChild(s);}}
+
+/* ---------- data (plain-language equation cards) ---------- */
+function confDots(n){return '<div class="conf" data-on="'+n+'"><span class="conf-lbl">How sure</span><div class="conf-dots">'+
+  Array.from({length:5},(_,i)=>'<span class="cdot"></span>').join('')+'</div><span class="conf-tag">'+
+  (n>=5?"Very sure":n>=4?"Fairly sure":"Early")+'</span></div>';}
+
+function barGraph(p){
+  const bars=p.tl.map(h=>'<div class="bar '+(h?"hit":"miss")+'"></div>').join('');
+  const hits=p.tl.filter(x=>x).length,tot=p.tl.length;
+  return '<div class="bars-wrap">'+
+    '<div class="bars-top"><span class="bars-cap">'+p.barCap+'</span><span class="bars-score">'+hits+' of '+tot+' days</span></div>'+
+    '<div class="bars">'+bars+'</div>'+
+    '<div class="bars-axis"><span>'+p.axisL+'</span><span>'+p.axisR+'</span></div></div>';
+}
+function eqCard(p,opt){
+  opt=opt||{};
+  const tint='--patCol:'+p.col+';';
+  return '<div class="pat rise'+(opt.dim?" dim":"")+'" style="'+tint+'" data-sfx="'+(opt.dim?"":"chime")+'">'+
+    '<div class="pat-head">'+
+      '<div class="pat-eq">'+
+        '<div class="eq-box"><div class="eq-ic" style="background:linear-gradient(135deg,'+p.col+',color-mix(in oklch,'+p.col+' 70%,black))"><i class="ti '+p.wIcon+'"></i></div><div class="eq-lbl">'+p.wLabel+'</div></div>'+
+        '<div class="eq-op"><i class="ti ti-arrow-right"></i></div>'+
+        '<div class="eq-box"><div class="eq-ic skin"><i class="ti '+p.sIcon+'"></i></div><div class="eq-lbl">'+p.sLabel+'</div></div>'+
+      '</div>'+
+      '<div class="pat-say">'+p.say+'</div>'+
+    '</div>'+
+    '<div class="pat-body">'+
+      (opt.bars!==false?barGraph(p):'')+
+      (opt.plain!==false?'<div class="pat-plain">'+p.plain+'</div>':'')+
+      confDots(opt.conf!==undefined?opt.conf:p.conf)+
+      '<div class="pat-foot">'+
+        (opt.btn!==false?'<button class="pat-btn" style="background:'+p.col+'" onclick="sfx(\'pop\')"><i class="ti ti-bell-ringing"></i> Warn me next time</button>':'')+
+        '<span class="pat-src">'+p.src+'</span>'+
+      '</div></div></div>';
+}
+function growBars(root){
+  root.querySelectorAll(".pat").forEach(card=>{
+    const bars=[...card.querySelectorAll(".bar")];
+    bars.forEach((b,i)=>setTimeout(()=>{b.classList.add("grow");if(b.classList.contains("hit")&&!muted&&i%2===0)sfx("count");},760+i*55));
+  });
+}
+
+const HUM={col:"var(--drv-humidity)",wIcon:"ti-droplet",wLabel:"Sticky, humid days",sIcon:"ti-mood-sad",sLabel:"Breakouts",conf:5,
+  say:"Humid days → breakouts, usually next day",
+  plain:"Happened <b>10 of the last 12</b> humid days — on your <b>cheeks first</b>. Weekends with the same weather barely showed it.",
+  barCap:"Humid days last month",axisL:"4 wks ago",axisR:"now",
+  tl:[0,1,0,1,1,0,1,1,0,1,1,1],
+  src:"Based on your 26 logs · PMID 31284694"};
+const SLEEP={col:"var(--accent-tertiary-dark)",wIcon:"ti-moon",wLabel:"Restful weekends",sIcon:"ti-mood-happy",sLabel:"Calm skin",conf:4,
+  say:"More sleep → calmer skin",
+  plain:"On <b>7 of 8</b> weekends your skin read calm — you sleep about <b>7.5h</b> then, vs 5.8h on weekdays.",
+  barCap:"Weekends tracked",axisL:"8 wks ago",axisR:"now",
+  tl:[1,1,0,1,1,1,0,1],
+  src:"Based on your 26 logs · PMID 28869823"};
+const AQI={col:"var(--drv-aqi)",wIcon:"ti-wind",wLabel:"Dusty mornings",sIcon:"ti-circle-half-2",sLabel:"Dull skin",conf:4,
+  say:"Morning dust → dullness",
+  plain:"The <b>9am air</b> matters more than afternoon sun for you — most dull days trace back to it.",
+  barCap:"Dusty mornings last month",axisL:"4 wks ago",axisR:"now",
+  tl:[1,0,1,1,0,1,0,1,0],
+  src:"Based on your 26 logs · PMID 30776417"};
+
+/* ---------- renders ---------- */
+const STATES=[
+  {k:"locked",label:"1 · New (locked)"},{k:"early",label:"2 · Early signals"},
+  {k:"behind",label:"3 · Behind pace"},{k:"unlock",label:"4 · Unlock 🎉"},
+  {k:"first",label:"5 · First reveal"},{k:"active",label:"6 · Regular"},
+  {k:"fading",label:"7 · Fading"},{k:"paused",label:"8 · Paused"}
+];
+const NOTES={
+  locked:"Plain 3-step checklist + a big ring meter instead of a bar. Every visit shows how close they are. Soft sounds on each step reveal.",
+  early:"Cards appear but say 'still checking' — honest. Reveal chime is softer than a confirmed pattern.",
+  behind:"No-blame ring + coach line. The number ticks up so progress feels alive even when behind.",
+  unlock:"Two-note rising chime + confetti. One tap to meet the patterns.",
+  first:"Each pattern is a picture equation: weather icon → skin icon → one plain sentence. Confidence shown as dots ('How sure'), not %. Cards chime in one by one.",
+  active:"Same simple cards, plus a happy digest strip. Confirmed sound repeats the good-news chime.",
+  fading:"Cards grey out with a downward tone. Copy stays kind — nothing is lost.",
+  paused:"Cards sleep; a friendly 3-of-5 challenge wakes them. 'Log today' plays a wake-up sound."
+};
+
+const RENDER={
+  locked(){
+    setFresh(null);
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="hero hero-brand rise" data-sfx="reveal"><div class="hero-emoji">🔒</div>
+      <div class="hero-title">This screen learns you</div>
+      <div class="hero-sub">Log on most days for a month and we'll show you what sets off your skin.</div></div>
+    <div class="big-meter rise">
+      <div class="bm-ring"><svg width="150" height="150" viewBox="0 0 150 150"><circle class="bm-track" cx="75" cy="75" r="67"/><circle class="bm-prog" id="bmp" cx="75" cy="75" r="67"/></svg>
+        <div class="bm-center"><div class="bm-num"><span id="bmn">0</span></div><div class="bm-of">of 25 logs</div></div></div>
+      <div class="bm-cap">You've logged <b>3 days</b>. About <b>3 weeks</b> to go — keep going!</div>
+    </div>
+    <div class="sec-lbl">3 simple steps</div>
+    <div class="steps">
+      <div class="step rise"><div class="step-ic wait"><i class="ti ti-calendar"></i></div><div><div class="step-t">Stay a month</div><div class="step-s">26 days left</div></div><i class="ti ti-clock step-chk wait"></i></div>
+      <div class="step rise"><div class="step-ic wait"><i class="ti ti-checklist"></i></div><div><div class="step-t">Log 25 days</div><div class="step-s">22 to go</div></div><i class="ti ti-clock step-chk wait"></i></div>
+      <div class="step rise"><div class="step-ic wait"><i class="ti ti-cloud-storm"></i></div><div><div class="step-t">A few rough-weather days</div><div class="step-s">so there's something to spot</div></div><i class="ti ti-clock step-chk wait"></i></div>
+    </div>`;
+    after(()=>{ringDash("#bmp",12);countUp("#bmn",3,1200);});
+    return html;
+  },
+  early(){
+    setFresh(null);
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="big-meter rise">
+      <div class="bm-ring"><svg width="150" height="150" viewBox="0 0 150 150"><circle class="bm-track" cx="75" cy="75" r="67"/><circle class="bm-prog" id="bmp" cx="75" cy="75" r="67"/></svg>
+        <div class="bm-center"><div class="bm-num"><span id="bmn">0</span></div><div class="bm-of">of 25 logs</div></div></div>
+      <div class="bm-cap">You're <b>ahead of pace</b> — patterns unlock around <b>12 July</b>.</div>
+    </div>
+    <div class="sec-lbl">Early hints — still checking</div>
+    ${eqCard(HUM,{conf:3,plain:false,btn:false})}
+    ${eqCard(AQI,{conf:3,plain:false,btn:false})}`;
+    after(()=>{ringDash("#bmp",72);countUp("#bmn",18,1300);});
+    return html;
+  },
+  behind(){
+    setFresh(null);
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="hero rise" style="background:linear-gradient(135deg,var(--muted),var(--card))" data-sfx="reveal">
+      <div class="hero-emoji">🌱</div>
+      <div class="hero-title" style="color:var(--primary)">No reset. No penalty.</div>
+      <div class="hero-sub" style="color:var(--secondary-foreground)">Missed days just move the finish line. You're <b>14 of 25</b> — 11 to go.</div></div>
+    <div class="big-meter rise">
+      <div class="bm-ring"><svg width="150" height="150" viewBox="0 0 150 150"><circle class="bm-track" cx="75" cy="75" r="67"/><circle class="bm-prog" id="bmp" cx="75" cy="75" r="67"/></svg>
+        <div class="bm-center"><div class="bm-num"><span id="bmn">0</span></div><div class="bm-of">of 25 logs</div></div></div>
+      <div class="bm-cap">Log tonight and you're <b>one closer</b>, instantly.</div>
+    </div>
+    <div class="emerge rise"><i class="ti ti-heart-handshake"></i><div class="emerge-t">Missed a few days? Totally fine. Your window rolls forward with you — nothing you've done is lost.</div></div>`;
+    after(()=>{ringDash("#bmp",56);countUp("#bmn",14,1300);});
+    return html;
+  },
+  unlock(){
+    setFresh(null);
+    const html=`<div class="celebrate" id="cel">
+      <div class="cel-badge">💡</div>
+      <div class="cel-kick">30 days · 26 logs</div>
+      <div class="cel-title holiday">Your skin<br>has patterns.</div>
+      <div class="cel-stats">We found <b>3</b> things that set it off. Ready to meet them?</div>
+      <button class="cel-cta" onclick="pick('first')">Show me <i class="ti ti-arrow-right"></i></button>
+      <div class="cel-skip" onclick="pick('first')">Later</div>
+    </div>`;
+    after(()=>{const c=$("cel");if(c)burst(c);sfx("unlock");});
+    return html;
+  },
+  first(){
+    setFresh("active");
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="hero hero-brand rise" data-sfx="pop"><div class="hero-emoji">✨</div>
+      <div class="hero-title">In one line: humidity is your trigger, sleep is your shield.</div>
+      <div class="hero-sub">Heat and sun barely bother you. Here's the full picture 👇</div></div>
+    <div class="sec-lbl">We found 3 patterns</div>
+    ${eqCard(HUM,{})}
+    ${eqCard(SLEEP,{})}
+    ${eqCard(AQI,{})}
+    <div class="emerge rise"><i class="ti ti-eye-search"></i><div class="emerge-t"><b>Cold snaps → dry skin</b> — a faint hint so far. A couple more and we'll confirm it.</div></div>`;
+    after(root=>{fillConf(root);growBars(root);});
+    return html;
+  },
+  active(){
+    setFresh("active");
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="digest rise" data-sfx="chime"><div class="digest-ic"><i class="ti ti-trending-up"></i></div>
+      <div><div class="digest-t">Good week 🎉</div><div class="digest-s">Your humidity pattern got even clearer, and a new one's showing up.</div></div></div>
+    ${eqCard(HUM,{})}
+    ${eqCard(SLEEP,{})}
+    ${eqCard(AQI,{})}
+    <div class="emerge rise"><i class="ti ti-eye-search"></i><div class="emerge-t"><b>Cold snaps → dry skin</b> — almost there (3 of 5). One cold day and it's confirmed.</div></div>`;
+    after(root=>{fillConf(root);growBars(root);});
+    return html;
+  },
+  fading(){
+    setFresh("fading");
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="decay decay-fading rise" data-sfx="fade"><div class="decay-ic" style="background:var(--drv-temp)"><i class="ti ti-flame"></i></div>
+      <div><div class="decay-t">Your patterns are going quiet</div><div class="decay-s">Just 15 logs this month. <b>4 logs this week</b> keeps them fresh — nothing's lost meanwhile.</div></div></div>
+    ${eqCard(HUM,{btn:false})}
+    ${eqCard(SLEEP,{dim:true,btn:false,plain:false})}
+    ${eqCard(AQI,{dim:true,btn:false,plain:false})}`;
+    after(root=>{fillConf(root);growBars(root);});
+    return html;
+  },
+  paused(){
+    setFresh("paused");
+    const html=`<div class="replay-bar"><span class="replay-label">Your skin patterns</span></div>
+    <div class="react rise" data-sfx="reveal">
+      <div class="react-title">Your patterns are asleep 😴</div>
+      <div class="react-sub">Everything's saved. Log <b>3 of the next 5 days</b> to wake them up.</div>
+      <div class="react-dots"><div class="rdot done"><i class="ti ti-check"></i></div><div class="rdot done"><i class="ti ti-check"></i></div><div class="rdot todo pulse">3</div><div class="rdot todo">4</div><div class="rdot todo">5</div></div>
+      <div class="react-sub">Just <b>one more day</b> brings them back.</div>
+      <button class="react-cta" onclick="sfx('wake');setTimeout(()=>pick('active'),400)">Log today</button>
+    </div>
+    ${eqCard(HUM,{dim:true,btn:false,plain:false})}
+    ${eqCard(SLEEP,{dim:true,btn:false,plain:false})}`;
+    return html;
+  }
+};
+
+function setFresh(kind){const f=$("fresh");if(!kind){f.style.display="none";return;}
+  f.style.display="";const map={active:["fresh-active","ti-flame","Live"],fading:["fresh-fading","ti-flame","Fading"],paused:["fresh-paused","ti-player-pause","Asleep"]};
+  const m=map[kind];f.className="freshness "+m[0];f.innerHTML='<i class="ti '+m[1]+'"></i>'+m[2];}
+
+let _after=null;
+function after(fn){_after=fn;}
+let cur="locked";
+function pick(k){
+  cur=k;const first=!document.querySelector(".sw-btn.on")||k!=="unlock";
+  document.querySelectorAll(".sw-btn").forEach(b=>b.classList.toggle("on",b.dataset.k===k));
+  $("sw-note").textContent=NOTES[k];
+  _after=null;
+  const s=$("screen");s.innerHTML=RENDER[k]();
+  reveal(s,110);
+  if(_after)setTimeout(()=>_after(s),120);
+  if(!muted&&k!=="unlock")sfx("tap");
+  s.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+(function init(){
+  const sw=$("sw");
+  STATES.forEach(s=>{const b=document.createElement("button");b.className="sw-btn";b.dataset.k=s.k;b.textContent=s.label;b.onclick=()=>pick(s.k);sw.appendChild(b);});
+  pick("locked");
+})();
+</script>
+</body>
+</html>

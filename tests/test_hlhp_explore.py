@@ -202,3 +202,50 @@ def test_mumbai_monsoon_nugget_shown_for_mumbai_user():
     )
     assert picked is not None
     assert picked["nugget_id"] == "nug_140"
+
+
+def test_north_india_nugget_not_shown_for_pune_user():
+    rows = [
+        {
+            "nugget_id": "nug_016",
+            "nugget_text": (
+                "North India winters routinely drop indoor humidity below 25%. "
+                "Heated indoor air pulls water from skin faster than it can be replaced."
+            ),
+            "concern_audience": "dryness",
+            "priority": 1,
+        },
+        {
+            "nugget_id": "nug_pan",
+            "nugget_text": "Oily skin still needs moisturizer. Without it, the skin compensates by producing even more oil.",
+            "concern_audience": "universal",
+            "priority": 1,
+        },
+    ]
+    when = datetime(2026, 1, 15)
+    picked = _pick_daily_nugget(
+        rows,
+        city="Baner, Pune, Maharashtra",
+        concern_id="dryness",
+        profile=_profile(skin_concerns=[SkinConcern.DEHYDRATION]),
+        user_id="u1",
+        when=when,
+    )
+    assert picked is not None
+    assert picked["nugget_id"] == "nug_pan"
+
+
+def test_north_india_nugget_matches_delhi_not_pune():
+    from app.hlhp.composition.explore import _nugget_matches_city
+
+    row = {
+        "nugget_id": "nug_016",
+        "nugget_text": (
+            "North India winters routinely drop indoor humidity below 25%. "
+            "Heated indoor air pulls water from skin faster than it can be replaced."
+        ),
+        "concern_audience": "dryness",
+        "priority": 1,
+    }
+    assert _nugget_matches_city(row, "Gurgaon, NCR") is True
+    assert _nugget_matches_city(row, "Baner, Pune, Maharashtra") is False

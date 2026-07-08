@@ -433,6 +433,14 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         humidity_band=band_fields["humidity_band"],
     )
     log_status = await fetch_feeling_log_status(body.user_id, at=when)
+
+    try:
+        from app.hlhp.services.patterns_engine_service import recompute_patterns_for_user
+
+        await recompute_patterns_for_user(body.user_id)
+    except Exception as exc:
+        logger.warning("HLHP patterns recompute after log skipped: %s", exc)
+
     return UserLogResponse(
         logged=logged_out,
         streak=current,
