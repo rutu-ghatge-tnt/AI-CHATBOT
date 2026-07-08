@@ -85,6 +85,7 @@ class PatternsPayloadV2(BaseModel):
     emerging: list[EmergingPatternV2] = Field(default_factory=list)
     generic_city_pattern: Optional[GenericCityPatternV2] = None
     unlock_celebration: Optional[UnlockCelebrationV2] = None
+    decay_banner: Optional[str] = None
     reactivation: Optional[ReactivationProgressV2] = None
     workbook_version: Optional[str] = None
     message: Optional[str] = None

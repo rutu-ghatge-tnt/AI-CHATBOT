@@ -16,7 +16,7 @@ from app.hlhp.services.log_event_store import (
     feeling_log_cooldown_remaining,
     next_feeling_log_at,
 )
-from app.hlhp.services.patterns_service import (
+from app.hlhp.services.feeling_session_mining import (
     DriverRule,
     MIN_LOGS_TO_MINE,
     PATTERNS_UNLOCK_DAYS,

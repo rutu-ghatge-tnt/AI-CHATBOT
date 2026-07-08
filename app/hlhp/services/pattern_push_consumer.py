@@ -22,8 +22,17 @@ _PUSH_KINDS = frozenset(
         "push_unlock",
         "push_behind",
         "push_d2",
+        "push_fading",
+        "push_paused",
         "weekly_digest",
         "warn_push",
+    }
+)
+
+_IN_APP_KINDS = frozenset(
+    {
+        "banner_fading",
+        "banner_paused",
     }
 )
 
@@ -33,6 +42,8 @@ def _notification_title(kind: str) -> str:
         "push_unlock": "Your patterns are ready",
         "push_behind": "Patterns progress",
         "push_d2": "Keep logging",
+        "push_fading": "Patterns fading",
+        "push_paused": "Patterns paused",
         "weekly_digest": "Your skin this week",
         "warn_push": "Weather heads-up",
     }.get(kind, "SkinBB HLHP")
@@ -135,6 +146,19 @@ async def deliver_pending_notifications(
         async for doc in cursor:
             kind = str(doc.get("kind") or "")
             user_id = str(doc.get("user_id") or "")
+            if kind in _IN_APP_KINDS:
+                await hl_db[_OUTBOX].update_one(
+                    {"_id": doc["_id"]},
+                    {
+                        "$set": {
+                            "delivered": True,
+                            "delivered_at": now,
+                            "delivery_channel": "in_app",
+                        }
+                    },
+                )
+                sent += 1
+                continue
             if kind not in _PUSH_KINDS:
                 skipped += 1
                 continue

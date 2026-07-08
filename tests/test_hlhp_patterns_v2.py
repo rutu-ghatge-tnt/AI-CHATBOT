@@ -14,11 +14,13 @@ from app.hlhp.patterns.hlhp_patterns_engine import (
     PatternState,
     _log_day_count,
     _window_logs,
+    build_patterns_payload,
     detect_patterns,
     evaluate_state,
     reactivation_progress,
     validate_narration,
 )
+from app.hlhp.patterns.hlhp_patterns_prompts import lifecycle
 
 
 def _env_day(day: date, **bands) -> EnvDay:
@@ -176,3 +178,77 @@ class TestGenericCityPattern:
         assert "body" in card
         assert "North India" not in card["body"]
         assert card["color_var"].startswith("--drv-")
+
+
+class TestDecayBannerPayload:
+    def test_fading_state_includes_decay_banner(self):
+        today = date(2026, 7, 30)
+        ps = PatternState(
+            "u1",
+            "UNLOCKED_FADING",
+            today - timedelta(days=60),
+            datetime(2026, 6, 1),
+            15,
+            10,
+            None,
+        )
+        payload = build_patterns_payload(ps, [], [], today)
+        assert payload["decay_banner"] == lifecycle("fading.banner")
+        assert payload["freshness"] == "fading"
+
+    def test_paused_state_includes_decay_banner_and_reactivation(self):
+        today = date(2026, 7, 30)
+        logs = [_log(today - timedelta(days=4)), _log(today - timedelta(days=2)), _log(today)]
+        ps = PatternState(
+            "u1",
+            "UNLOCKED_PAUSED",
+            today - timedelta(days=60),
+            datetime(2026, 6, 1),
+            10,
+            8,
+            None,
+        )
+        payload = build_patterns_payload(ps, [], logs, today)
+        assert payload["decay_banner"] == lifecycle("paused.react")
+        assert payload["reactivation"]["done"] == 3
+        assert payload["freshness"] == "paused"
+
+
+class TestPatternStateStore:
+    def test_pattern_from_doc_skips_incomplete_rows(self):
+        from app.hlhp.services.pattern_state_store import _pattern_from_doc
+
+        assert _pattern_from_doc({"symptom": "breakout"}) is None
+        pat = _pattern_from_doc(
+            {
+                "driver": "humidity",
+                "symptom": "breakout",
+                "E": 6,
+                "H": 4,
+                "match": 0.7,
+                "lift": 2.1,
+            }
+        )
+        assert pat is not None
+        assert pat.driver == "humidity"
+
+
+class TestNarrationLlmAsync:
+    def test_call_llm_uses_thread_pool(self, monkeypatch):
+        import asyncio
+
+        from app.hlhp.services import patterns_narration_service as svc
+
+        called = {"to_thread": False}
+
+        async def fake_to_thread(fn, packet):
+            called["to_thread"] = True
+            assert fn is svc._call_llm_sync
+            return {"patterns": []}
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+
+        result = asyncio.run(svc._call_llm({"outputs_wanted": ["pattern_narrative"]}))
+        assert called["to_thread"] is True
+        assert result == {"patterns": []}

@@ -29,22 +29,22 @@ async def apply_state_transitions(
         return notifications
 
     if ps.state == "UNLOCKED_FADING" and prev_decay_notified != "UNLOCKED_FADING":
-        notifications.append(
-            {
-                "user_id": user_id,
-                "kind": "banner_fading",
-                "copy": lifecycle("fading.banner"),
-            }
+        copy = lifecycle("fading.banner")
+        notifications.extend(
+            [
+                {"user_id": user_id, "kind": "banner_fading", "copy": copy},
+                {"user_id": user_id, "kind": "push_fading", "copy": copy},
+            ]
         )
         ps.last_decay_notified_state = "UNLOCKED_FADING"
 
     elif ps.state == "UNLOCKED_PAUSED" and prev_decay_notified != "UNLOCKED_PAUSED":
-        notifications.append(
-            {
-                "user_id": user_id,
-                "kind": "banner_paused",
-                "copy": lifecycle("paused.react"),
-            }
+        copy = lifecycle("paused.react")
+        notifications.extend(
+            [
+                {"user_id": user_id, "kind": "banner_paused", "copy": copy},
+                {"user_id": user_id, "kind": "push_paused", "copy": copy},
+            ]
         )
         ps.last_decay_notified_state = "UNLOCKED_PAUSED"
 

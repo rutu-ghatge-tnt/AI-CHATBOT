@@ -8,7 +8,7 @@ from app.hlhp.db import hl_db
 
 logger = logging.getLogger(__name__)
 
-_INDEXEnsured = False
+_indexes_ensured = False
 
 # Seconds after the indexed date field before Mongo TTL removes the document.
 _LOG_EVENTS_TTL_SEC = 90 * 24 * 3600
@@ -19,8 +19,8 @@ _ACTION_LOG_TTL_SEC = 90 * 24 * 3600
 
 async def ensure_hlhp_indexes() -> None:
     """Create HLHP collection indexes and TTL policies."""
-    global _INDEXEnsured
-    if _INDEXEnsured:
+    global _indexes_ensured
+    if _indexes_ensured:
         return
 
     try:
@@ -85,7 +85,7 @@ async def ensure_hlhp_indexes() -> None:
         await push_tokens.create_index([("user_id", 1), ("token", 1)], unique=True)
         await push_tokens.create_index("updated_at")
 
-        _INDEXEnsured = True
+        _indexes_ensured = True
         logger.info("HLHP Mongo indexes ensured")
     except Exception as exc:
         logger.warning("HLHP Mongo index setup incomplete: %s", exc)

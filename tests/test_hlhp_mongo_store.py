@@ -51,12 +51,12 @@ class _FakeDb:
 def test_ensure_hlhp_indexes_runs_once(monkeypatch):
     from app.hlhp import mongo_setup
 
-    mongo_setup._INDEXEnsured = False
+    mongo_setup._indexes_ensured = False
     fake = _FakeDb()
     monkeypatch.setattr(mongo_setup, "hl_db", fake)
 
     asyncio.run(mongo_setup.ensure_hlhp_indexes())
-    assert mongo_setup._INDEXEnsured is True
+    assert mongo_setup._indexes_ensured is True
     first_total = sum(c.index_calls for c in fake._cols.values())
     assert first_total > 0
 

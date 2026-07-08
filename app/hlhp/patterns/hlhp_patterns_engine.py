@@ -583,7 +583,14 @@ def build_patterns_payload(ps: PatternState, patterns: list[Pattern],
             for p in emerging
         ],
     }
-    if ps.state == "UNLOCKED_PAUSED":
+    if ps.state == "UNLOCKED_FADING":
+        from app.hlhp.patterns.hlhp_patterns_prompts import lifecycle
+
+        payload["decay_banner"] = lifecycle("fading.banner")
+    elif ps.state == "UNLOCKED_PAUSED":
+        from app.hlhp.patterns.hlhp_patterns_prompts import lifecycle
+
+        payload["decay_banner"] = lifecycle("paused.react")
         payload["reactivation"] = reactivation_progress(logs, today)
     return payload
 

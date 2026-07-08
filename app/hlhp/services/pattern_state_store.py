@@ -51,15 +51,19 @@ def _pattern_state_from_doc(doc: dict[str, Any], user_id: str) -> PatternState:
     )
 
 
-def _pattern_from_doc(doc: dict[str, Any]) -> Pattern:
+def _pattern_from_doc(doc: dict[str, Any]) -> Pattern | None:
+    driver = doc.get("driver")
+    symptom = doc.get("symptom")
+    if not driver or not symptom:
+        return None
     return Pattern(
-        driver=str(doc["driver"]),
-        symptom=str(doc["symptom"]),
+        driver=str(driver),
+        symptom=str(symptom),
         city=str(doc.get("city") or ""),
-        E=int(doc["E"]),
-        H=int(doc["H"]),
-        match=float(doc["match"]),
-        lift=float(doc["lift"]),
+        E=int(doc.get("E") or 0),
+        H=int(doc.get("H") or 0),
+        match=float(doc.get("match") or 0),
+        lift=float(doc.get("lift") or 0),
         label=str(doc.get("label") or "EARLY"),
         status=str(doc.get("status") or "promoted"),
         lag_hours=int(doc.get("lag_hours") or 24),
@@ -142,7 +146,9 @@ async def get_stored_patterns(user_id: str) -> list[Pattern]:
     try:
         cursor = hl_db[_PATTERNS].find({"user_id": user_id})
         async for doc in cursor:
-            out.append(_pattern_from_doc(doc))
+            pat = _pattern_from_doc(doc)
+            if pat is not None:
+                out.append(pat)
     except Exception as exc:
         logger.warning("patterns fetch failed user=%s: %s", user_id, exc)
     return out

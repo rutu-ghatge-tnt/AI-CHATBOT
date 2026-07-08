@@ -86,7 +86,10 @@ async def maybe_refresh_weekly_digest(
     ps.last_weekly_digest_at = datetime.now(timezone.utc)
     await save_pattern_state(ps)
 
-    digest_copy = lifecycle("active.digest")
+    from app.hlhp.services.pattern_state_store import get_narration_cache
+
+    cache = await get_narration_cache(user_id)
+    digest_copy = cache.get("weekly_digest") or lifecycle("active.digest")
     await enqueue_notifications(
         [
             {

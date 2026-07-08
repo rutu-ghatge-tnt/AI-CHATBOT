@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 from typing import Any
@@ -15,7 +17,11 @@ from app.hlhp.patterns.hlhp_patterns_engine import (
     validate_narration,
 )
 from app.hlhp.patterns.hlhp_patterns_prompts import VOICE_RULES, build_messages, lifecycle
-from app.hlhp.services.pattern_state_store import get_narration_cache, save_narration_entry
+from app.hlhp.services.pattern_state_store import (
+    get_narration_cache,
+    get_stored_patterns,
+    save_narration_entry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,35 +48,44 @@ async def get_patterns_narration(user_id: str) -> dict[str, Any]:
     cached = await get_narration_cache(user_id)
     if cached:
         return cached
+    patterns = await get_stored_patterns(user_id)
+    promoted = [p for p in patterns if p.status == "promoted"]
+    if promoted:
+        return _template_narration_for_patterns(promoted)
     return {}
+
+
+def _call_llm_sync(packet: dict) -> dict[str, Any] | None:
+    """Blocking Anthropic call — run via asyncio.to_thread from async handlers."""
+    api_key = (os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY") or "").strip()
+    if not api_key:
+        return None
+    from anthropic import Anthropic
+
+    client = Anthropic(api_key=api_key)
+    messages = build_messages(packet, include_example=True)
+    system = next((m["content"] for m in messages if m["role"] == "system"), "")
+    user_parts = [m for m in messages if m["role"] != "system"]
+    resp = client.messages.create(
+        model=os.getenv("HLHP_PATTERNS_NARRATION_MODEL", "claude-3-5-haiku-latest"),
+        max_tokens=220,
+        temperature=0.4,
+        system=system,
+        messages=[{"role": m["role"], "content": m["content"]} for m in user_parts],
+    )
+    text = ""
+    for block in resp.content:
+        if hasattr(block, "text"):
+            text += block.text
+    return json.loads(text)
 
 
 async def _call_llm(packet: dict) -> dict[str, Any] | None:
     """Optional Anthropic narration — skipped when API key absent."""
-    api_key = (os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY") or "").strip()
-    if not api_key:
+    if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY") or "").strip():
         return None
     try:
-        from anthropic import Anthropic
-
-        client = Anthropic(api_key=api_key)
-        messages = build_messages(packet, include_example=True)
-        system = next((m["content"] for m in messages if m["role"] == "system"), "")
-        user_parts = [m for m in messages if m["role"] != "system"]
-        resp = client.messages.create(
-            model=os.getenv("HLHP_PATTERNS_NARRATION_MODEL", "claude-3-5-haiku-latest"),
-            max_tokens=220,
-            temperature=0.4,
-            system=system,
-            messages=[{"role": m["role"], "content": m["content"]} for m in user_parts],
-        )
-        text = ""
-        for block in resp.content:
-            if hasattr(block, "text"):
-                text += block.text
-        import json
-
-        return json.loads(text)
+        return await asyncio.to_thread(_call_llm_sync, packet)
     except Exception as exc:
         logger.warning("patterns LLM narration failed: %s", exc)
         return None
