@@ -43,6 +43,8 @@ def compute_env_delta(
         tags.append("heat_surge")
     if uvi_delta >= 2:
         tags.append("uv_surge")
+    if aqi_delta >= 60:
+        tags.append("pollution_surge")
 
     return EnvDelta(
         uvi_delta=uvi_delta,

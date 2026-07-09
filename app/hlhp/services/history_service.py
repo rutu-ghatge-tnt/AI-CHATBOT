@@ -117,6 +117,11 @@ def _feeling_sessions_from_events(
         days_ago = max(0, (now.date() - when.date()).days)
         sfi_val = doc.get("sfi")
         tags = doc.get("sudden_event_tags") or []
+        areas = [str(a) for a in (doc.get("areas") or []) if a]
+        notes_raw = doc.get("notes")
+        notes = str(notes_raw).strip() if notes_raw else None
+        exposure_raw = doc.get("outdoor_exposure")
+        outdoor_exposure = str(exposure_raw) if exposure_raw else None
         sessions.append(
             HistoryFeelingSession(
                 session_id=str(doc.get("session_id") or ""),
@@ -133,6 +138,9 @@ def _feeling_sessions_from_events(
                 session_description=_env_description_from_doc(doc),
                 sudden_event=bool(tags),
                 driver=str(doc.get("driver") or "") or None,
+                outdoor_exposure=outdoor_exposure,
+                notes=notes or None,
+                areas=areas,
             )
         )
     return sessions

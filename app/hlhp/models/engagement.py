@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
 
 
 class UserLogRequest(BaseModel):
@@ -25,6 +29,8 @@ class UserLogRequest(BaseModel):
     outdoor_ok_score: Optional[int] = Field(None, ge=0, le=100)
     mood_verdict: Optional[str] = None
     sudden_event_tags: Optional[list[str]] = None
+    outdoor_exposure: Optional[OutdoorExposure] = None
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 class LoggedEventOut(BaseModel):

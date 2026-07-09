@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from app.hlhp.core.local_date import calendar_date, calendar_date_key, today_local
+from app.hlhp.core.profile_mode import resolve_mode
 
 from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
 from app.hlhp.composition.explore import pick_learn_nuggets
@@ -47,14 +48,35 @@ from app.hlhp.services.log_event_store import (
     insert_log_event,
 )
 from app.hlhp.services.profile_loader import load_user_profile
-from app.hlhp.services.scoring_engine import calculate_skin_score
+from app.hlhp.services.sfi_unified import headline_sfi, resolve_sfi
+from app.hlhp.services.v4_scoring_engine import clamp_sfi, feeling_log_sfi_adjustment
 from app.hlhp.services.scan_service import resolve_environment
 from app.hlhp.coach.models import ActionTapRequest
 from app.hlhp.db_errors import HlhpStoreError
 
 logger = logging.getLogger(__name__)
 
-NEEDS_AREA = {"breakout", "spots"}
+_SYMPTOM_ALLOW = frozenset({"normal", "dry", "oily", "dull", "breakout", "spots"})
+_NEEDS_AREA = {"breakout", "spots"}
+
+
+def validate_log_symptoms(symptoms: list[str], areas: list[str]) -> tuple[list[str], list[str]]:
+    """V4 log rules: vocabulary, normal/full_face exclusivity, areas for breakout/spots."""
+    out = _normalize_symptoms(symptoms)
+    if not out:
+        raise HTTPException(status_code=400, detail="At least one symptom required")
+    unknown = [s for s in out if s not in _SYMPTOM_ALLOW]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown symptoms: {', '.join(unknown)}")
+    if "normal" in out and len(out) > 1:
+        raise HTTPException(status_code=400, detail="'normal' is exclusive — remove other symptoms")
+
+    norm_areas = _normalize_areas(areas)
+    if "full_face" in norm_areas and len(norm_areas) > 1:
+        raise HTTPException(status_code=400, detail="'full_face' is exclusive of specific zones")
+    if _NEEDS_AREA.intersection(out) and not norm_areas:
+        raise HTTPException(status_code=400, detail="areas required for breakout / spots")
+    return out, norm_areas if _NEEDS_AREA.intersection(out) else []
 
 
 def _parse_dt(value: datetime) -> datetime:
@@ -296,16 +318,9 @@ async def assemble_learn(
 
 async def run_user_log(body: UserLogRequest) -> UserLogResponse:
     profile = await load_user_profile(body.user_id)
-    if profile is None:
-        raise HTTPException(status_code=404, detail="Complete your skin profile first")
+    guest_mode = profile is None or resolve_mode(profile).value == "guest"
 
-    symptoms = _normalize_symptoms(body.symptoms)
-    if not symptoms:
-        raise HTTPException(status_code=400, detail="At least one symptom required")
-
-    areas: list[str] = []
-    if NEEDS_AREA.intersection(symptoms):
-        areas = _normalize_areas(body.areas)
+    symptoms, areas = validate_log_symptoms(body.symptoms, body.areas)
 
     when = _parse_dt(body.local_time)
     date_key = calendar_date_key(when)
@@ -341,9 +356,18 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
     env = await resolve_environment(scan_req)
     bands = bucketize_environment(env)
     band_fields = bands_snapshot(bands)
-    score = calculate_skin_score(env)
-    sfi = int(body.outdoor_ok_score if body.outdoor_ok_score is not None else score.total)
-    driver = driver_key_from_env(env)
+    sfi_base = int(
+        body.outdoor_ok_score
+        if body.outdoor_ok_score is not None
+        else headline_sfi(env, profile, guest_mode=guest_mode)
+    )
+    log_delta = feeling_log_sfi_adjustment(
+        symptoms=symptoms,
+        outdoor_exposure=body.outdoor_exposure,
+        notes=body.notes,
+    )
+    sfi = clamp_sfi(sfi_base + log_delta)
+    driver = driver_key_from_env(env, profile, guest_mode=guest_mode)
     sudden_tags = [str(t) for t in (body.sudden_event_tags or []) if t]
 
     session_id = await insert_log_event(
@@ -364,6 +388,8 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
             "city": str(body.location_city or env.location_name or ""),
             "mood_verdict": str(body.mood_verdict or ""),
             "sudden_event_tags": sudden_tags,
+            "outdoor_exposure": body.outdoor_exposure,
+            "notes": (body.notes or "").strip() or None,
         }
     )
 

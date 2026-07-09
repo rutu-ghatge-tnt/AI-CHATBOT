@@ -48,12 +48,15 @@ from app.hlhp.services.profile_loader import (
 from app.hlhp.services.concern_resolver import concern_slug_from_profile
 from app.hlhp.services.weather_fetcher import fetch_environmental_data
 from app.hlhp.services.weather_visuals import extract_weather_visuals
+from app.hlhp.services.v4_scoring_engine import V4Evaluation
+from app.hlhp.services.sfi_unified import resolve_sfi
 from app.hlhp.composition.vocabulary import mood_headline, symptom_chips
 from app.hlhp.composition.lane_state import resolve_lane_states
 from app.hlhp.composition.feeds import seasonal_tags_for_city
 from app.hlhp.composition.delta import compute_env_delta
 from app.hlhp.services.consent_store import env_logging_allowed
 from app.hlhp.services.scan_log_store import env_baseline_7d, record_scan_log
+from app.hlhp.services.surge_detector import assess_surge
 
 _GUEST_NUDGE = (
     "Create a profile to unlock concern-specific alerts tailored to your skin."
@@ -168,32 +171,50 @@ def _scenario_alert_tile(
     )
 
 
-def _scenario_scan_fields(store: ScenarioStore, scenario: ScenarioEvaluation) -> dict:
+_V4_DRIVER_KEYS = {
+    "Temperature": "temp",
+    "UV": "uv",
+    "Humidity": "humidity",
+    "AQI": "aqi",
+}
+_V4_DRIVER_NAMES = {
+    "Temperature": "Heat",
+    "UV": "UV",
+    "Humidity": "Humidity",
+    "AQI": "Air (AQI)",
+}
+
+
+def _scenario_scan_fields(
+    store: ScenarioStore,
+    scenario: ScenarioEvaluation,
+    v4_eval: V4Evaluation,
+) -> dict:
     flash = scenario.flash_alert
     ev = scenario.evidence_cell
     return {
-        "sfi": scenario.sfi,
-        "personal_sfi": scenario.personal_sfi,
-        "band": scenario.band,
+        "sfi": v4_eval.environmental_sfi,
+        "personal_sfi": v4_eval.personal_sfi,
+        "band": v4_eval.mode,
         "action_cluster": scenario.action_cluster,
         "risk": scenario.risk,
         "risk_label": scenario.risk_label,
         "confidence": scenario.confidence,
         "flash_alert": FlashAlertOut(
             level=flash.level,
-            mode=flash.mode,
+            mode=v4_eval.mode,  # type: ignore[arg-type]
             l0=flash.l0,
             l1=flash.l1,
             tip=flash.tip,
         ),
         "impacts": [
             ImpactLineOut(
-                driver=line.driver,  # type: ignore[arg-type]
-                name=line.name,
-                level=line.level,
-                value=line.value,
+                driver=_V4_DRIVER_KEYS[d.factor],  # type: ignore[arg-type]
+                name=_V4_DRIVER_NAMES[d.factor],
+                level=d.level,
+                value=d.value,
             )
-            for line in scenario.impacts
+            for d in v4_eval.drivers
         ],
         "evidence_cell": (
             EvidenceCellOut(
@@ -210,20 +231,20 @@ def _scenario_scan_fields(store: ScenarioStore, scenario: ScenarioEvaluation) ->
         ),
         "scenario_library_version": store.version,
         "time_window": scenario.time_window,
-        "outdoor_ok_score": scenario.sfi,
-        "outdoor_ok_band_text": scenario.band,
+        "outdoor_ok_score": v4_eval.headline_sfi,
+        "outdoor_ok_band_text": v4_eval.mode,
     }
 
 
-def _sfi_factor_cards_from_scenario(scenario: ScenarioEvaluation) -> list[SfiFactorCard]:
+def _sfi_factor_cards_from_v4(v4_eval: V4Evaluation) -> list[SfiFactorCard]:
     return [
         SfiFactorCard(
-            factor=d.name,
-            label=d.band_label,
-            skin_impact=f"{d.name} in the {d.band_label.lower()} band today.",
+            factor=_V4_DRIVER_NAMES[d.factor],
+            label=d.label,
+            skin_impact=f"{_V4_DRIVER_NAMES[d.factor]} in the {d.label.lower()} band today.",
             severity_pct=_severity_pct_for_points(d.points),
         )
-        for d in scenario.drivers
+        for d in v4_eval.drivers
     ]
 
 
@@ -283,6 +304,7 @@ def _personalize_forecast(oneliner: str | None, first_name: str | None, guest_mo
 async def _scan_ui_enrichment(
     *,
     scenario: ScenarioEvaluation,
+    v4_eval: V4Evaluation,
     env: EnvironmentalData,
     city: str,
     local_time: datetime,
@@ -310,7 +332,7 @@ async def _scan_ui_enrichment(
             first_name = ""
     oneliner = _personalize_forecast(oneliner, first_name or None, guest_mode)
 
-    mood = _mood_for_band(scenario.band)
+    mood = _mood_for_band(v4_eval.mode)
     selected_symptoms: set[str] = set()
     if user_id:
         selected_symptoms = await fetch_selected_symptoms(user_id)
@@ -331,7 +353,7 @@ async def _scan_ui_enrichment(
             mood_verdict=mood,
             when=local_time,
         ),
-        "sfi_factor_cards": _sfi_factor_cards_from_scenario(scenario),
+        "sfi_factor_cards": _sfi_factor_cards_from_v4(v4_eval),
     }
 
 
@@ -481,18 +503,31 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
     )
 
     scenario_env = _env_for_scenario(env, req.force_surge)
+    baseline = None
+    if req.user_id:
+        baseline = await env_baseline_7d(req.user_id, before=req.local_time or datetime.now(timezone.utc))
+    surge_assessment = assess_surge(env, baseline=baseline, force=req.force_surge)
+    surge_active = surge_assessment.active
+
+    v4_eval = resolve_sfi(
+        scenario_env,
+        profile,
+        guest_mode=guest_mode,
+        surge=surge_active,
+    )
     scenario = evaluate_scenario(
         scenario_store,
         scenario_env,
         city=req.city,
         profile=profile,
         guest_mode=guest_mode,
-        force_surge=req.force_surge,
+        force_surge=surge_active,
         local_time=req.local_time,
     )
     env_snapshot = _build_env_snapshot(env, user_id=req.user_id, city=req.city, local_time=req.local_time)
     ui = await _scan_ui_enrichment(
         scenario=scenario,
+        v4_eval=v4_eval,
         env=env,
         city=req.city,
         local_time=req.local_time,
@@ -512,7 +547,7 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
     if coach_wrap is not None:
         alert = alert.model_copy(update={"coach_wrap": coach_wrap})
     nugget_out = _pick_scenario_nugget(scenario_store, scenario, req.user_id)
-    mood = _mood_for_band(scenario.band)
+    mood = _mood_for_band(v4_eval.mode)
     strip_line = scenario.flash_alert.l0 or mood_headline(mood)
 
     resp = ScanResponse(
@@ -529,7 +564,8 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
         profile_nudge=profile_nudge,
         **_weather_fields(env),
         **ui,
-        **_scenario_scan_fields(scenario_store, scenario),
+        **_scenario_scan_fields(scenario_store, scenario, v4_eval),
+        scene=v4_eval.scene,
     )
     await _maybe_record_scan(req=req, response=resp, env=env, profile=profile, guest_mode=guest_mode)
     return resp

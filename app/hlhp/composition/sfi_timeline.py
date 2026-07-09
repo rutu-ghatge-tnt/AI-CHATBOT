@@ -6,7 +6,6 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from app.hlhp.evidence.scenario_store import get_scenario_store
-from app.hlhp.models.engine_models import EnvironmentalData as EngineEnv
 from app.hlhp.models.engine_models import SkinConcern as EngineConcern
 from app.hlhp.models.engine_models import SkinType as EngineSkinType
 from app.hlhp.models.engine_models import UserProfile as EngineProfile
@@ -17,9 +16,8 @@ from app.hlhp.models.sfi_timeline import (
     SfiTimelinePoint,
     SfiTimelineResponse,
 )
-from app.hlhp.services.outdoor_ok import compute_outdoor_ok
 from app.hlhp.services.scan_log_store import fetch_scans
-from app.hlhp.services.scoring import compute_sfi
+from app.hlhp.services.sfi_unified import resolve_sfi
 from app.hlhp.services.weatherapi_timeline import (
     HourlyEnvReading,
     fetch_timeline_hourly_readings,
@@ -62,22 +60,11 @@ def _sfi_scores(
         temperature_c=reading.temp_c,
         aqi=reading.aqi,
         humidity_pct=reading.humidity_pct,
+        wind_kmh=getattr(reading, "wind_kmh", 0.0) or 0.0,
         location_name=location_name,
     )
-    sfi_env, _ = compute_outdoor_ok(env)
-    engine_profile = _profile_to_engine(profile)
-    if engine_profile is None:
-        return sfi_env, sfi_env
-
-    engine_env = EngineEnv(
-        location=location_name,
-        uv_index=reading.uv_index,
-        temperature_c=reading.temp_c,
-        aqi=reading.aqi,
-        humidity_pct=reading.humidity_pct,
-    )
-    sfi_personalised, *_ = compute_sfi(engine_env, engine_profile)
-    return sfi_env, int(sfi_personalised)
+    eval_ = resolve_sfi(env, profile, guest_mode=profile is None)
+    return eval_.environmental_sfi, eval_.headline_sfi
 
 
 def _day_offset(iso_date: str, *, tz_id: str) -> int:

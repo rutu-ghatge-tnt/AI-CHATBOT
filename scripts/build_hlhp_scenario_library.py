@@ -38,6 +38,9 @@ def main() -> int:
     print(f"  gender rules   : {snapshot['meta'].get('gender_rule_count', 0)}")
     print(f"  time overlays  : {snapshot['meta'].get('time_overlay_count', 0)}")
     print(f"  cities mapped  : {len(snapshot['city_zone'])}")
+    print()
+    print("To activate this snapshot in the API, run:")
+    print(f"  python scripts/update_hlhp_library.py --xlsx {args.xlsx}")
 
     return 0
 

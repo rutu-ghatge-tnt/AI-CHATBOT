@@ -272,7 +272,10 @@ def test_history_feeling_sessions_lists_each_commit():
             "session_id": "evening",
             "ts": evening,
             "date": day,
-            "symptoms": ["dry", "tight"],
+            "symptoms": ["breakout"],
+            "areas": ["forehead", "chin"],
+            "outdoor_exposure": "3+",
+            "notes": "Felt tight after gym",
             "sfi": 48,
             "uvi": 0.0,
             "temp_c": 26.0,
@@ -288,8 +291,11 @@ def test_history_feeling_sessions_lists_each_commit():
         result = asyncio.run(assemble_history("u1", days=15))
     assert len(result.feeling_sessions) == 2
     assert result.feeling_sessions[0].session_id == "evening"
-    assert result.feeling_sessions[0].feelings == ["Dry", "Tight"]
+    assert result.feeling_sessions[0].feelings == ["Breakout"]
     assert result.feeling_sessions[0].outdoor_score == 48
+    assert result.feeling_sessions[0].areas == ["forehead", "chin"]
+    assert result.feeling_sessions[0].outdoor_exposure == "3+"
+    assert result.feeling_sessions[0].notes == "Felt tight after gym"
     assert result.feeling_sessions[1].session_id == "morning"
     assert result.feeling_sessions[1].outdoor_score == 72
     assert "26°C outdoors" in result.feeling_sessions[0].session_description

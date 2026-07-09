@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
+OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+
 from pydantic import BaseModel, Field
 
 
@@ -60,6 +62,9 @@ class HistoryFeelingSession(BaseModel):
     session_description: str = ""
     sudden_event: bool = False
     driver: Optional[str] = None
+    outdoor_exposure: Optional[OutdoorExposure] = None
+    notes: Optional[str] = None
+    areas: list[str] = Field(default_factory=list)
 
 
 class HistoryResponse(BaseModel):

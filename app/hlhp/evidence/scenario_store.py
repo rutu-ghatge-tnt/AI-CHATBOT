@@ -3,11 +3,39 @@
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-_SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / "data" / "scenario_snapshot_v3_5.json"
+from app.hlhp.config import hl_settings
+
+_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DEFAULT_SNAPSHOT = _DATA_DIR / "scenario_snapshot_v3_5.json"
+_ACTIVE_POINTER = _DATA_DIR / "scenario_snapshot_active.json"
+
+
+def resolve_snapshot_path() -> Path:
+    """
+    Resolve the active scenario library snapshot.
+
+    Priority: HL_SCENARIO_SNAPSHOT env → active pointer file → default v3.5 path.
+    """
+    if hl_settings.HL_SCENARIO_SNAPSHOT:
+        return Path(hl_settings.HL_SCENARIO_SNAPSHOT)
+    if _ACTIVE_POINTER.exists():
+        try:
+            meta = json.loads(_ACTIVE_POINTER.read_text(encoding="utf-8"))
+            rel = meta.get("path") or meta.get("snapshot")
+            if rel:
+                p = Path(rel)
+                if not p.is_absolute():
+                    p = _DATA_DIR / p
+                if p.exists():
+                    return p
+        except (json.JSONDecodeError, OSError):
+            pass
+    return _DEFAULT_SNAPSHOT
 
 
 class ScenarioStore:
@@ -34,6 +62,7 @@ class ScenarioStore:
         self.gender_states = snapshot.get("gender_states", [])
         self.gender_rules: dict[str, dict[str, Any]] = snapshot.get("gender_rules", {})
         self.time_overlay: dict[str, dict[str, str]] = snapshot.get("time_overlay", {})
+        self.skin_band_penalty: dict[str, Any] = snapshot.get("skin_band_penalty", {})
 
     @property
     def master_cell_count(self) -> int:
@@ -54,10 +83,29 @@ class ScenarioStore:
 
 @lru_cache(maxsize=1)
 def get_scenario_store() -> ScenarioStore:
-    if not _SNAPSHOT_PATH.exists():
+    path = resolve_snapshot_path()
+    if not path.exists():
         raise FileNotFoundError(
-            f"Scenario snapshot missing at {_SNAPSHOT_PATH}. "
-            "Run: python scripts/build_hlhp_scenario_library.py"
+            f"Scenario snapshot missing at {path}. "
+            "Run: python scripts/update_hlhp_library.py --xlsx <workbook>"
         )
-    snapshot = json.loads(_SNAPSHOT_PATH.read_text(encoding="utf-8"))
+    snapshot = json.loads(path.read_text(encoding="utf-8"))
     return ScenarioStore(snapshot)
+
+
+def reload_scenario_store() -> ScenarioStore:
+    """Clear cached store after a library update (call from update script or admin)."""
+    get_scenario_store.cache_clear()
+    return get_scenario_store()
+
+
+def write_active_pointer(snapshot_path: Path, *, version: str = "") -> None:
+    """Record which snapshot file the API should load."""
+    rel = snapshot_path.name if snapshot_path.parent == _DATA_DIR else str(snapshot_path)
+    payload = {
+        "path": rel,
+        "version": version,
+        "absolute": str(snapshot_path.resolve()),
+    }
+    _ACTIVE_POINTER.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.environ["HL_SCENARIO_SNAPSHOT"] = str(snapshot_path.resolve())

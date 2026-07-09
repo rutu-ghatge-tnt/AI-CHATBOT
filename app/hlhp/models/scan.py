@@ -177,6 +177,7 @@ class ScanResponse(BaseModel):
     evidence_cell: Optional[EvidenceCellOut] = None
     scenario_library_version: Optional[str] = None
     time_window: Optional[Literal["morning", "daytime", "evening"]] = None
+    scene: Optional[str] = None
 
 
 class SymptomTapRequest(BaseModel):
