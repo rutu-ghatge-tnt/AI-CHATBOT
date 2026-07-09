@@ -155,10 +155,18 @@ def main() -> None:
     )
 
     norm_name = normalize_text(ingredient_name)
-    existing = branded_col.find_one({"ingredient_name_normalized": norm_name}, {"_id": 1})
-    if existing:
-        branded_col.delete_one({"_id": existing["_id"]})
-        print(f"  replaced existing Glyteine doc: {existing['_id']}")
+    name_filter = {
+        "$or": [
+            {"ingredient_name_normalized": norm_name},
+            {
+                "ingredient_name": {
+                    "$regex": f"^{re.escape(ingredient_name)}$",
+                    "$options": "i",
+                }
+            },
+        ]
+    }
+    existing = branded_col.find_one(name_filter, {"_id": 1})
 
     branded_doc = {
         "ingredient_name": ingredient_name,
@@ -175,8 +183,12 @@ def main() -> None:
         "isLocked": False,
     }
 
-    result = branded_col.insert_one(branded_doc)
-    print(f"\nInserted Glyteine -> {result.inserted_id}")
+    if existing:
+        branded_col.replace_one({"_id": existing["_id"]}, branded_doc)
+        print(f"\nUpdated Glyteine -> {existing['_id']}")
+    else:
+        result = branded_col.insert_one(branded_doc)
+        print(f"\nInserted Glyteine -> {result.inserted_id}")
 
 
 if __name__ == "__main__":
