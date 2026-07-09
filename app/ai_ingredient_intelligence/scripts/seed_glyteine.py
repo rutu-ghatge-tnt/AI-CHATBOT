@@ -1,10 +1,15 @@
 """One-off seed script for Glyteine branded ingredient."""
 
 import re
+import sys
 import unicodedata
+from pathlib import Path
 
 from bson.objectid import ObjectId
 from pymongo import MongoClient
+
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 from app.config import DB_NAME, MONGO_URI
 
