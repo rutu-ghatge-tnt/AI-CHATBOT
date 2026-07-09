@@ -32,6 +32,14 @@ def auth_failed_detail(message: str) -> dict[str, Any]:
     )
 
 
+def auth_user_mismatch_detail() -> dict[str, Any]:
+    return http_error_detail(
+        code="auth_user_mismatch",
+        message="The user id in this request does not match your signed-in account.",
+        action="Remove user_id from the request or use the id for your signed-in account.",
+    )
+
+
 def profile_incomplete_detail(diagnosis: dict[str, Any]) -> dict[str, Any]:
     missing = list(diagnosis.get("missing_fields") or [])
     invalid = list(diagnosis.get("invalid_fields") or [])
@@ -47,3 +55,21 @@ def profile_incomplete_detail(diagnosis: dict[str, Any]) -> dict[str, Any]:
 
 def service_unavailable_detail(*, code: str, message: str, reason: str | None = None) -> dict[str, Any]:
     return http_error_detail(code=code, message=message, reason=reason)
+
+
+def feeling_log_cooldown_detail(
+    *,
+    next_log_at: str,
+    retry_after_seconds: int,
+    cooldown_hours: int,
+) -> dict[str, Any]:
+    return http_error_detail(
+        code="feeling_log_cooldown",
+        message=(
+            f"Wait {cooldown_hours} hours between feeling logs so each entry reflects "
+            "a distinct moment."
+        ),
+        next_log_at=next_log_at,
+        retry_after_seconds=retry_after_seconds,
+        cooldown_hours=cooldown_hours,
+    )

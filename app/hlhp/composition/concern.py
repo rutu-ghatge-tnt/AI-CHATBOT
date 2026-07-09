@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from app.hlhp.composition.vocabulary import mood_headline
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
 
 
 def _filter_rows(rows: list[dict], concern_id: str, key: str = "concern_id") -> list[dict]:
@@ -14,7 +14,7 @@ def _filter_rows(rows: list[dict], concern_id: str, key: str = "concern_id") -> 
 
 
 def assemble_concern_deepdive(concern_id: str) -> Optional[dict[str, Any]]:
-    store = get_evidence_store()
+    store = get_composition_store()
     comp = store.composition
     pages = comp.get("concern_pages") or []
     page = next(
@@ -69,6 +69,6 @@ def assemble_concern_deepdive(concern_id: str) -> Optional[dict[str, Any]]:
             }
             for r in triage
         ],
-        "snapshot_version": store.workbook_version,
+        "snapshot_version": store.version,
         "workbook_version": store.workbook_version,
     }

@@ -51,9 +51,9 @@ def _workbook_to_coach_templates(rows: list[dict[str, Any]]) -> list[CoachTempla
 def load_coach_templates() -> list[CoachTemplate]:
     templates = _load_json_templates()
     try:
-        from app.hlhp.evidence.loader import get_evidence_store
+        from app.hlhp.evidence.composition_store import get_composition_store
 
-        store = get_evidence_store()
+        store = get_composition_store()
         wb_rows = store.composition.get("coach_voice_templates") or []
         templates = templates + _workbook_to_coach_templates(wb_rows)
     except FileNotFoundError:

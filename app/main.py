@@ -3,6 +3,7 @@ import os
 import sys
 import warnings
 import logging
+from pathlib import Path
 
 # Limit BLAS/OpenMP threads before numpy/scipy/torch are imported downstream
 for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
@@ -65,7 +66,7 @@ from app.hlhp.api.personalized_alerts import router as hl_personalized_alerts_ro
 from app.hlhp.api.scan import router as hlhp_scan_router
 from app.hlhp.api.composition import router as hlhp_composition_router
 from app.hlhp.api.weather import router as hlhp_weather_router
-
+from app.hlhp.api.v4_routes import router as hlhp_v4_router
 # Import Trend Insights router (with error handling for missing dependencies)
 try:
     from app.ai_ingredient_intelligence.api.trend_insights import router as trend_insights_router
@@ -98,7 +99,6 @@ except ImportError as e:
     print("   Notifications API will not be available. This is not critical.")
     notifications_router = None
 # from app.product_listing_image_extraction.route import router as image_extractor_router  # Commented out - module doesn't exist
-from pathlib import Path
 
 # Add Face Analysis path to Python path
 face_analysis_path = Path(__file__).parent / "faceAnalysis"
@@ -114,8 +114,6 @@ except ImportError as e:
 from fastapi.middleware.cors import CORSMiddleware
 from app.ai_ingredient_intelligence.db.collections import distributor_col
 from fastapi.openapi.utils import get_openapi
-from app.ai_ingredient_intelligence.middleware import TimingMiddleware
-
 app = FastAPI(
     title="SkinBB API Documentation",
     description="API documentation for SkinBB - An AI assistant for skincare queries with document retrieval and web search fallback",
@@ -266,10 +264,6 @@ def custom_openapi():
 # Override the default OpenAPI function
 app.openapi = custom_openapi
 
-# ✅ Timing Middleware - Track execution time for all endpoints
-# This must be added BEFORE CORS middleware to ensure it wraps all requests
-app.add_middleware(TimingMiddleware)
-
 # ✅ CORS - Configuration loaded from .env
 # Parse CORS settings from environment variables
 cors_allow_origins_str = os.getenv("CORS_ALLOW_ORIGINS", "")
@@ -347,6 +341,7 @@ app.include_router(hl_personalized_alerts_router, prefix="/api")
 app.include_router(hlhp_scan_router, prefix="/api")
 app.include_router(hlhp_composition_router, prefix="/api")
 app.include_router(hlhp_weather_router, prefix="/api")
+app.include_router(hlhp_v4_router, prefix="/api")
 
 # ✅ Add trend insights API
 if trend_insights_router is not None:
@@ -415,14 +410,6 @@ except ImportError as e:
     print(f"Warning: Could not import QMS router: {e}")
     print("   QMS API will not be available.")
 
-# ✅ Add Timing Statistics API
-try:
-    from app.ai_ingredient_intelligence.api.timing_stats import router as timing_stats_router
-    app.include_router(timing_stats_router, prefix="/api")
-except ImportError as e:
-    print(f"Warning: Could not import timing_stats router: {e}")
-    print("   Timing Statistics API will not be available.")
-
 # ✅ Credits API: Using third-party API via CREDITS_API_BASE_URL (paths in credit_service.py)
 # credit_service.py handles all credit deduction calls to external API
 
@@ -482,17 +469,11 @@ async def create_indexes():
         await notifications_col.create_index([("user_id", 1), ("module", 1)])
         await notifications_col.create_index("id", unique=True)
         print("Formulynx notifications collection indexes created successfully")
-        
-        # Initialize endpoint timing Excel file if it doesn't exist
-        from app.ai_ingredient_intelligence.middleware.timing_middleware import TIMING_EXCEL_FILE
-        if not TIMING_EXCEL_FILE.exists():
-            import pandas as pd
-            df = pd.DataFrame(columns=[
-                "timestamp", "method", "path", "feature", 
-                "execution_time", "status_code", "user_id", "error"
-            ])
-            df.to_excel(TIMING_EXCEL_FILE, index=False, engine='openpyxl')
-            print(f"Created endpoint timing Excel file: {TIMING_EXCEL_FILE}")
+
+        from app.hlhp.mongo_setup import ensure_hlhp_indexes
+
+        await ensure_hlhp_indexes()
+        print("HLHP Mongo indexes ensured")
     except Exception as e:
         print(f"Warning: Could not create indexes: {e}")
         # Don't fail startup if indexes already exist

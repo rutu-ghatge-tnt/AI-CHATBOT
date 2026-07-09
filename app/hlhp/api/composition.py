@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.hlhp.api.deps_auth import (
+    hlhp_authenticated_user,
+    hlhp_optional_authenticated_user,
+    resolve_optional_personalization_user_id,
+    verify_client_user_id,
+)
+from app.hlhp.api.store_http import http_503_for_store_error
+from app.hlhp.db_errors import HlhpStoreError
 
 from app.hlhp.composition.concern import assemble_concern_deepdive
 from app.hlhp.composition.explore import assemble_event_guides, assemble_explore
@@ -16,12 +26,42 @@ from app.hlhp.composition.forecast import assemble_week_ahead
 from app.hlhp.composition.plan_week import assemble_plan_week
 from app.hlhp.composition.sfi_timeline import assemble_sfi_timeline
 from app.hlhp.composition.symptom import assemble_symptom_explainer
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
+from app.hlhp.evidence.scenario_store import get_scenario_store
+from app.hlhp.models.engagement import (
+    FeelingLogStatus,
+    LearnResponse,
+    StreakResponse,
+    UserLogRequest,
+    UserLogResponse,
+    WeeklyCardResponse,
+)
 from app.hlhp.models.history import ConsentRequest, ConsentResponse, ConsentStatusResponse
 from app.hlhp.models.scan import ScanRequest
 from app.hlhp.services.consent_store import get_consent, upsert_consent
 from app.hlhp.coach.state_store import fetch_selected_symptoms
+from app.hlhp.services.engagement_service import (
+    assemble_learn,
+    assemble_streak,
+    assemble_weekly_card,
+    run_user_log,
+)
+from app.hlhp.services.log_event_store import fetch_feeling_log_status
 from app.hlhp.services.history_service import assemble_catchup, assemble_history
+from app.hlhp.models.patterns_v2 import (
+    PatternAlertToggleRequest,
+    PatternAlertToggleResponse,
+    PatternPushTokenRequest,
+    PatternsNarrationResponse,
+    PatternsPayloadV2,
+    PatternsStateResponseV2,
+)
+from app.hlhp.services.patterns_engine_service import (
+    assemble_patterns_state,
+    recompute_patterns_for_user,
+    toggle_pattern_alert,
+)
+from app.hlhp.services.patterns_narration_service import get_patterns_narration
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.scan_service import resolve_environment
 
@@ -58,9 +98,11 @@ async def explore_lane(
     raw_aqi: int | None = Query(None, ge=0),
     raw_rh: float | None = Query(None, ge=0, le=100),
     raw_temp: float | None = Query(None),
+    auth_user: dict | None = Depends(hlhp_optional_authenticated_user),
 ):
-    selected = await fetch_selected_symptoms(user_id) if user_id else set()
-    profile = await load_user_profile(user_id) if user_id else None
+    resolved_user_id = resolve_optional_personalization_user_id(auth_user, user_id)
+    selected = await fetch_selected_symptoms(resolved_user_id) if resolved_user_id else set()
+    profile = await load_user_profile(resolved_user_id) if resolved_user_id else None
     bands = None
     if raw_uvi is not None and raw_aqi is not None and raw_rh is not None and raw_temp is not None:
         env = EnvironmentalData(
@@ -75,7 +117,7 @@ async def explore_lane(
         city,
         concern_id,
         selected_symptoms=selected,
-        user_id=user_id,
+        user_id=resolved_user_id,
         profile=profile,
         bands=bands,
     )
@@ -85,7 +127,7 @@ async def explore_lane(
         concern_id=payload.get("concern_id"),
         bands=bands,
         when=datetime.now().astimezone(),
-        user_id=user_id,
+        user_id=resolved_user_id,
         profile=profile,
         limit=4,
     )
@@ -130,7 +172,7 @@ async def week_ahead(
         "concern_id": concern_id,
         "days": week_days,
         "forecast_source": "synthetic",
-        "workbook_version": get_evidence_store().workbook_version,
+        "workbook_version": get_scenario_store().workbook_version,
     }
 
 
@@ -142,8 +184,10 @@ async def plan_week_lane(
     concern_id: str | None = Query(None),
     user_id: str | None = Query(None),
     days: int = Query(3, ge=1, le=3),
+    auth_user: dict | None = Depends(hlhp_optional_authenticated_user),
 ):
-    profile = await load_user_profile(user_id) if user_id else None
+    resolved_user_id = resolve_optional_personalization_user_id(auth_user, user_id)
+    profile = await load_user_profile(resolved_user_id) if resolved_user_id else None
     from app.hlhp.services.concern_resolver import resolve_concern_id
 
     resolved = resolve_concern_id(profile=profile, client_concern_id=concern_id)
@@ -165,13 +209,15 @@ async def sfi_timeline_lane(
     user_id: str | None = Query(None),
     days_back: int = Query(3, ge=0, le=7),
     days_ahead: int = Query(3, ge=0, le=7),
+    auth_user: dict | None = Depends(hlhp_optional_authenticated_user),
 ):
-    profile = await load_user_profile(user_id) if user_id else None
+    resolved_user_id = resolve_optional_personalization_user_id(auth_user, user_id)
+    profile = await load_user_profile(resolved_user_id) if resolved_user_id else None
     return await assemble_sfi_timeline(
         latitude=latitude,
         longitude=longitude,
         city=city,
-        user_id=user_id,
+        user_id=resolved_user_id,
         profile=profile,
         days_back=days_back,
         days_ahead=days_ahead,
@@ -179,20 +225,168 @@ async def sfi_timeline_lane(
 
 
 @router.get("/history")
-async def history_lane(user_id: str = Query(...), days: int = Query(15, ge=1, le=15)):
-    return await assemble_history(user_id, days=days)
+async def history_lane(
+    user_id: str = Query(...),
+    days: int = Query(30, ge=1, le=30),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = verify_client_user_id(user, user_id)
+    return await assemble_history(uid, days=days)
+
+
+@router.get("/patterns", response_model=PatternsPayloadV2)
+async def patterns_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternsPayloadV2:
+    """Full Patterns tab payload (v4 UI contract): state, meter, cards, emerging."""
+    uid = verify_client_user_id(user, user_id)
+    payload = await recompute_patterns_for_user(uid)
+    return PatternsPayloadV2(**payload)
+
+
+@router.get("/patterns/state", response_model=PatternsStateResponseV2)
+async def patterns_state_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternsStateResponseV2:
+    uid = verify_client_user_id(user, user_id)
+    payload = await assemble_patterns_state(uid)
+    return PatternsStateResponseV2(**payload)
+
+
+@router.get("/patterns/narration", response_model=PatternsNarrationResponse)
+async def patterns_narration_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternsNarrationResponse:
+    uid = verify_client_user_id(user, user_id)
+    cached = await get_patterns_narration(uid)
+    return PatternsNarrationResponse(**cached)
+
+
+@router.post("/patterns/alert", response_model=PatternAlertToggleResponse)
+async def patterns_alert_lane(
+    body: PatternAlertToggleRequest,
+    user: dict = Depends(hlhp_authenticated_user),
+) -> PatternAlertToggleResponse:
+    uid = verify_client_user_id(user, body.user_id)
+    result = await toggle_pattern_alert(uid, body.pattern_id, on=body.on)
+    return PatternAlertToggleResponse(**result)
+
+
+@router.post("/patterns/push-token")
+async def patterns_push_token_lane(
+    body: PatternPushTokenRequest,
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = verify_client_user_id(user, body.user_id)
+    from app.hlhp.services.pattern_push_store import save_push_token
+
+    await save_push_token(uid, body.token, platform=body.platform)
+    return {"saved": True}
 
 
 @router.get("/catchup")
-async def catchup_lane(user_id: str = Query(...), days: int = Query(15, ge=1, le=15)):
-    return await assemble_catchup(user_id, days=days)
+async def catchup_lane(
+    user_id: str = Query(...),
+    days: int = Query(30, ge=1, le=30),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = verify_client_user_id(user, user_id)
+    return await assemble_catchup(uid, days=days)
+
+
+@router.get("/log/status", response_model=FeelingLogStatus)
+async def feeling_log_status_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> FeelingLogStatus:
+    uid = verify_client_user_id(user, user_id)
+    status = await fetch_feeling_log_status(uid)
+    return FeelingLogStatus(**status)
+
+
+@router.post("/log", response_model=UserLogResponse)
+async def user_log_lane(
+    body: UserLogRequest,
+    user: dict = Depends(hlhp_authenticated_user),
+) -> UserLogResponse:
+    uid = verify_client_user_id(user, body.user_id)
+    if uid != body.user_id:
+        body = body.model_copy(update={"user_id": uid})
+    try:
+        return await run_user_log(body)
+    except HlhpStoreError as exc:
+        http_503_for_store_error(exc)
+
+
+@router.get("/streak", response_model=StreakResponse)
+async def streak_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> StreakResponse:
+    uid = verify_client_user_id(user, user_id)
+    return await assemble_streak(uid)
+
+
+@router.get("/weekly-card", response_model=WeeklyCardResponse)
+async def weekly_card_lane(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> WeeklyCardResponse:
+    uid = verify_client_user_id(user, user_id)
+    return await assemble_weekly_card(uid)
+
+
+@router.get("/learn", response_model=LearnResponse)
+async def learn_lane(
+    user_id: str = Query(...),
+    city: str | None = Query(None),
+    concern_id: str | None = Query(None),
+    raw_uvi: float | None = Query(None, ge=0),
+    raw_aqi: int | None = Query(None, ge=0),
+    raw_rh: float | None = Query(None, ge=0, le=100),
+    raw_temp: float | None = Query(None),
+    user: dict = Depends(hlhp_authenticated_user),
+) -> LearnResponse:
+    uid = verify_client_user_id(user, user_id)
+    bands = None
+    if raw_uvi is not None and raw_aqi is not None and raw_rh is not None and raw_temp is not None:
+        env = EnvironmentalData(
+            uv_index=raw_uvi,
+            temperature_c=raw_temp,
+            aqi=raw_aqi,
+            humidity_pct=raw_rh,
+            location_name=city or "",
+        )
+        bands = bucketize_environment(env)
+    return await assemble_learn(
+        uid,
+        city=city,
+        concern_id=concern_id,
+        bands=bands,
+    )
 
 
 @router.post("/consent", response_model=ConsentResponse)
-async def record_consent(body: ConsentRequest):
-    return await upsert_consent(body)
+async def record_consent(
+    body: ConsentRequest,
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = verify_client_user_id(user, body.user_id)
+    if uid != body.user_id:
+        body = body.model_copy(update={"user_id": uid})
+    try:
+        return await upsert_consent(body)
+    except HlhpStoreError as exc:
+        http_503_for_store_error(exc)
 
 
 @router.get("/consent", response_model=ConsentStatusResponse)
-async def read_consent(user_id: str = Query(...)):
-    return await get_consent(user_id)
+async def read_consent(
+    user_id: str = Query(...),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = verify_client_user_id(user, user_id)
+    return await get_consent(uid)

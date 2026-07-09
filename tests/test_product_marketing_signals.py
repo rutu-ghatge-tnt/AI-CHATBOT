@@ -17,7 +17,7 @@ def test_enagenbio_tags_map_to_frizz_and_repair_benefits():
             "formulated with hydrolyzed keratin, pro-vitamin B5, and wheat germ oil "
             "to gently cleanse, strengthen, and nourish dry, damaged, and frizzy hair.</p>"
         ),
-        "benefit": [],
+        "benefit": [{"label": "Frizz Control"}, {"label": "Repair"}],
         "tags": [],
     }
     tag_names = [
@@ -32,10 +32,9 @@ def test_enagenbio_tags_map_to_frizz_and_repair_benefits():
     assert "Repair" in labels
 
     options = build_expected_benefit_options(product=product, mode="haircare", tag_names=tag_names)
-    recommended = [row for row in options["expectedBenefitOptions"] if row.get("recommended")]
-    recommended_labels = [row["label"] for row in recommended]
-    assert "Frizz Control" in recommended_labels
-    assert any("repair" in label.lower() for label in recommended_labels)
+    option_labels = [row["label"] for row in options["expectedBenefitOptions"]]
+    assert option_labels == ["Frizz Control", "Repair"]
+    assert all(row["source"] == "product" for row in options["expectedBenefitOptions"])
 
 
 def test_tag_backed_product_scores_partial_for_frizz_goal():

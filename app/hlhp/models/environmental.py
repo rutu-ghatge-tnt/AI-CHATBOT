@@ -21,6 +21,9 @@ class EnvironmentalData(BaseModel):
     temperature_c: float = Field(..., ge=-50, le=60)
     aqi: int = Field(..., ge=0, le=500)
     humidity_pct: float = Field(..., ge=0, le=100)
+    wind_kmh: float = Field(0.0, ge=0, le=200)
+    wind_dir: str = ""
+    gust_kmh: float = Field(0.0, ge=0, le=250)
     location_name: str
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     data_sources: dict = Field(default_factory=dict)

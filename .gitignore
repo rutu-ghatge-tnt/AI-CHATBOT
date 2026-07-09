@@ -17,14 +17,13 @@ __pycache__/
 .venv
 env/
 venv/
+venv_main/
 ENV/
 env.bak/
 venv.bak/
 venv311/
 venv311/pyvenv.cfg
 venv311/docx-template/docProps/thumbnail.jpeg
-
-endpoint_timing.xlsx
 
 # Database folder
 chroma_db/
@@ -181,6 +180,14 @@ cleaning_checkpoint.json
 # backups & checkpoints
 *.backup_*
 *.pre_save_*
+*.py.save
+
+# Local binaries & scratch data
+ngrok.exe
+failed_queries.json
+still_failed_queries.json
+processed_distributors.json
+evaluation_metrics/
 
 # data outputs — bulky / local inputs stay untracked; version one file so CI/server can run ingest
 /data/**
@@ -188,7 +195,5 @@ cleaning_checkpoint.json
 !/data/raw_documents/system_knowledge_chunks.json
 datasets/
 checkpoints/
-
-endpoint_timing_stats.xlsx
 
 Product_portfolio/

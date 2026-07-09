@@ -6,10 +6,12 @@ from typing import Optional
 
 from bson import ObjectId
 
-from app.hlhp.coach.models import ActionRecord, CoachContext, StreakRecord
+from app.hlhp.coach.models import ActionRecord, CoachContext, StreakMeta, StreakRecord
 from app.hlhp.coach.streak_engine import compute_streak_after_tap, current_streak, streak_key
 from app.hlhp.coach.voice_modulator import select_tone
 from app.hlhp.db import hl_db
+from app.hlhp.db_errors import fail_write
+from app.hlhp.mongo_setup import ensure_hlhp_indexes
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.services.profile_loader import load_user_first_name
 
@@ -161,6 +163,34 @@ async def record_nugget_shown(user_id: str, nugget_id: int) -> None:
         logger.warning("HLHP nugget_log write failed: %s", exc)
 
 
+async def fetch_streak_meta(
+    user_id: str,
+    *,
+    uvi_band: str,
+    routine_action: str,
+    today,
+) -> StreakMeta:
+    """Current streak for a UV band + routine action pair (read-only)."""
+    skey = streak_key(uvi_band, routine_action)
+    prior: StreakRecord | None = None
+    try:
+        doc = await hl_db[_STREAKS].find_one({"user_id": user_id, "streak_key": skey})
+        if doc:
+            prior = StreakRecord(
+                streak_key=skey,
+                consecutive_days=int(doc.get("consecutive_days", 0)),
+                last_increment_at=_parse_dt(doc["last_increment_at"])
+                if doc.get("last_increment_at")
+                else None,
+                longest_ever=int(doc.get("longest_ever", 0)),
+            )
+    except Exception as exc:
+        logger.warning("HLHP streak fetch failed for %s: %s", user_id, exc)
+    current = current_streak(prior, today)
+    longest = prior.longest_ever if prior else 0
+    return StreakMeta(current=current, longest=longest)
+
+
 async def record_action_tap(
     user_id: str,
     *,
@@ -169,6 +199,7 @@ async def record_action_tap(
     tapped_at: datetime,
     rule_id: Optional[str] = None,
 ) -> tuple[int, int]:
+    await ensure_hlhp_indexes()
     skey = streak_key(uvi_band, routine_action)
     streaks_col = hl_db[_STREAKS]
     existing = await streaks_col.find_one({"user_id": user_id, "streak_key": skey})
@@ -209,7 +240,7 @@ async def record_action_tap(
             upsert=True,
         )
     except Exception as exc:
-        logger.warning("HLHP action_tap persist failed: %s", exc)
+        fail_write(_STREAKS, "record_action_tap", exc)
 
     today = tapped_at.date()
     return current_streak(updated, today), updated.longest_ever
@@ -295,18 +326,21 @@ async def record_symptom_feeling(
     *,
     selected: bool,
     recorded_at: datetime,
+    session_id: str | None = None,
 ) -> None:
+    await ensure_hlhp_indexes()
+    doc: dict = {
+        "user_id": user_id,
+        "symptom_keyword": symptom_keyword.strip().lower(),
+        "selected": selected,
+        "recorded_at": recorded_at,
+    }
+    if session_id:
+        doc["session_id"] = session_id
     try:
-        await hl_db[_FEELINGS].insert_one(
-            {
-                "user_id": user_id,
-                "symptom_keyword": symptom_keyword.strip().lower(),
-                "selected": selected,
-                "recorded_at": recorded_at,
-            }
-        )
+        await hl_db[_FEELINGS].insert_one(doc)
     except Exception as exc:
-        logger.warning("HLHP symptom_feeling write failed: %s", exc)
+        fail_write(_FEELINGS, "insert", exc)
 
 
 async def record_symptom_tap(user_id: str, symptom_keyword: str, tapped_at: datetime) -> None:

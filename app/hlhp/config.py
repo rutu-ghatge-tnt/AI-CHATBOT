@@ -15,6 +15,14 @@ class HLSettings:
         "WEATHERAPI_HISTORY_URL",
         "https://api.weatherapi.com/v1/history.json",
     )
+    WEATHERAPI_CURRENT_URL = os.getenv(
+        "WEATHERAPI_CURRENT_URL",
+        "https://api.weatherapi.com/v1/current.json",
+    )
+    HL_SCENARIO_SNAPSHOT = os.getenv(
+        "HL_SCENARIO_SNAPSHOT",
+        "",
+    )
     # Cache backend: memory | mongo | redis  (default mongo — uses existing MONGO_URI)
     CACHE_BACKEND = os.getenv("HLHP_CACHE_BACKEND", "mongo").lower()
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

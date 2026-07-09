@@ -7,11 +7,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from app.hlhp.db import hl_db
+from app.hlhp.mongo_setup import ensure_hlhp_indexes
 
 logger = logging.getLogger(__name__)
 
 _SCAN_LOG = "hlhp_scan_log"
-_INDEXEnsured = False
 
 
 def _parse_dt(value) -> datetime:
@@ -20,19 +20,6 @@ def _parse_dt(value) -> datetime:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
     return datetime.now(timezone.utc)
-
-
-async def _ensure_indexes() -> None:
-    global _INDEXEnsured
-    if _INDEXEnsured:
-        return
-    try:
-        col = hl_db[_SCAN_LOG]
-        await col.create_index([("user_id", 1), ("scanned_at", -1)])
-        await col.create_index("scanned_at")
-        _INDEXEnsured = True
-    except Exception as exc:
-        logger.warning("HLHP scan_log index setup skipped: %s", exc)
 
 
 async def record_scan_log(
@@ -56,7 +43,7 @@ async def record_scan_log(
 ) -> None:
     if not user_id:
         return
-    await _ensure_indexes()
+    await ensure_hlhp_indexes()
     doc = {
         "user_id": user_id,
         "scanned_at": _parse_dt(scanned_at),

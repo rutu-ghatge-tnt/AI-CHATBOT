@@ -10,7 +10,7 @@ from app.hlhp.composition.sfi_daily import lowest_daily_slots_by_date
 from app.hlhp.composition.sfi_timeline import _profile_to_engine, _reading_to_point
 from app.hlhp.composition.vocabulary import mood_headline
 from app.hlhp.core.bands import bucketize_environment
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.models.sfi_timeline import SfiTimelinePoint
@@ -65,7 +65,7 @@ def assemble_plan_week_days(
     worst_slots: dict[str, SfiTimelinePoint] | None = None,
     personalised: bool = False,
 ) -> list[dict[str, Any]]:
-    store = get_evidence_store()
+    store = get_composition_store()
     templates = store.composition.get("forecast_day_templates") or []
     location = city or "your city"
     worst_slots = worst_slots or {}
@@ -135,7 +135,7 @@ async def assemble_plan_week(
     profile: UserProfile | None = None,
     days: int = 3,
 ) -> dict[str, Any]:
-    store = get_evidence_store()
+    store = get_composition_store()
     readings = await fetch_weatherapi_forecast(latitude, longitude, days=days)
     source = "weatherapi" if readings else "unavailable"
 

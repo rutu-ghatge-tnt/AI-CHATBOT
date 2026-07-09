@@ -8,8 +8,6 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 from app.hlhp.coach.models import CoachWrap
-from app.hlhp.models.alert import AlertResponse
-from app.hlhp.models.personalized_alert import PersonalizedAlertResponse
 
 Severity = Literal["BLOCK_ENV", "HARD_ENV", "SOFT_ENV"]
 PhaseUsed = Literal["morning_prep", "evening_recovery"]
@@ -25,6 +23,7 @@ class ScanRequest(BaseModel):
     raw_aqi: Optional[int] = Field(None, ge=0)
     raw_rh: Optional[float] = Field(None, ge=0, le=100)
     raw_temp: Optional[float] = None
+    force_surge: bool = False
 
     @model_validator(mode="after")
     def require_env_source(self):
@@ -104,6 +103,41 @@ class SfiFactorCard(BaseModel):
     severity_pct: int = 0
 
 
+SeverityBandName = Literal[
+    "Paradise Mode",
+    "Smooth Sailing",
+    "Guard Up",
+    "Battle Stations",
+    "Hostile Mode",
+    "Code Red",
+]
+
+
+class FlashAlertOut(BaseModel):
+    level: Literal["L0", "L1"]
+    mode: SeverityBandName
+    l0: str
+    l1: str
+    tip: str
+
+
+class ImpactLineOut(BaseModel):
+    driver: Literal["temp", "uv", "humidity", "aqi"]
+    name: str
+    level: Literal["Low", "Medium", "High"]
+    value: float
+
+
+class EvidenceCellOut(BaseModel):
+    id: str
+    factor: str
+    band: str
+    evidence: str
+    pmids: list[str] = Field(default_factory=list)
+    confidence: str
+    action: str = ""
+
+
 class ScanResponse(BaseModel):
     snapshot_version: str
     workbook_version: Optional[str] = None
@@ -124,12 +158,26 @@ class ScanResponse(BaseModel):
     alerts: list[AlertTile]
     candidate_alerts: list[AlertTile] = Field(default_factory=list)
     user_first_name: Optional[str] = None
-    legacy_alert: Optional[AlertResponse | PersonalizedAlertResponse] = None
     science_nugget: Optional[ScienceNuggetOut] = None
     profile_nudge: Optional[str] = None
     weather_visuals: Optional[WeatherVisuals] = None
     skin_care_tip: Optional[str] = None
+    weather_api_url: Optional[str] = None
     raw_weather_payload: Optional[dict[str, Any]] = None
+    # v3.5 scenario library (SkinBB_HLHP_Scenario_Library_v3.5.xlsx)
+    sfi: Optional[int] = None
+    personal_sfi: Optional[int] = None
+    band: Optional[SeverityBandName] = None
+    action_cluster: Optional[str] = None
+    risk: Optional[int] = None
+    risk_label: Optional[str] = None
+    confidence: Optional[str] = None
+    flash_alert: Optional[FlashAlertOut] = None
+    impacts: list[ImpactLineOut] = Field(default_factory=list)
+    evidence_cell: Optional[EvidenceCellOut] = None
+    scenario_library_version: Optional[str] = None
+    time_window: Optional[Literal["morning", "daytime", "evening"]] = None
+    scene: Optional[str] = None
 
 
 class SymptomTapRequest(BaseModel):
@@ -167,6 +215,26 @@ class SymptomFeelingResponse(BaseModel):
     selected_keywords: list[str] = Field(default_factory=list)
 
 
+class FeelingLogStatusOut(BaseModel):
+    can_log: bool = True
+    cooldown_hours: int = 5
+    next_log_at: Optional[str] = None
+    retry_after_seconds: Optional[int] = None
+
+
+class SymptomSelectedResponse(BaseModel):
+    user_id: str
+    selected_keywords: list[str] = Field(default_factory=list)
+    areas: list[str] = Field(
+        default_factory=list,
+        description="Face areas from the latest log on the requested date",
+    )
+    feeling_log: FeelingLogStatusOut = Field(
+        default_factory=FeelingLogStatusOut,
+        description="Whether a new committed feeling session can be saved now",
+    )
+
+
 class HealthResponse(BaseModel):
     ok: bool
     snapshot_version: str
@@ -174,3 +242,6 @@ class HealthResponse(BaseModel):
     rule_count: int
     composition_row_count: int = 0
     generated_at: str
+    scenario_library_version: Optional[str] = None
+    scenario_master_cells: int = 0
+    scenario_compound_cells: int = 0

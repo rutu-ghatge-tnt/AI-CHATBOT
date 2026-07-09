@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.hlhp.db import hl_db
+from app.hlhp.db_errors import fail_write
+from app.hlhp.mongo_setup import ensure_hlhp_indexes
 from app.hlhp.models.history import ConsentRequest, ConsentResponse, ConsentStatusResponse
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ def _now_iso() -> str:
 
 
 async def upsert_consent(req: ConsentRequest) -> ConsentResponse:
+    await ensure_hlhp_indexes()
     updated_at = _now_iso()
     doc = {
         "user_id": req.user_id,
@@ -34,8 +37,7 @@ async def upsert_consent(req: ConsentRequest) -> ConsentResponse:
             upsert=True,
         )
     except Exception as exc:
-        logger.warning("HLHP consent upsert failed: %s", exc)
-        raise
+        fail_write(_CONSENT, "upsert", exc)
     return ConsentResponse(
         user_id=req.user_id,
         env_logging_consent=req.env_logging_consent,

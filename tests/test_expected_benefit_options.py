@@ -9,7 +9,7 @@ from app.label_looker.services.expected_benefit_options import (
 )
 
 
-def test_skincare_product_offers_skincare_benefits_not_hair():
+def test_skincare_product_offers_only_stored_benefits():
     product = {
         "productType": "Serum",
         "productName": "Vitamin C Face Serum",
@@ -19,21 +19,21 @@ def test_skincare_product_offers_skincare_benefits_not_hair():
     payload = build_expected_benefit_options(product=product)
     assert payload["mode"] == "skincare"
     labels = [row["label"] for row in payload["expectedBenefitOptions"]]
-    assert labels
-    assert not any("hair" in label.lower() for label in labels)
+    assert labels == ["Brightening", "Hydration"]
+    assert all(row["source"] == "product" for row in payload["expectedBenefitOptions"])
 
 
-def test_haircare_product_offers_hair_benefits():
+def test_haircare_product_offers_only_stored_benefits():
     product = {
         "productType": "Shampoo",
         "productName": "Moisturizing Hair Shampoo",
         "hairTypes": ["wavy"],
-        "benefit": [{"label": "Moisturizing"}],
+        "benefit": [{"label": "Moisturizing"}, {"label": "Frizz Control"}],
     }
     payload = build_expected_benefit_options(product=product)
     assert payload["mode"] == "haircare"
     labels = [row["label"] for row in payload["expectedBenefitOptions"]]
-    assert any("moistur" in label.lower() for label in labels)
+    assert labels == ["Moisturizing", "Frizz Control"]
 
 
 def test_validate_desired_benefits_rejects_out_of_catalog():
@@ -57,33 +57,26 @@ def test_validate_desired_benefits_accepts_catalog_label():
     assert cleaned == [first["label"]]
 
 
-def test_validate_accepts_pdp_tag_names_for_hair_product():
+def test_validate_accepts_stored_product_benefit_labels():
     product = {
         "productType": "Shampoo",
         "productName": "EnagenBio Hair Cleanser",
-        "description": "sulphate-free damage repair shampoo with keratin for frizzy hair",
-        "benefit": [],
+        "benefit": [{"label": "Frizz Control"}, {"label": "Repair"}],
     }
-    tag_names = [
-        "Sulphate Free Shampoo",
-        "Damage Repair Shampoo",
-        "Frizz Control Shampoo",
-    ]
-    options = build_expected_benefit_options(product=product, mode="haircare", tag_names=tag_names)
+    options = build_expected_benefit_options(product=product, mode="haircare")
     cleaned = validate_desired_benefits(
-        desired=["Frizz Control Shampoo", "Damage Repair Shampoo"],
+        desired=["Frizz Control", "Repair"],
         options_payload=options,
         product=product,
-        tag_names=tag_names,
     )
     assert cleaned == ["Frizz Control", "Repair"]
 
 
-def test_hair_options_include_hair_fall_control():
+def test_hair_options_only_include_product_benefits():
     product = {
         "productType": "Shampoo",
         "productName": "EnagenBio Hair Cleanser",
-        "benefit": [],
+        "benefit": [{"label": "Hair Fall Control"}, {"label": "Frizz Control"}],
     }
     options = build_expected_benefit_options(
         product=product,
@@ -91,4 +84,17 @@ def test_hair_options_include_hair_fall_control():
         tag_names=["Frizz Control Shampoo"],
     )
     labels = [row["label"] for row in options["expectedBenefitOptions"]]
-    assert "Hair Fall Control" in labels
+    assert labels == ["Hair Fall Control", "Frizz Control"]
+
+
+def test_taxonomy_snapshot_resolves_benefit_object_ids():
+    from bson import ObjectId
+
+    from app.label_looker.services.expected_benefit_options import _taxonomy_benefit_labels_by_id
+    from app.label_looker.services.profile_taxonomy_resolver import _resolve_list_values
+
+    oids = [ObjectId("681b224610e9409e12c03acd"), ObjectId("681b224610e9409e12c03ace")]
+    snap = _taxonomy_benefit_labels_by_id()
+    resolved = {oid: snap[str(oid)] for oid in oids}
+    labels = _resolve_list_values(oids, resolved)
+    assert labels == ["Restorative", "Nourishing"]

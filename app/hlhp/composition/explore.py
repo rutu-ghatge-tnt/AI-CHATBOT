@@ -9,7 +9,7 @@ from typing import Any
 from app.hlhp.composition.feeds import festival_situation_tags
 from app.hlhp.composition.vocabulary import symptom_chips
 from app.hlhp.core.bands import EnvironmentBands, science_condition_tags
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.services.concern_resolver import (
     nugget_audience_slugs,
@@ -60,6 +60,31 @@ _CITY_REGION_ALIASES: dict[str, frozenset[str]] = {
     "coastal": frozenset(
         {"goa", "mumbai", "chennai", "kochi", "kerala", "mangalore", "visakhapatnam", "puducherry"}
     ),
+    "north_india": frozenset(
+        {"delhi", "ncr", "new delhi", "gurgaon", "gurugram", "noida", "faridabad", "ghaziabad",
+         "chandigarh", "punjab", "haryana", "himachal", "shimla", "jammu", "lucknow", "jaipur"}
+    ),
+}
+
+# Macro regions implied by primary city keys (used for workbook scopes like "north_india").
+_CITY_MACRO_REGIONS: dict[str, frozenset[str]] = {
+    "delhi": frozenset({"north_india", "ncr"}),
+    "mumbai": frozenset({"coastal", "maharashtra"}),
+    "pune": frozenset({"deccan", "maharashtra"}),
+    "bangalore": frozenset({"deccan", "south_india"}),
+    "hyderabad": frozenset({"deccan", "south_india"}),
+    "chennai": frozenset({"coastal", "south_india"}),
+    "kolkata": frozenset({"east_india"}),
+    "goa": frozenset({"coastal"}),
+}
+
+_SCOPE_TOKEN_ALIASES: dict[str, str] = {
+    "north india": "north_india",
+    "north_india": "north_india",
+    "ncr": "delhi",
+    "pan-india": "pan_india",
+    "pan_india": "pan_india",
+    "pan-india urban": "pan_india",
 }
 
 
@@ -73,7 +98,10 @@ def _user_city_regions(city: str) -> set[str]:
             continue
         if any(alias in blob or alias in tokens for alias in aliases):
             regions.add(region)
-    return regions
+    expanded = set(regions)
+    for region in regions:
+        expanded |= _CITY_MACRO_REGIONS.get(region, frozenset())
+    return expanded
 
 
 def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
@@ -82,7 +110,7 @@ def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
     if scope and "pan-india" not in scope.lower() and scope.lower() != "any":
         regions: set[str] = set()
         for part in scope.lower().replace(";", ",").split(","):
-            key = part.strip()
+            key = _SCOPE_TOKEN_ALIASES.get(part.strip(), part.strip())
             if key in _CITY_REGION_ALIASES:
                 regions.add(key)
             elif key:
@@ -92,10 +120,20 @@ def _nugget_required_regions(row: dict[str, Any]) -> set[str] | None:
     text = str(row.get("nugget_text") or "").lower()
     if text.startswith("mumbai ") or "mumbai monsoon" in text:
         return {"mumbai"}
-    if text.startswith("delhi ") or "skin in ncr" in text:
-        return {"delhi"}
+    if text.startswith("delhi ") or "skin in ncr" in text or " in ncr " in text:
+        return {"delhi", "north_india"}
+    if "north india" in text:
+        return {"north_india", "delhi"}
     if "goa, mumbai, chennai" in text or "coastal karnataka" in text:
         return {"coastal", "mumbai", "chennai", "goa"}
+    if text.startswith("pune ") or " in pune " in text:
+        return {"pune"}
+    if text.startswith("bangalore ") or "bengaluru" in text:
+        return {"bangalore"}
+    if text.startswith("hyderabad ") or " in hyderabad " in text:
+        return {"hyderabad"}
+    if text.startswith("chennai ") or " in chennai " in text:
+        return {"chennai"}
     return None
 
 
@@ -123,7 +161,7 @@ def _month_matches(month_window: str, when: datetime) -> bool:
 
 
 def assemble_event_guides(city: str, when: datetime | None = None) -> list[dict[str, Any]]:
-    store = get_evidence_store()
+    store = get_composition_store()
     rows = store.composition.get("event_guides") or []
     now = when or datetime.now()
     by_guide: dict[str, list[dict]] = {}
@@ -203,6 +241,47 @@ def _situation_relevance_score(row: dict[str, Any], situation_tags: list[str]) -
     return score
 
 
+def _nugget_candidate_pool(
+    rows: list[dict[str, Any]],
+    *,
+    city: str,
+    concern_id: str | None,
+    profile: UserProfile | None,
+) -> list[dict[str, Any]]:
+    pool = [
+        r
+        for r in rows
+        if r.get("nugget_text") and nugget_matches_profile(r, profile)
+    ]
+    if not pool:
+        return []
+    city_pool = [r for r in pool if _nugget_matches_city(r, city)]
+    if city_pool:
+        pool = city_pool
+    if concern_id:
+        matched = [r for r in pool if _concern_matches_nugget(r, concern_id)]
+        if matched:
+            pool = matched
+    return pool
+
+
+def _score_nugget_rows(
+    pool: list[dict[str, Any]],
+    *,
+    bands: EnvironmentBands | None,
+    when: datetime,
+) -> list[tuple[int, int, str, dict[str, Any]]]:
+    situation_tags = _situation_tags_for_context(bands=bands, when=when)
+    scored: list[tuple[int, int, str, dict[str, Any]]] = []
+    for row in pool:
+        env_score = _situation_relevance_score(row, situation_tags)
+        priority = int(row.get("priority") or 99)
+        nugget_id = str(row.get("nugget_id") or row.get("nugget_text") or "")
+        scored.append((-env_score, priority, nugget_id, row))
+    scored.sort(key=lambda item: (item[0], item[1], item[2]))
+    return scored
+
+
 def _pick_daily_nugget(
     rows: list[dict[str, Any]],
     *,
@@ -213,30 +292,11 @@ def _pick_daily_nugget(
     when: datetime,
     bands: EnvironmentBands | None = None,
 ) -> dict[str, Any] | None:
-    pool = [
-        r
-        for r in rows
-        if r.get("nugget_text") and nugget_matches_profile(r, profile)
-    ]
+    pool = _nugget_candidate_pool(rows, city=city, concern_id=concern_id, profile=profile)
     if not pool:
         return None
-    city_pool = [r for r in pool if _nugget_matches_city(r, city)]
-    if city_pool:
-        pool = city_pool
-    if concern_id:
-        matched = [r for r in pool if _concern_matches_nugget(r, concern_id)]
-        if matched:
-            pool = matched
 
-    situation_tags = _situation_tags_for_context(bands=bands, when=when)
-    scored: list[tuple[int, int, str, dict[str, Any]]] = []
-    for row in pool:
-        env_score = _situation_relevance_score(row, situation_tags)
-        priority = int(row.get("priority") or 99)
-        nugget_id = str(row.get("nugget_id") or "")
-        scored.append((-env_score, priority, nugget_id, row))
-
-    scored.sort(key=lambda item: (item[0], item[1], item[2]))
+    scored = _score_nugget_rows(pool, bands=bands, when=when)
     best_env_score = scored[0][0]
     tier = [row for neg, *_rest, row in scored if neg == best_env_score]
 
@@ -244,6 +304,66 @@ def _pick_daily_nugget(
     digest = hashlib.sha256(key.encode()).hexdigest()
     idx = int(digest[:8], 16) % len(tier)
     return tier[idx]
+
+
+def _nugget_factor_label(row: dict[str, Any], situation_tags: list[str]) -> str:
+    text = str(row.get("nugget_text") or "").lower()
+    if any(w in text for w in ("uv", "sun", "spf", "photoag")):
+        return "UV"
+    if any(w in text for w in ("pollution", "particulate", "pm2", "aqi", "smog")):
+        return "Pollution"
+    if any(w in text for w in ("heat", "temperature", "sweat", "warm")):
+        return "Temperature"
+    if any(w in text for w in ("humid", "monsoon", "dry", "dehydr", "barrier")):
+        return "Humidity"
+    if "uv_high" in situation_tags or "uv_surge" in situation_tags:
+        return "UV"
+    if "aqi_high" in situation_tags or "air_quality_spike" in situation_tags:
+        return "Pollution"
+    if "temp_high" in situation_tags or "heat_surge" in situation_tags:
+        return "Temperature"
+    if "humidity_high" in situation_tags or "humidity_low" in situation_tags:
+        return "Humidity"
+    category = str(row.get("nugget_category") or "").lower()
+    if category in {"indian_culture", "mythbust"}:
+        return "Nutrition"
+    return "Humidity"
+
+
+def pick_learn_nuggets(
+    rows: list[dict[str, Any]],
+    *,
+    city: str,
+    concern_id: str | None,
+    profile: UserProfile | None,
+    user_id: str | None,
+    when: datetime,
+    bands: EnvironmentBands | None = None,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """Rank workbook nuggets for Learn — same signals as explore science feed."""
+    pool = _nugget_candidate_pool(rows, city=city, concern_id=concern_id, profile=profile)
+    if not pool:
+        return []
+
+    situation_tags = _situation_tags_for_context(bands=bands, when=when)
+    scored = _score_nugget_rows(pool, bands=bands, when=when)
+    picked: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for _neg, _priority, nugget_id, row in scored:
+        if nugget_id in seen:
+            continue
+        seen.add(nugget_id)
+        picked.append(
+            {
+                **row,
+                "factor": _nugget_factor_label(row, situation_tags),
+                "source": str(row.get("pmid_anchor") or row.get("source") or "SkinBB evidence base"),
+            }
+        )
+        if len(picked) >= limit:
+            break
+    return picked
 
 
 def _science_nugget_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -264,7 +384,7 @@ def assemble_explore(
     when: datetime | None = None,
     bands: EnvironmentBands | None = None,
 ) -> dict[str, Any]:
-    store = get_evidence_store()
+    store = get_composition_store()
     now = when or datetime.now()
     resolved_concern = resolve_concern_id(profile=profile, client_concern_id=concern_id)
     all_guides = assemble_event_guides(city, now)
@@ -290,5 +410,5 @@ def assemble_explore(
         "science_nugget": science_nugget,
         "knowledge_feed": [],
         "symptom_keywords": symptom_chips(resolved_concern, selected=selected_symptoms or set()),
-        "snapshot_version": store.workbook_version,
+        "snapshot_version": store.version,
     }

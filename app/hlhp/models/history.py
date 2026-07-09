@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
+OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+
 from pydantic import BaseModel, Field
 
 
@@ -18,8 +20,10 @@ class SuddenEventEntry(BaseModel):
 
 class SfiTrendPoint(BaseModel):
     date: str
-    sfi: int
+    sfi: Optional[int] = None
     sudden_event: bool = False
+    driver: Optional[str] = None
+    feeling_logged: bool = False
 
 
 class MostFiredMood(BaseModel):
@@ -47,6 +51,22 @@ class HistoryDayLog(BaseModel):
     logged: bool = True
 
 
+class HistoryFeelingSession(BaseModel):
+    session_id: str
+    committed_at: str
+    date: str
+    days_ago: int
+    feelings: list[str] = Field(default_factory=list)
+    outdoor_score: Optional[int] = None
+    mood_display: str = ""
+    session_description: str = ""
+    sudden_event: bool = False
+    driver: Optional[str] = None
+    outdoor_exposure: Optional[OutdoorExposure] = None
+    notes: Optional[str] = None
+    areas: list[str] = Field(default_factory=list)
+
+
 class HistoryResponse(BaseModel):
     user_id: str
     days: int
@@ -57,6 +77,10 @@ class HistoryResponse(BaseModel):
     sfi_delta_vs_prior: Optional[float] = None
     sudden_events: list[SuddenEventEntry] = Field(default_factory=list)
     daily_logs: list[HistoryDayLog] = Field(default_factory=list)
+    feeling_sessions: list[HistoryFeelingSession] = Field(
+        default_factory=list,
+        description="Committed feeling logs with point-in-time SFI and environment",
+    )
     trend: list[SfiTrendPoint] = Field(default_factory=list)
     most_fired_mood: Optional[MostFiredMood] = None
     returner_banner: Optional[ReturnerBanner] = None

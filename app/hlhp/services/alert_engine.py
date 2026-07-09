@@ -1,8 +1,8 @@
 """
-Unified HLHP engine — evidence workbook is the single source of truth.
+Unified HLHP engine — scenario library v3.5 is the single source of truth.
 """
 
-from app.hlhp.evidence.selector import select_evidence_bundle
+from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.engine_models import (
     Alert,
     EngineResponse,
@@ -10,7 +10,7 @@ from app.hlhp.models.engine_models import (
     ScienceTip,
     UserProfile,
 )
-from app.hlhp.services.scenario_matcher import match_scenario
+from app.hlhp.services.scenario_engine import evaluate_scenario
 from app.hlhp.services.scoring import compute_sfi
 
 
@@ -25,6 +25,13 @@ def _profile_summary(profile: UserProfile | None) -> str:
     )
 
 
+def _scenario_cell_id(scenario) -> str:
+    if scenario.evidence_cell:
+        return scenario.evidence_cell.id
+    cell = scenario.cell or {}
+    return str(cell.get("id", ""))
+
+
 def evaluate(
     env: EnvironmentalData,
     profile: UserProfile | None = None,
@@ -34,21 +41,26 @@ def evaluate(
     )
 
     guest_mode = profile is None
-    bundle = select_evidence_bundle(env, profile=profile, guest_mode=guest_mode)
-    if bundle.primary is None:
-        raise RuntimeError("No evidence row matched for engine evaluation")
-
-    primary = bundle.primary
-    finding = primary.finding
-
-    alert = Alert(
-        l1=primary.l1_text,
-        l2=primary.l2_text or finding.product_implication or finding.mechanism,
-        l3=finding.science_citation,
+    store = get_scenario_store()
+    scenario = evaluate_scenario(
+        store,
+        env,
+        city=env.location or "Unknown",
+        profile=profile,
+        guest_mode=guest_mode,
     )
-    tip = ScienceTip(fact=primary.science_fact, source=primary.science_source)
+    cell_id = _scenario_cell_id(scenario)
+    l1 = scenario.flash_alert.l1 or scenario.flash_alert.l0
+    l2 = scenario.flash_alert.tip or l1
+    l3 = ""
+    if scenario.evidence_cell:
+        l3 = "|".join(scenario.evidence_cell.pmids) or scenario.evidence_cell.evidence
+    if not l3:
+        l3 = "SkinBB HLHP Scenario Library v3.5"
 
-    _, scenario_code = match_scenario(env)
+    alert = Alert(l1=l1, l2=l2, l3=l3)
+    science_fact = scenario.evidence_cell.evidence if scenario.evidence_cell else l1
+    tip = ScienceTip(fact=science_fact, source=l3)
 
     return EngineResponse(
         skin_friendliness_index=sfi,
@@ -58,8 +70,8 @@ def evaluate(
         factor_breakdown=breakdown,
         location=env.location,
         readings=env,
-        scenario_code=finding.id,
-        scenario_name=f"{finding.factor} · {scenario_code}",
+        scenario_code=cell_id,
+        scenario_name=f"{scenario.dominant.factor} · {cell_id}",
         alert=alert,
         science_tip=tip,
         profile_summary=_profile_summary(profile),

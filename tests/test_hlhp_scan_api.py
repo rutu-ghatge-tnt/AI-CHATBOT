@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.scan import ScanRequest, SymptomTapRequest
 from app.hlhp.services.outdoor_ok import compute_outdoor_ok, uv_penalty
@@ -89,9 +89,9 @@ def test_run_scan_guest_with_raw_env():
 
 
 def test_hlhp_health_store_loaded():
-    store = get_evidence_store()
-    assert store.version >= 3
-    assert len(store.findings) >= 1000
+    store = get_scenario_store()
+    assert store.version == "3.5"
+    assert store.master_cell_count >= 1000
 
 
 def test_symptom_tap_guest():

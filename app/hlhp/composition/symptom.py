@@ -6,11 +6,11 @@ from typing import Any, Optional
 
 from app.hlhp.composition.alert_copy import label_routine_action
 from app.hlhp.composition.vocabulary import SYMPTOM_RELATIONS
-from app.hlhp.evidence.loader import get_evidence_store
+from app.hlhp.evidence.composition_store import get_composition_store
 
 
 def assemble_symptom_explainer(symptom_keyword: str) -> Optional[dict[str, Any]]:
-    store = get_evidence_store()
+    store = get_composition_store()
     key = symptom_keyword.strip().lower().replace(" ", "_").replace("-", "_")
     rows = store.composition.get("symptom_explainer_pages") or []
     matched = [
@@ -36,6 +36,6 @@ def assemble_symptom_explainer(symptom_keyword: str) -> Optional[dict[str, Any]]
             for r in sections
         ],
         "related_symptoms": SYMPTOM_RELATIONS.get(key, []),
-        "snapshot_version": store.workbook_version,
+        "snapshot_version": store.version,
         "workbook_version": store.workbook_version,
     }
