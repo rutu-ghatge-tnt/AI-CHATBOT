@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 
 from app.hlhp.api.deps_auth import (
     hlhp_authenticated_user,
     hlhp_optional_authenticated_user,
     resolve_optional_personalization_user_id,
+    user_id_from_auth,
     verify_client_user_id,
 )
 from app.hlhp.api.store_http import http_503_for_store_error
@@ -24,6 +26,14 @@ from app.hlhp.models.v4_api import (
     V4TodayResponse,
 )
 from app.hlhp.services.patterns_engine_service import recompute_patterns_for_user
+from app.hlhp.services.city_chart_service import build_city_chart
+from app.hlhp.services.selfie_service import (
+    delete_daily_selfie,
+    get_selfie_for_date,
+    list_selfies,
+    read_local_selfie_bytes,
+    upsert_daily_selfie,
+)
 from app.hlhp.services.v4_api_service import (
     assemble_learn_v4,
     assemble_recap,
@@ -33,6 +43,77 @@ from app.hlhp.services.v4_api_service import (
 )
 
 router = APIRouter(prefix="/v2", tags=["HLHP V4 — Prototype API"])
+
+
+@router.get("/cities")
+async def v4_cities(
+    city: str = Query("Pune", description="Your city — flags the YOU row"),
+    surge: bool = Query(False, description="Apply surge drill to your city"),
+):
+    """City SFI leaderboard from WeatherAPI slot averages (11 fixed cities + optional YOU)."""
+    return await build_city_chart(you_city=city, surge=surge)
+
+
+@router.post("/selfies")
+async def upload_selfie(
+    file: UploadFile = File(...),
+    date: str = Form(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    """Upsert today's selfie — one per user+day under s3://…/HLHP-LOG/{user}/{date}.jpg."""
+    uid = user_id_from_auth(user)
+    return await upsert_daily_selfie(uid, date, file)
+
+
+@router.get("/selfies/media")
+async def get_selfie_media(
+    date: str = Query(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    """Serve the day's selfie JPEG (local cache). Used when S3 GetObject is unavailable."""
+    uid = user_id_from_auth(user)
+    data = read_local_selfie_bytes(uid, date)
+    if not data:
+        # Rehydrate empty local cache is not possible without S3 GetObject.
+        row = await get_selfie_for_date(uid, date)
+        if not row:
+            raise HTTPException(status_code=404, detail={"code": "not_found", "message": "No selfie for that day."})
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "preview_unavailable",
+                "message": "Selfie is stored but the preview cache is missing. Retake to restore the preview.",
+            },
+        )
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.get("/selfies")
+async def get_selfies(
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+    date: str | None = Query(None, description="Single day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = user_id_from_auth(user)
+    if date:
+        row = await get_selfie_for_date(uid, date)
+        return {"selfies": [row] if row else []}
+    rows = await list_selfies(uid, date_from=date_from, date_to=date_to)
+    return {"selfies": rows}
+
+
+@router.delete("/selfies")
+async def remove_selfie(
+    date: str = Query(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = user_id_from_auth(user)
+    return await delete_daily_selfie(uid, date)
 
 
 @router.get("/today", response_model=V4TodayResponse)

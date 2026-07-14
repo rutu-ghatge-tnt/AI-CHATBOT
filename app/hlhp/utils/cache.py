@@ -59,6 +59,13 @@ def _memory_set(key: str, value: dict[str, Any], ttl: int) -> None:
     _memory_cache[key] = (time.time() + ttl, json.dumps(value, default=str))
 
 
+def _as_utc(value: datetime) -> datetime:
+    """PyMongo often returns naive UTC; always compare as aware UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 async def _mongo_get(key: str) -> dict[str, Any] | None:
     from app.hlhp.db import hl_db
 
@@ -67,7 +74,7 @@ async def _mongo_get(key: str) -> dict[str, Any] | None:
     if not doc:
         return None
     expires_at = doc.get("expires_at")
-    if expires_at and expires_at <= datetime.now(timezone.utc):
+    if isinstance(expires_at, datetime) and _as_utc(expires_at) <= datetime.now(timezone.utc):
         await hl_db[_CACHE_COLLECTION].delete_one({"key": key})
         return None
     payload = doc.get("payload")
