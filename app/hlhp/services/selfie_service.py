@@ -235,6 +235,10 @@ async def list_selfies(user_id: str, *, date_from: str | None = None, date_to: s
     rows = []
     async for doc in cursor:
         date_iso = doc["date"]
+        # Skip orphans: Mongo pointer without a serveable preview file.
+        if not read_local_selfie_bytes(user_id, date_iso):
+            await _scrub_orphan_selfie(user_id, date_iso, doc.get("s3_key"))
+            continue
         rows.append(
             {
                 "date": date_iso,
@@ -247,17 +251,31 @@ async def list_selfies(user_id: str, *, date_from: str | None = None, date_to: s
     return rows
 
 
+async def _scrub_orphan_selfie(user_id: str, date_iso: str, s3_key: str | None = None) -> None:
+    """Drop metadata when the preview bytes are gone (stale S3-only / wiped cache)."""
+    try:
+        if s3_key:
+            _delete_s3(s3_key)
+        await _col().delete_one({"user_id": user_id, "date": date_iso})
+        logger.info("Scrubbed orphan selfie metadata user=%s date=%s", user_id, date_iso)
+    except Exception as exc:
+        logger.warning("Orphan selfie scrub failed user=%s date=%s: %s", user_id, date_iso, exc)
+
+
 async def get_selfie_for_date(user_id: str, date_iso: str) -> dict[str, Any] | None:
     date_iso = _validate_date(date_iso)
     doc = await _col().find_one({"user_id": user_id, "date": date_iso}, {"_id": 0})
     local = read_local_selfie_bytes(user_id, date_iso)
-    if not doc and not local:
-        return None
-    return {
-        "date": date_iso,
-        "url": media_api_url(date_iso),
-        "s3_key": (doc or {}).get("s3_key"),
-    }
+    if local:
+        return {
+            "date": date_iso,
+            "url": media_api_url(date_iso),
+            "s3_key": (doc or {}).get("s3_key"),
+        }
+    if doc:
+        # Stale row from an older upload that never left a local preview.
+        await _scrub_orphan_selfie(user_id, date_iso, doc.get("s3_key"))
+    return None
 
 
 async def delete_daily_selfie(user_id: str, date_iso: str) -> dict[str, Any]:
