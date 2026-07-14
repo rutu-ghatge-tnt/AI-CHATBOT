@@ -74,16 +74,11 @@ async def get_selfie_media(
     uid = user_id_from_auth(user)
     data = read_local_selfie_bytes(uid, date)
     if not data:
-        # Rehydrate empty local cache is not possible without S3 GetObject.
-        row = await get_selfie_for_date(uid, date)
-        if not row:
-            raise HTTPException(status_code=404, detail={"code": "not_found", "message": "No selfie for that day."})
+        # Clear stale Mongo pointers so list/get agree with “no selfie yet”.
+        await get_selfie_for_date(uid, date)
         raise HTTPException(
             status_code=404,
-            detail={
-                "code": "preview_unavailable",
-                "message": "Selfie is stored but the preview cache is missing. Retake to restore the preview.",
-            },
+            detail={"code": "not_found", "message": "No selfie for that day."},
         )
     return Response(
         content=data,
