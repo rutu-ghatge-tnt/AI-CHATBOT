@@ -6,7 +6,12 @@ class HLSettings:
         "HL_WEATHER_API_URL",
         "https://api.skintruth.in/api/v1/weathers/location-weather",
     )
-    WEATHERAPI_KEY = os.getenv("WEATHERAPI_KEY") or os.getenv("WEATHER_API_KEY") or ""
+
+    @property
+    def WEATHERAPI_KEY(self) -> str:
+        # Read live so dotenv / process env updates are picked up; strip whitespace.
+        return (os.getenv("WEATHERAPI_KEY") or os.getenv("WEATHER_API_KEY") or "").strip()
+
     WEATHERAPI_FORECAST_URL = os.getenv(
         "WEATHERAPI_FORECAST_URL",
         "https://api.weatherapi.com/v1/forecast.json",
@@ -48,4 +53,3 @@ class HLSettings:
 
 
 hl_settings = HLSettings()
-

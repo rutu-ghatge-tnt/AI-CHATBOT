@@ -85,6 +85,10 @@ async def ensure_hlhp_indexes() -> None:
         await push_tokens.create_index([("user_id", 1), ("token", 1)], unique=True)
         await push_tokens.create_index("updated_at")
 
+        selfies = hl_db["hlhp_selfie_day"]
+        await selfies.create_index([("user_id", 1), ("date", 1)], unique=True)
+        await selfies.create_index([("user_id", 1), ("updated_at", -1)])
+
         _indexes_ensured = True
         logger.info("HLHP Mongo indexes ensured")
     except Exception as exc:
