@@ -1,6 +1,7 @@
 """Tests for HLHP cache backends."""
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from app.hlhp.utils.cache import get_cached, set_cached
@@ -44,5 +45,40 @@ def test_mongo_cache_roundtrip():
                     await set_cached("hl:weather:19:72", {"uv_index": 8}, 900)
                     hit = await get_cached("hl:weather:19:72")
                     assert hit["uv_index"] == 8
+
+    asyncio.run(_run())
+
+
+def test_mongo_cache_accepts_naive_expires_at():
+    """PyMongo often returns naive UTC — must not blow up on aware comparison."""
+    store: dict = {
+        "hl:board": {
+            "key": "hl:board",
+            "payload": {"cities": [{"city": "Pune", "sfi": 70}]},
+            # Naive UTC — mirrors typical PyMongo codec_options return values.
+            "expires_at": datetime.now(timezone.utc).replace(tzinfo=None)
+            + timedelta(seconds=900),
+        }
+    }
+
+    async def fake_find_one(filter_doc):
+        return store.get(filter_doc["key"])
+
+    async def fake_delete_one(_filter_doc):
+        return None
+
+    mock_col = MagicMock()
+    mock_col.find_one = fake_find_one
+    mock_col.delete_one = fake_delete_one
+
+    mock_db = MagicMock()
+    mock_db.__getitem__ = MagicMock(return_value=mock_col)
+
+    async def _run():
+        with patch("app.hlhp.config.hl_settings.CACHE_BACKEND", "mongo"):
+            with patch("app.hlhp.utils.cache._mongo_index_ensured", True):
+                with patch("app.hlhp.db.get_hlhp_db", return_value=mock_db):
+                    hit = await get_cached("hl:board")
+                    assert hit["cities"][0]["city"] == "Pune"
 
     asyncio.run(_run())

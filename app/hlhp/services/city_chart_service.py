@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 _CACHE_BOARD = "hl:city-chart:board:v2"
 _IST = ZoneInfo("Asia/Kolkata")
+_BOARD_LOCKS: dict[str, asyncio.Lock] = {}
 
 # Fixed 11-city board (same set as HelloCityChart / V7).
 CITY_QUERIES: dict[str, str] = {
@@ -313,50 +314,57 @@ async def build_city_chart(
     if cached and isinstance(cached, dict) and isinstance(cached.get("cities"), list):
         return cached
 
-    now = datetime.now(_IST)
-    today_iso = now.date().isoformat()
-    yesterday_iso = (now.date() - timedelta(days=1)).isoformat()
+    lock = _BOARD_LOCKS.setdefault(board_key, asyncio.Lock())
+    async with lock:
+        # Second look after winning the lock — another request may have filled cache.
+        cached = await get_cached(board_key)
+        if cached and isinstance(cached, dict) and isinstance(cached.get("cities"), list):
+            return cached
 
-    readings = await asyncio.gather(
-        *[
-            _city_day_averages(city, query, today_iso=today_iso, yesterday_iso=yesterday_iso)
-            for city, query in CITY_QUERIES.items()
-        ]
-    )
+        now = datetime.now(_IST)
+        today_iso = now.date().isoformat()
+        yesterday_iso = (now.date() - timedelta(days=1)).isoformat()
 
-    rows: list[dict[str, Any]] = []
-    for reading in readings:
-        city = reading["city"]
-        row = _row_from_reading(
-            city,
-            reading,
-            is_you=(you_on_board and city == you_canon),
-            surge=surge,
+        readings = await asyncio.gather(
+            *[
+                _city_day_averages(city, query, today_iso=today_iso, yesterday_iso=yesterday_iso)
+                for city, query in CITY_QUERIES.items()
+            ]
         )
-        if row:
-            rows.append(row)
 
-    # 12th city only when the user's place is outside the fixed 11.
-    if you_canon and not you_on_board and not any(r["is_you"] for r in rows):
-        query = f"{you_canon},India"
-        extra = await _city_day_averages(
-            you_canon, query, today_iso=today_iso, yesterday_iso=yesterday_iso
-        )
-        row = _row_from_reading(you_canon, extra, is_you=True, surge=surge)
-        if row:
-            rows.append(row)
+        rows: list[dict[str, Any]] = []
+        for reading in readings:
+            city = reading["city"]
+            row = _row_from_reading(
+                city,
+                reading,
+                is_you=(you_on_board and city == you_canon),
+                surge=surge,
+            )
+            if row:
+                rows.append(row)
 
-    rows.sort(key=lambda r: (-int(r["sfi"]), str(r["city"])))
-    for i, r in enumerate(rows):
-        r["rank"] = i + 1
+        # 12th city only when the user's place is outside the fixed 11.
+        if you_canon and not you_on_board and not any(r["is_you"] for r in rows):
+            query = f"{you_canon},India"
+            extra = await _city_day_averages(
+                you_canon, query, today_iso=today_iso, yesterday_iso=yesterday_iso
+            )
+            row = _row_from_reading(you_canon, extra, is_you=True, surge=surge)
+            if row:
+                rows.append(row)
 
-    payload = {
-        "cities": rows,
-        "source": "weatherapi_slot_avg",
-        "slots": list(SFI_SLOT_HOURS),
-        "you_city": you_canon,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if rows:
-        await set_cached(board_key, payload, hl_settings.WEATHER_CACHE_TTL)
-    return payload
+        rows.sort(key=lambda r: (-int(r["sfi"]), str(r["city"])))
+        for i, r in enumerate(rows):
+            r["rank"] = i + 1
+
+        payload = {
+            "cities": rows,
+            "source": "weatherapi_slot_avg",
+            "slots": list(SFI_SLOT_HOURS),
+            "you_city": you_canon,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if rows:
+            await set_cached(board_key, payload, hl_settings.WEATHER_CACHE_TTL)
+        return payload
