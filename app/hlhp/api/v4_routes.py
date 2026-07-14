@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 
 from app.hlhp.api.deps_auth import (
     hlhp_authenticated_user,
@@ -30,6 +31,7 @@ from app.hlhp.services.selfie_service import (
     delete_daily_selfie,
     get_selfie_for_date,
     list_selfies,
+    read_local_selfie_bytes,
     upsert_daily_selfie,
 )
 from app.hlhp.services.v4_api_service import (
@@ -61,6 +63,33 @@ async def upload_selfie(
     """Upsert today's selfie — one per user+day under s3://…/HLHP-LOG/{user}/{date}.jpg."""
     uid = user_id_from_auth(user)
     return await upsert_daily_selfie(uid, date, file)
+
+
+@router.get("/selfies/media")
+async def get_selfie_media(
+    date: str = Query(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    """Serve the day's selfie JPEG (local cache). Used when S3 GetObject is unavailable."""
+    uid = user_id_from_auth(user)
+    data = read_local_selfie_bytes(uid, date)
+    if not data:
+        # Rehydrate empty local cache is not possible without S3 GetObject.
+        row = await get_selfie_for_date(uid, date)
+        if not row:
+            raise HTTPException(status_code=404, detail={"code": "not_found", "message": "No selfie for that day."})
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "preview_unavailable",
+                "message": "Selfie is stored but the preview cache is missing. Retake to restore the preview.",
+            },
+        )
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.get("/selfies")

@@ -23,7 +23,9 @@ class HlhpSettings:
         self.selfie_storage_dir = os.getenv("HLHP_SELFIE_STORAGE_DIR") or "data/hlhp-selfies"
         self.default_plus_fee_inr = int(os.getenv("HLHP_PLUS_DEFAULT_FEE_INR") or "1499")
 
-        # Daily log selfies → s3://skinbb-main/HLHP-LOG/{user}/{date}.jpg
+        # Daily log selfies → s3://skinbb-main/HLHP-LOG/{user}/{date}.jpg (prod path).
+        # Override with HLHP_SELFIE_S3_BUCKET if needed. Local disk cache still
+        # backs previews when GetObject / console credentials lack read access.
         self.selfie_s3_bucket = (
             os.getenv("HLHP_SELFIE_S3_BUCKET")
             or os.getenv("AWS_S3_BUCKET_PLATFORM_LOGOS")

@@ -1,10 +1,11 @@
-"""HLHP daily selfie storage — S3 stable keys under HLHP-LOG/ + Mongo pointer."""
+"""HLHP daily selfie storage — S3 + local cache for previews when GetObject is blocked."""
 
 from __future__ import annotations
 
 import logging
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -64,6 +65,45 @@ def public_selfie_url(key: str) -> str:
     return f"https://{settings.selfie_s3_bucket}.s3.{settings.selfie_s3_region}.amazonaws.com/{key}"
 
 
+def media_api_url(date_iso: str) -> str:
+    """Browser-facing path — FE must fetch with auth (CSS url() cannot send Bearer)."""
+    return f"/api/v2/selfies/media?date={_validate_date(date_iso)}"
+
+
+def _local_path(user_id: str, date_iso: str) -> Path:
+    settings = get_hlhp_settings()
+    root = Path(settings.selfie_storage_dir)
+    path = root / _safe_user_id(user_id) / f"{_validate_date(date_iso)}.jpg"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _put_local(user_id: str, date_iso: str, body: bytes) -> Path:
+    path = _local_path(user_id, date_iso)
+    path.write_bytes(body)
+    return path
+
+
+def _delete_local(user_id: str, date_iso: str) -> None:
+    path = _local_path(user_id, date_iso)
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError as exc:
+        logger.warning("Local selfie delete failed for %s: %s", path, exc)
+
+
+def read_local_selfie_bytes(user_id: str, date_iso: str) -> bytes | None:
+    path = _local_path(user_id, date_iso)
+    if not path.is_file():
+        return None
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        logger.warning("Local selfie read failed for %s: %s", path, exc)
+        return None
+
+
 async def _normalize_jpeg(upload: UploadFile) -> bytes:
     settings = get_hlhp_settings()
     raw = await upload.read()
@@ -91,7 +131,6 @@ async def _normalize_jpeg(upload: UploadFile) -> bytes:
 
         img = Image.open(io.BytesIO(raw))
         img = img.convert("RGB")
-        # Cap long edge for skincare-quality stills without huge uploads
         max_edge = 1600
         w, h = img.size
         scale = min(1.0, max_edge / float(max(w, h)))
@@ -110,8 +149,9 @@ async def _normalize_jpeg(upload: UploadFile) -> bytes:
         raise
     except Exception as exc:
         logger.warning("Selfie image normalize failed: %s", exc)
-        # Fallback: accept raw jpeg bytes only
-        if content_type in {"image/jpeg", "image/jpg"} or (upload.filename or "").lower().endswith((".jpg", ".jpeg")):
+        if content_type in {"image/jpeg", "image/jpg"} or (upload.filename or "").lower().endswith(
+            (".jpg", ".jpeg")
+        ):
             return raw
         raise HTTPException(
             status_code=400,
@@ -119,7 +159,8 @@ async def _normalize_jpeg(upload: UploadFile) -> bytes:
         ) from exc
 
 
-def _put_s3(key: str, body: bytes) -> None:
+def _put_s3(key: str, body: bytes) -> bool:
+    """Best-effort S3 write. Returns False when credentials/policy block PutObject."""
     settings = get_hlhp_settings()
     client = _s3()
     try:
@@ -130,12 +171,16 @@ def _put_s3(key: str, body: bytes) -> None:
             ContentType="image/jpeg",
             CacheControl="private, max-age=3600",
         )
+        return True
     except ClientError as exc:
-        logger.exception("S3 put failed for %s", key)
-        raise HTTPException(
-            status_code=502,
-            detail={"code": "s3_put_failed", "message": "Could not upload selfie to storage."},
-        ) from exc
+        code = (exc.response or {}).get("Error", {}).get("Code", "")
+        logger.warning(
+            "S3 put failed for s3://%s/%s (%s) — keeping local copy only",
+            settings.selfie_s3_bucket,
+            key,
+            code or exc,
+        )
+        return False
 
 
 def _delete_s3(key: str) -> None:
@@ -148,22 +193,23 @@ def _delete_s3(key: str) -> None:
 
 
 async def upsert_daily_selfie(user_id: str, date_iso: str, upload: UploadFile) -> dict[str, Any]:
-    """One selfie per user+day. Overwrites the stable S3 key (no clutter)."""
+    """One selfie per user+day. Local cache for previews; S3 when credentials allow."""
     date_iso = _validate_date(date_iso)
     key = selfie_object_key(user_id, date_iso)
     body = await _normalize_jpeg(upload)
 
-    # Explicit delete then put so replace always clears any prior object version/orphan.
+    _put_local(user_id, date_iso, body)
     _delete_s3(key)
-    _put_s3(key, body)
+    s3_ok = _put_s3(key, body)
 
-    url = public_selfie_url(key)
+    url = media_api_url(date_iso)
     now = datetime.now(timezone.utc)
     doc = {
         "user_id": user_id,
         "date": date_iso,
         "s3_key": key,
         "url": url,
+        "s3_uploaded": s3_ok,
         "bytes": len(body),
         "content_type": "image/jpeg",
         "updated_at": now,
@@ -173,7 +219,7 @@ async def upsert_daily_selfie(user_id: str, date_iso: str, upload: UploadFile) -
         {"$set": doc, "$setOnInsert": {"created_at": now}},
         upsert=True,
     )
-    return {"date": date_iso, "url": url, "s3_key": key, "bytes": len(body)}
+    return {"date": date_iso, "url": url, "s3_key": key, "bytes": len(body), "s3_uploaded": s3_ok}
 
 
 async def list_selfies(user_id: str, *, date_from: str | None = None, date_to: str | None = None) -> list[dict[str, Any]]:
@@ -188,11 +234,11 @@ async def list_selfies(user_id: str, *, date_from: str | None = None, date_to: s
     cursor = _col().find(filt, {"_id": 0, "date": 1, "url": 1, "s3_key": 1, "updated_at": 1}).sort("date", 1)
     rows = []
     async for doc in cursor:
-        url = doc.get("url") or public_selfie_url(doc["s3_key"])
+        date_iso = doc["date"]
         rows.append(
             {
-                "date": doc["date"],
-                "url": url,
+                "date": date_iso,
+                "url": media_api_url(date_iso),
                 "updated_at": doc.get("updated_at").isoformat()
                 if isinstance(doc.get("updated_at"), datetime)
                 else doc.get("updated_at"),
@@ -204,12 +250,13 @@ async def list_selfies(user_id: str, *, date_from: str | None = None, date_to: s
 async def get_selfie_for_date(user_id: str, date_iso: str) -> dict[str, Any] | None:
     date_iso = _validate_date(date_iso)
     doc = await _col().find_one({"user_id": user_id, "date": date_iso}, {"_id": 0})
-    if not doc:
+    local = read_local_selfie_bytes(user_id, date_iso)
+    if not doc and not local:
         return None
     return {
-        "date": doc["date"],
-        "url": doc.get("url") or public_selfie_url(doc["s3_key"]),
-        "s3_key": doc.get("s3_key"),
+        "date": date_iso,
+        "url": media_api_url(date_iso),
+        "s3_key": (doc or {}).get("s3_key"),
     }
 
 
@@ -220,5 +267,6 @@ async def delete_daily_selfie(user_id: str, date_iso: str) -> dict[str, Any]:
     if doc and doc.get("s3_key"):
         key = doc["s3_key"]
     _delete_s3(key)
+    _delete_local(user_id, date_iso)
     result = await _col().delete_one({"user_id": user_id, "date": date_iso})
     return {"date": date_iso, "deleted": result.deleted_count > 0 or True}
