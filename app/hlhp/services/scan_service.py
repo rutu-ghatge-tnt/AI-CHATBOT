@@ -33,6 +33,7 @@ from app.hlhp.models.scan import (
     SymptomTapResponse,
     WeatherVisuals,
 )
+from app.hlhp.services.routine_today_service import select_routine_today
 from app.hlhp.services.scenario_engine import (
     ScenarioEvaluation,
     evaluate_scenario,
@@ -189,6 +190,9 @@ def _scenario_scan_fields(
     store: ScenarioStore,
     scenario: ScenarioEvaluation,
     v4_eval: V4Evaluation,
+    *,
+    profile: UserProfile | None = None,
+    guest_mode: bool = False,
 ) -> dict:
     flash = scenario.flash_alert
     ev = scenario.evidence_cell
@@ -197,6 +201,9 @@ def _scenario_scan_fields(
         "personal_sfi": v4_eval.personal_sfi,
         "band": v4_eval.mode,
         "action_cluster": scenario.action_cluster,
+        "whats_different": select_routine_today(
+            v4_eval, profile, guest_mode=guest_mode
+        ),
         "risk": scenario.risk,
         "risk_label": scenario.risk_label,
         "confidence": scenario.confidence,
@@ -564,7 +571,13 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
         profile_nudge=profile_nudge,
         **_weather_fields(env),
         **ui,
-        **_scenario_scan_fields(scenario_store, scenario, v4_eval),
+        **_scenario_scan_fields(
+            scenario_store,
+            scenario,
+            v4_eval,
+            profile=profile,
+            guest_mode=guest_mode,
+        ),
         scene=v4_eval.scene,
     )
     await _maybe_record_scan(req=req, response=resp, env=env, profile=profile, guest_mode=guest_mode)
