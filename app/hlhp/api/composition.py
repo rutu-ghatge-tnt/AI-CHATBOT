@@ -316,7 +316,11 @@ async def user_log_lane(
     if uid != body.user_id:
         body = body.model_copy(update={"user_id": uid})
     try:
-        return await run_user_log(body)
+        token = user.get("_label_looker_access_token")
+        return await run_user_log(
+            body,
+            bearer_token=str(token) if token else None,
+        )
     except HlhpStoreError as exc:
         http_503_for_store_error(exc)
 

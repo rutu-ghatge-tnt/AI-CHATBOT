@@ -198,4 +198,9 @@ checkpoints/
 
 Product_portfolio/
 
+# ---- HLHP design / reference prototypes (local only — do not push) ----
 /new-hlhp-ref-with-goals/
+/app/hlhp/final-ref/
+/app/hlhp/new-changes/
+/app/hlhp/HLHP Seeker App*.html
+/app/hlhp/patterns/*.html

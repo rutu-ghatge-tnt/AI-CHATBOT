@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class HlhpGoalSetupPayload(BaseModel):
@@ -54,21 +54,42 @@ class HlhpGoalCreateRequest(BaseModel):
     age: str = ""
     gender: str = ""
     assigned_doctor_id: str = Field(default="", alias="assignedDoctorId")
+    assigned_doctor_name: str = Field(default="", alias="assignedDoctorName")
 
     model_config = {"populate_by_name": True}
 
 
+class HlhpChatDoc(BaseModel):
+    name: str = Field(..., min_length=1, max_length=256)
+    size: str = ""
+
+
 class HlhpChatMessageRequest(BaseModel):
     user_id: str | None = None
-    doctor_id: str | None = None
+    doctor_id: str | None = Field(default=None, alias="doctorId")
     txt: str = ""
     photo: bool = False
+    img: str | None = None
+    doc: HlhpChatDoc | None = None
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def require_content(self) -> "HlhpChatMessageRequest":
+        has_text = bool((self.txt or "").strip())
+        has_img = bool((self.img or "").strip()) or self.photo
+        has_doc = self.doc is not None and bool(self.doc.name.strip())
+        if not (has_text or has_img or has_doc):
+            raise ValueError("message requires txt, img/photo, or doc")
+        return self
 
 
 class HlhpTypingRequest(BaseModel):
     user_id: str | None = None
-    doctor_id: str | None = None
+    doctor_id: str | None = Field(default=None, alias="doctorId")
     on: bool = True
+
+    model_config = {"populate_by_name": True}
 
 
 class HlhpPaymentCheckoutRequest(BaseModel):
@@ -76,7 +97,35 @@ class HlhpPaymentCheckoutRequest(BaseModel):
     doctor_id: str = Field(..., alias="doctorId")
     tnc_accepted: bool = Field(..., alias="tncAccepted")
     name: str = ""
-    winback: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
+class HlhpPaymentVerifyRequest(BaseModel):
+    user_id: str | None = None
+    razorpay_payment_id: str = Field(..., alias="razorpayPaymentId", min_length=1)
+    razorpay_subscription_id: str = Field(
+        ..., alias="razorpaySubscriptionId", min_length=1
+    )
+    razorpay_signature: str = Field(..., alias="razorpaySignature", min_length=1)
+
+    model_config = {"populate_by_name": True}
+
+
+class HlhpPaymentDoctorScopedRequest(BaseModel):
+    """Cancel / resume body — scoped to a seeker↔doctor lane."""
+
+    user_id: str | None = None
+    doctor_id: str = Field(..., alias="doctorId")
+
+    model_config = {"populate_by_name": True}
+
+
+class HlhpPaymentRenewRequest(BaseModel):
+    user_id: str | None = None
+    doctor_id: str = Field(..., alias="doctorId")
+    tnc_accepted: bool = Field(..., alias="tncAccepted")
+    name: str = ""
 
     model_config = {"populate_by_name": True}
 
@@ -86,7 +135,19 @@ class HlhpDoctorSubscriptionUpdate(BaseModel):
 
 
 class HlhpDoctorMessageRequest(BaseModel):
-    txt: str = Field(..., min_length=1)
+    txt: str = ""
+    photo: bool = False
+    img: str | None = None
+    doc: HlhpChatDoc | None = None
+
+    @model_validator(mode="after")
+    def require_content(self) -> "HlhpDoctorMessageRequest":
+        has_text = bool((self.txt or "").strip())
+        has_img = bool((self.img or "").strip()) or self.photo
+        has_doc = self.doc is not None and bool(self.doc.name.strip())
+        if not (has_text or has_img or has_doc):
+            raise ValueError("message requires txt, img/photo, or doc")
+        return self
 
 
 class HlhpDoctorOnboardComplete(BaseModel):
@@ -100,6 +161,13 @@ class HlhpDoctorOnboardComplete(BaseModel):
     fee: int = 1499
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("fee")
+    @classmethod
+    def fee_bounds(cls, value: int) -> int:
+        if value < 99 or value > 99999:
+            raise ValueError("fee must be between 99 and 99999")
+        return value
 
 
 ChatWho = Literal["seeker", "doctor"]
