@@ -1,8 +1,15 @@
 """
-HLHP V4 deterministic scoring engine — port from V4 backend handoff (July 2026).
+HLHP V4 deterministic scoring engine — canonical Fun / scan / city-chart SFI.
 
-Environmental SFI = sum of four band points (0–100).
-Personal SFI uses CONCERN_WEIGHTS + SKIN_BAND_PENALTY from v4_scoring_data.
+**Canonical formula (additive V4):**
+- Environmental SFI = sum of four factor band points (Temperature, UV, Humidity, AQI),
+  each 0–25 → total 0–100.
+- Personal SFI = concern-weighted average of those points, minus skin-band penalties
+  (and small gender/age deltas when profile is present).
+- Headline SFI = personal when logged-in with profile; else environmental.
+
+`dominant_factor` (lowest points) is **UI-only** — it does not reweight the score.
+V7 reference `W_DOM=0.6` blend is **not** used in production.
 """
 
 from __future__ import annotations

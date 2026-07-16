@@ -1,4 +1,4 @@
-"""Doctor panel domain helpers — panel view, CRT, tasks (scaffold)."""
+"""Doctor panel domain helpers — panel view, CRT, tasks (hub-backed)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,22 @@ import time
 from datetime import datetime
 from typing import Any
 
+from fastapi import HTTPException
+
 from app.hlhp.core.bus_client import get_bus_client
-from app.hlhp.core.bus_contract import CRT_TARGET_HOURS, CRT_WINDOW_CLOSE_HOUR, CRT_WINDOW_OPEN_HOUR
+from app.hlhp.core.bus_contract import (
+    CRT_TARGET_HOURS,
+    CRT_WINDOW_CLOSE_HOUR,
+    CRT_WINDOW_OPEN_HOUR,
+)
+from app.hlhp.core.chat_payload import ChatPayloadError, build_chat_message
 from app.hlhp.core.hlhp_settings import get_hlhp_settings
-from app.hlhp.models.hlhp_bus import HlhpDoctorMessageRequest, HlhpDoctorOnboardComplete, HlhpDoctorSubscriptionUpdate
+from app.hlhp.core.hub_state import doctor_bucket, iter_doctor_lanes
+from app.hlhp.models.hlhp_bus import (
+    HlhpDoctorMessageRequest,
+    HlhpDoctorOnboardComplete,
+    HlhpDoctorSubscriptionUpdate,
+)
 
 
 def _now_ms() -> int:
@@ -32,13 +44,42 @@ def _crt_gaps(chat: list[dict[str, Any]]) -> list[float]:
             (
                 x
                 for x in chat[i + 1 :]
-                if x.get("who") == "doctor" and x.get("ts") and _in_business_window(int(x["ts"]))
+                if x.get("who") == "doctor"
+                and x.get("ts")
+                and _in_business_window(int(x["ts"]))
             ),
             None,
         )
         if reply:
             gaps.append((int(reply["ts"]) - int(msg["ts"])) / 3_600_000.0)
     return gaps
+
+
+def _lane_summary(seeker_id: str, lane: dict[str, Any]) -> dict[str, Any]:
+    goal = lane.get("hlhp_goal_setup_v1") if isinstance(lane.get("hlhp_goal_setup_v1"), dict) else {}
+    pay = lane.get("hlhp_payment_v1") if isinstance(lane.get("hlhp_payment_v1"), dict) else {}
+    accept = lane.get("hlhp_panel_accept_v1") if isinstance(lane.get("hlhp_panel_accept_v1"), dict) else {}
+    chat = lane.get("hlhp_shared_chat_v1") if isinstance(lane.get("hlhp_shared_chat_v1"), list) else []
+    reads = lane.get("hlhp_chat_reads_v1") if isinstance(lane.get("hlhp_chat_reads_v1"), dict) else {}
+    doctor_read_ts = int(reads.get("doctor") or 0)
+    unread = sum(
+        1
+        for m in chat
+        if isinstance(m, dict)
+        and m.get("who") == "seeker"
+        and m.get("ts")
+        and int(m["ts"]) > doctor_read_ts
+    )
+    return {
+        "seekerId": seeker_id,
+        "name": goal.get("name") or seeker_id,
+        "goalName": goal.get("goalName") or goal.get("goal_name"),
+        "city": goal.get("city"),
+        "accepted": bool(accept),
+        "payment": pay or None,
+        "unread": unread,
+        "lastMessage": chat[-1] if chat else None,
+    }
 
 
 async def get_panel_for_doctor(
@@ -49,8 +90,23 @@ async def get_panel_for_doctor(
     client = get_bus_client()
     if not client.configured:
         return {"doctorId": doctor_id, "seekers": [], "note": "hub not configured"}
-    state = await client.get_state(doctor_id=doctor_id, bearer_token=bearer_token)
-    return {"doctorId": doctor_id, "state": state, "seekers": []}
+
+    state = await client.get_state(
+        doctor_id=doctor_id,
+        bearer_token=bearer_token,
+        as_role="doctor",
+    )
+    lanes = iter_doctor_lanes(state, doctor_id)
+    seekers = [_lane_summary(sid, lane) for sid, lane in lanes]
+    doctor_state = doctor_bucket(state, doctor_id)
+
+    return {
+        "doctorId": doctor_id,
+        "seekers": seekers,
+        "subscription": doctor_state.get("hlhp_subscription_v1"),
+        "onboard": doctor_state.get("hlhp_doctor_onboard_v1"),
+        "earnings": doctor_state.get("hlhp_doctor_earnings_v1"),
+    }
 
 
 async def accept_seeker(
@@ -67,6 +123,7 @@ async def accept_seeker(
         "doctorId": doctor_id,
         "doctor": doctor_name,
         "name": seeker_name or seeker_id,
+        "accepted": True,
         "ts": _now_ms(),
     }
     if client.configured:
@@ -78,6 +135,7 @@ async def accept_seeker(
             bearer_token=bearer_token,
             on_behalf_user_id=doctor_id,
             on_behalf_role="doctor",
+            as_role="doctor",
         )
     return {"ok": True, "payload": payload}
 
@@ -106,6 +164,7 @@ async def approve_plan(
             bearer_token=bearer_token,
             on_behalf_user_id=doctor_id,
             on_behalf_role="doctor",
+            as_role="doctor",
         )
     return {"ok": True, "payload": payload}
 
@@ -132,6 +191,7 @@ async def set_subscription_fee(
             bearer_token=bearer_token,
             on_behalf_user_id=doctor_id,
             on_behalf_role="doctor",
+            as_role="doctor",
         )
     return {"ok": True, "fee": body.fee, "effect": "seeker Plus screens re-price live"}
 
@@ -143,14 +203,21 @@ async def post_doctor_message(
     *,
     bearer_token: str | None = None,
 ) -> dict[str, Any]:
+    try:
+        msg = build_chat_message(
+            who="doctor",
+            txt=body.txt,
+            photo=body.photo,
+            img=body.img,
+            doc=body.doc.model_dump() if body.doc else None,
+        )
+    except ChatPayloadError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "hlhp_chat_invalid", "message": str(exc)},
+        ) from exc
+
     client = get_bus_client()
-    ts = _now_ms()
-    msg = {
-        "who": "doctor",
-        "txt": body.txt.strip(),
-        "time": datetime.fromtimestamp(ts / 1000).strftime("%I:%M %p").lstrip("0").lower(),
-        "ts": ts,
-    }
     if client.configured:
         await client.publish(
             "hlhp_shared_chat_v1",
@@ -160,6 +227,7 @@ async def post_doctor_message(
             bearer_token=bearer_token,
             on_behalf_user_id=doctor_id,
             on_behalf_role="doctor",
+            as_role="doctor",
         )
     return {"ok": True, "message": msg}
 
@@ -172,17 +240,22 @@ async def get_crt_stats(
     client = get_bus_client()
     gaps: list[float] = []
     if client.configured:
-        state = await client.get_state(doctor_id=doctor_id, bearer_token=bearer_token)
-        seekers = state.get("seekers") if isinstance(state.get("seekers"), dict) else {}
-        if isinstance(seekers, dict):
-            for lane in seekers.values():
-                if isinstance(lane, dict):
-                    chat = lane.get("hlhp_shared_chat_v1") or []
-                    if isinstance(chat, list):
-                        gaps.extend(_crt_gaps(chat))
+        state = await client.get_state(
+            doctor_id=doctor_id,
+            bearer_token=bearer_token,
+            as_role="doctor",
+        )
+        for _seeker_id, lane in iter_doctor_lanes(state, doctor_id):
+            chat = lane.get("hlhp_shared_chat_v1") or []
+            if isinstance(chat, list):
+                gaps.extend(_crt_gaps([m for m in chat if isinstance(m, dict)]))
 
     avg_h = round(sum(gaps) / len(gaps), 2) if gaps else None
-    on_time = round(100 * sum(1 for g in gaps if g <= CRT_TARGET_HOURS) / len(gaps)) if gaps else None
+    on_time = (
+        round(100 * sum(1 for g in gaps if g <= CRT_TARGET_HOURS) / len(gaps))
+        if gaps
+        else None
+    )
     return {
         "doctorId": doctor_id,
         "targetMins": int(CRT_TARGET_HOURS * 60),
@@ -227,6 +300,7 @@ async def complete_onboarding(
             bearer_token=bearer_token,
             on_behalf_user_id=doctor_id,
             on_behalf_role="doctor",
+            as_role="doctor",
         )
         await client.publish(
             "hlhp_subscription_v1",
@@ -235,6 +309,7 @@ async def complete_onboarding(
             bearer_token=bearer_token,
             on_behalf_user_id=doctor_id,
             on_behalf_role="doctor",
+            as_role="doctor",
         )
     return {"ok": True, "toast": "Your panel is live"}
 

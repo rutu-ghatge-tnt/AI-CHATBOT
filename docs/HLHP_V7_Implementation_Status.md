@@ -57,26 +57,26 @@ Reference contract: `backend/README.md` + `Backend Handoff.dc.html` §8–9.
 | Slice | Status | One-line |
 |-------|--------|----------|
 | SFI engine + alerts + scan | **Done** | Live weather → score → scenarios → Fun Hello |
-| Fun coach tabs (Hello→Learn) | **Mostly done** | Live APIs; a few demo leftovers |
+| Fun coach tabs (Hello→Learn) | **Mostly done** | Live APIs; P0 Fun polish shipped |
 | Weather metrics (WeatherAPI) | **Done** | Temp/RH/UV/AQI/wind from `WEATHERAPI_KEY`; Skintruth = location + visuals |
 | Live city chart | **Done** | `GET /api/v2/cities` + HelloCityChart live path |
 | Goals / Plus UI shell | **Partial** | Wizard + chart hub exist; pay/dermat/chat mostly local/demo |
 | Shared chat (real) | **Partial backend / missing product UI** | AI-Tools chat routes + hooks; Fun Goals overlay is fake |
 | Dermat panel product | **Scaffold API / no seeker-site UI** | Doctor routes in AI-Tools; no dermat front-end in skinbb |
 | Admin console | **Missing** | Hooks vendored; no admin app in production repos |
-| Selfie S3/server | **Missing** | Log selfie = localStorage data URL |
+| Selfie S3/server | **Done** | `POST/GET/DELETE /api/v2/selfies`; Recap timeline auth-fetches media blobs |
 | Hub end-to-end | **Partial** | Client + keys exist; needs live hub + role lanes wired |
 
 Rough completion (product capability, not LOC):
 
 | Area | ~% toward V7 reference |
 |------|-------------------------|
-| Seeker SFI / Fun tabs | ~85% |
+| Seeker SFI / Fun tabs | ~90% |
 | Weather + city board | ~90% |
-| Goals → Plus → dermat journey | ~35% |
+| Goals → Plus → dermat journey | ~40% |
 | Shared chat | ~25% |
 | Dermat panel | ~20% (API scaffold) |
-| Admin | ~5% (hooks only) |
+| Admin | ~10% (Ops doctors/services partial) |
 | Cross-app bus live in prod | ~30% |
 
 ---
@@ -90,9 +90,9 @@ Rough completion (product capability, not LOC):
 | Tab | Status | Backed by |
 |-----|--------|-----------|
 | **Hello / Today** | Live | `POST /api/hlhp/scan`, `GET /api/v2/today`, city chart, scenery |
-| **Log** | Live (selfie local) | `POST /api/v2/logs` / v1 log |
+| **Log** | Live | `POST /api/v2/logs` / v1 log · selfie via `/api/v2/selfies` |
 | **Streak** | Live | `/api/v2/streak` (+ v1 fallback) |
-| **Recap** | Mostly live | history/catchup APIs; some demo month + selfie placeholders |
+| **Recap** | Live | history/catchup APIs + server selfie timeline |
 | **Patterns** | Live | patterns + narration + alert toggles |
 | **Share** | Live | `/api/v2/share` / weekly card |
 | **Learn** | Mostly live | learn API; some static lifestyle copy |
@@ -149,16 +149,16 @@ Key files: `app/hlhp/services/weather_fetcher.py`, `city_chart_service.py`, `wea
 
 ### P0 — Close the Fun / V7 polish gaps (seeker)
 
-| Item | Gap vs V7 Light | Suggested work |
-|------|-----------------|----------------|
-| What’s Different Today | Multi-rule RE-APPLY / PROTECT / SKIP not fully live | Wire rules off live drivers + evidence cells |
+| Item | Gap vs V7 Light | Status |
+|------|-----------------|--------|
+| What’s Different Today | Multi-rule REINFORCE / PROTECT / SKIP from evidence | **Done** — `routine_rules_v1.json` + `select_routine_today` on scan → `whats_different`; Hello multi-rule cards |
 | My routine overlay | Coming soon (button hint) | Deferred — no editor this wave |
-| Selfie compare | Side-by-side from daily log extras | Done — photos + log chips only, **no AI** |
-| Selfie server upload | Python → `s3://skinbb-main/HLHP-LOG/{user}/{date}.jpg` | **Done** — `POST/GET/DELETE /api/v2/selfies`; one per day; replace deletes then puts |
+| Selfie compare | Side-by-side from daily log extras | **Done** — photos + log chips only, **no AI** |
+| Selfie server upload | Python → S3 | **Done** — `POST/GET/DELETE /api/v2/selfies`; Recap auth-blob fetch |
 | Barrier / selfie AI check | Out of scope | Compare is visual only |
-| SFI formula alignment | Ref V7 uses dominant-aware `W_DOM=0.6`; production scan still mostly additive V4 sum | Decide one formula; align city chart + orb |
-| Learn articles | Partial mock | Feed from knowledge / content CMS |
-| Recap demo strip | Synthetic month still available | Gate behind demo flag or remove |
+| SFI formula alignment | Ref V7 `W_DOM=0.6` vs production | **Canonical = additive V4** via `resolve_sfi` (scan + city chart + orb). W_DOM remains reference-only |
+| Learn articles | Partial mock | Thin cleanup — API levers preferred; Knowledge Feed via Explore CMS |
+| Recap demo strip | Synthetic month toggle | **Done** — removed FunDemoStrip / forceDemo path |
 
 ### P1 — Goals → Plus → dermat journey (cross-app)
 
@@ -221,11 +221,12 @@ Legend: **Done** · **Partial** · **Missing** · **N/A**
 | Visuals (Skintruth) | Bundled assets | Done | Done | N/A | N/A |
 | City chart live | Demo zones | Done | Done (+ fallback) | N/A | N/A |
 | Log + factors | Done | Done (Mongo) | Done | Read via bus (ref) | Feed (ref) |
-| Selfie server | Done (`/v2/selfies`) | Missing | Local only | Missing | Missing |
+| Selfie server | Done (`/v2/selfies`) | **Done** | Done (auth blob) | Missing | Missing |
 | Streak / Recap / Patterns / Share / Learn | Done | Done | Mostly done | N/A | N/A |
+| What’s Different today | Done | **Done** (`whats_different`) | **Done** | N/A | N/A |
 | Goal wizard | Done | Partial | Partial UI | Listens (ref) | Feed (ref) |
 | Plus payment | Done (demo pay) | Partial proxy | Demo/bus | Toast (ref) | Payments (ref) |
-| Dermat pick | Done | Missing roster API | Static list | Accept API partial | Missing |
+| Dermat pick | Done | Missing roster in Python (Node marketplace) | Static / API | Accept API partial | Missing |
 | Shared chat | Done | Partial | Fake overlay | Scaffold API | QC (ref only) |
 | Plan approval | Done | Partial | Chart shell | Scaffold | Missing |
 | Doctor onboard / earnings | Done | Partial / Missing | N/A | Missing product | Missing |
@@ -237,10 +238,10 @@ Legend: **Done** · **Partial** · **Missing** · **N/A**
 ## 6. Suggested delivery waves
 
 ### Wave A — Seeker “V7 Fun complete” (1–2 sprints)
-1. Selfie upload + Recap timeline from server  
-2. What’s Different + My routine live  
-3. Kill remaining demo strips (or hard-gate)  
-4. Align SFI formula (document + implement one rule)
+1. ~~Selfie upload + Recap timeline from server~~ **Done**
+2. ~~What’s Different live~~ **Done** · My routine editor still deferred
+3. ~~Kill Recap demo strips~~ **Done**
+4. ~~Align SFI formula~~ **Done (canonical additive V4 documented)**
 
 ### Wave B — Goals money path (2–3 sprints)
 1. Hub required in staging  
@@ -297,8 +298,9 @@ Legend: **Done** · **Partial** · **Missing** · **N/A**
 
 ## 9. Bottom line
 
-- **The seeker SFI product** (scan → Hello → Log → Streak → Recap → Patterns → Share → Learn, plus WeatherAPI + live city chart) is the mature slice and is most of the way to V7 Fun.
-- **Goals / dermat / chat / admin** in the reference folder describe a **multi-app bus product**. Today you have: seeker Goals **shell**, AI-Tools **API scaffolds**, vendored **hooks**, and a **reference** hub/dermat/admin — not a finished cross-platform journey.
-- Next highest leverage: **selfie server + real Plus payment + live chat + dermat panel aggregation**, with hub on in staging.
+- **The seeker SFI product** (scan → Hello → Log → Streak → Recap → Patterns → Share → Learn, plus WeatherAPI + live city chart + selfies + What’s Different rules) is the mature slice and is near V7 Fun completeness (My routine editor still deferred).
+- **Canonical SFI** is additive V4 via `resolve_sfi` — not the V7 reference `W_DOM` blend.
+- **Goals / dermat / chat / admin** in the reference folder describe a **multi-app bus product**. Today you have: seeker Goals **shell**, AI-Tools **API scaffolds**, Node doctor marketplace, vendored **hooks**, and a **reference** hub/dermat/admin — not a finished cross-platform journey.
+- Next highest leverage: **real Plus payment + live chat + dermat panel aggregation**, with hub on in staging.
 
-*This document is a living status snapshot as of 14 Jul 2026. Update after each wave.*
+*This document is a living status snapshot (updated 15 Jul 2026). Update after each wave.*

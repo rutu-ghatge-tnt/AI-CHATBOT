@@ -1,5 +1,9 @@
 """
-Unified HLHP SFI — single entry point for V4 scoring across scan, log, timeline, and recap.
+Unified HLHP SFI — single entry point for V4 scoring across Fun surfaces.
+
+All production Fun paths (scan Hello orb, /api/v2/today, city chart, timeline)
+must call ``resolve_sfi`` so scores stay additive-V4-consistent. Dominant factor
+is metadata only; there is no W_DOM reweighting in this module.
 """
 
 from __future__ import annotations

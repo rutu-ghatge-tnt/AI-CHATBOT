@@ -316,7 +316,11 @@ async def assemble_learn(
     )
 
 
-async def run_user_log(body: UserLogRequest) -> UserLogResponse:
+async def run_user_log(
+    body: UserLogRequest,
+    *,
+    bearer_token: str | None = None,
+) -> UserLogResponse:
     profile = await load_user_profile(body.user_id)
     guest_mode = profile is None or resolve_mode(profile).value == "guest"
 
@@ -466,6 +470,41 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
         await recompute_patterns_for_user(body.user_id)
     except Exception as exc:
         logger.warning("HLHP patterns recompute after log skipped: %s", exc)
+
+    selfie_url = (body.selfie_url or "").strip() or None
+    if not selfie_url:
+        try:
+            from app.hlhp.services.selfie_service import (
+                get_selfie_for_date,
+                public_selfie_url,
+            )
+
+            existing = await get_selfie_for_date(body.user_id, date_key)
+            if existing and existing.get("s3_key"):
+                selfie_url = public_selfie_url(str(existing["s3_key"]))
+        except Exception as exc:
+            logger.debug("HLHP selfie lookup for bus log skipped: %s", exc)
+
+    try:
+        from app.hlhp.services.daily_log_bus import publish_daily_log_best_effort
+
+        await publish_daily_log_best_effort(
+            body.user_id,
+            symptoms=symptoms,
+            areas=areas,
+            sfi=sfi,
+            notes=(body.notes or "").strip() or None,
+            outdoor_exposure=body.outdoor_exposure,
+            selfie=bool(selfie_url),
+            selfie_url=selfie_url,
+            streak=current,
+            date_key=date_key,
+            doctor_id=body.doctor_id,
+            bearer_token=bearer_token,
+            ts_ms=int(when.timestamp() * 1000),
+        )
+    except Exception as exc:
+        logger.warning("HLHP daily_log bus side-effect skipped: %s", exc)
 
     return UserLogResponse(
         logged=logged_out,
