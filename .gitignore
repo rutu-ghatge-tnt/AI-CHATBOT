@@ -3,6 +3,11 @@
 test_load.py
 verify_embeddings.py
 
+# Local scratch / extraction leftovers (never commit)
+_tmp*/
+_tmp*
+tmp_*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -204,3 +209,5 @@ Product_portfolio/
 /app/hlhp/new-changes/
 /app/hlhp/HLHP Seeker App*.html
 /app/hlhp/patterns/*.html
+/app/hlhp/final-ref/
+/app/hlhp/HLHP Suite Release/

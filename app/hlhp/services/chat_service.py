@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+import httpx
 from fastapi import HTTPException, UploadFile
 
 from app.hlhp.core.bus_client import (
+    HlhpHubError,
     get_bus_client,
     normalize_media_upload_response,
 )
 from app.hlhp.core.chat_payload import ChatPayloadError, build_chat_message, now_ms
 from app.hlhp.core.hlhp_settings import get_hlhp_settings
-from app.hlhp.core.hub_state import get_bus_value, lane_bucket
+from app.hlhp.core.hub_state import get_bus_value, lane_bucket, unwrap_envelope
 from app.hlhp.models.hlhp_bus import HlhpChatMessageRequest, HlhpTypingRequest
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_MEDIA_TYPES = frozenset(
     {
@@ -49,6 +54,19 @@ async def get_chat_state(
     chat_limit: int | None = None,
     chat_before_ts: int | None = None,
 ) -> dict[str, Any]:
+    """Prefer Node ``GET /api/v1/consult-chats``; fall back to hub ``/state``."""
+    settings = get_hlhp_settings()
+    if settings.node_configured and doctor_id and bearer_token:
+        try:
+            return await _consult_chats_state(
+                doctor_id,
+                bearer_token=bearer_token,
+                chat_limit=chat_limit,
+                chat_before_ts=chat_before_ts,
+            )
+        except Exception as exc:  # noqa: BLE001 — fall back to hub
+            logger.warning("consult-chats failed, falling back to hub state: %s", exc)
+
     client = get_bus_client()
     if not client.configured:
         return {
@@ -58,6 +76,7 @@ async def get_chat_state(
             "payment": None,
             "accepted": None,
             "chatPagination": None,
+            "doctorId": doctor_id,
         }
 
     state = await client.get_state(
@@ -100,6 +119,79 @@ async def get_chat_state(
         "chatPagination": _chat_page_meta(
             state, seeker_id=seeker_id, doctor_id=doctor_id
         ),
+    }
+
+
+async def _consult_chats_state(
+    doctor_id: str,
+    *,
+    bearer_token: str,
+    chat_limit: int | None = None,
+    chat_before_ts: int | None = None,
+) -> dict[str, Any]:
+    settings = get_hlhp_settings()
+    params: dict[str, str] = {
+        "doctorId": doctor_id,
+        "format": "simple",
+        "asRole": "seeker",
+    }
+    if chat_limit is not None and chat_limit > 0:
+        params["chatLimit"] = str(int(chat_limit))
+    if chat_before_ts is not None and chat_before_ts > 0:
+        params["chatBeforeTs"] = str(int(chat_before_ts))
+        params["beforeTs"] = str(int(chat_before_ts))
+
+    headers = {"Authorization": f"Bearer {bearer_token}"}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(
+            settings.node_consult_chats_url(),
+            params=params,
+            headers=headers,
+        )
+    if response.status_code >= 400:
+        raise HlhpHubError(response.status_code, "consult-chats failed", response.text)
+
+    try:
+        raw = response.json()
+    except Exception as exc:
+        raise HlhpHubError(502, "consult-chats invalid JSON") from exc
+
+    data = unwrap_envelope(raw)
+    if not isinstance(data, dict):
+        data = {}
+
+    lanes = data.get("lanes") if isinstance(data.get("lanes"), list) else []
+    lane = None
+    for item in lanes:
+        if isinstance(item, dict) and str(item.get("doctorId") or "") == str(doctor_id):
+            lane = item
+            break
+    if lane is None and lanes and isinstance(lanes[0], dict):
+        lane = lanes[0]
+
+    state = lane.get("state") if isinstance(lane, dict) else {}
+    if not isinstance(state, dict):
+        state = {}
+
+    messages = state.get("hlhp_shared_chat_v1")
+    if not isinstance(messages, list):
+        messages = data.get("messages") if isinstance(data.get("messages"), list) else []
+
+    reads = state.get("hlhp_chat_reads_v1")
+    sub = state.get("hlhp_subscription_v1")
+    payment = state.get("hlhp_payment_v1")
+    accept = state.get("hlhp_panel_accept_v1")
+    fee = sub.get("fee") if isinstance(sub, dict) else None
+
+    return {
+        "messages": messages,
+        "readState": reads if isinstance(reads, dict) else {},
+        "subscriptionFee": fee,
+        "payment": payment if isinstance(payment, dict) else None,
+        "accepted": accept if isinstance(accept, dict) else None,
+        "doctorId": doctor_id,
+        "chatPagination": data.get("chatPagination"),
+        "lanes": lanes,
     }
 
 
