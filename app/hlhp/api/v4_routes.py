@@ -31,7 +31,7 @@ from app.hlhp.services.selfie_service import (
     delete_daily_selfie,
     get_selfie_for_date,
     list_selfies,
-    read_local_selfie_bytes,
+    read_selfie_bytes,
     upsert_daily_selfie,
 )
 from app.hlhp.services.v4_api_service import (
@@ -70,12 +70,10 @@ async def get_selfie_media(
     date: str = Query(..., description="Local calendar day YYYY-MM-DD"),
     user: dict = Depends(hlhp_authenticated_user),
 ):
-    """Serve the day's selfie JPEG (local cache). Used when S3 GetObject is unavailable."""
+    """Serve the day's selfie JPEG (local cache, rehydrated from S3 after deploy)."""
     uid = user_id_from_auth(user)
-    data = read_local_selfie_bytes(uid, date)
+    data = await read_selfie_bytes(uid, date)
     if not data:
-        # Clear stale Mongo pointers so list/get agree with “no selfie yet”.
-        await get_selfie_for_date(uid, date)
         raise HTTPException(
             status_code=404,
             detail={"code": "not_found", "message": "No selfie for that day."},

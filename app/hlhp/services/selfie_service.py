@@ -70,11 +70,61 @@ def media_api_url(date_iso: str) -> str:
     return f"/api/v2/selfies/media?date={_validate_date(date_iso)}"
 
 
-def _local_path(user_id: str, date_iso: str) -> Path:
+def _local_user_dir(user_id: str) -> Path:
     settings = get_hlhp_settings()
     root = Path(settings.selfie_storage_dir)
-    path = root / _safe_user_id(user_id) / f"{_validate_date(date_iso)}.jpg"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = root / _safe_user_id(user_id)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def list_local_selfie_dates(user_id: str) -> list[str]:
+    """Dates that still have JPEG bytes on this host (survives Mongo scrub after deploy)."""
+    root = _local_user_dir(user_id)
+    out: list[str] = []
+    try:
+        for path in root.glob("*.jpg"):
+            stem = path.stem
+            if _DATE_RE.match(stem) and path.is_file() and path.stat().st_size > 0:
+                out.append(stem)
+    except OSError as exc:
+        logger.warning("Local selfie scan failed for %s: %s", root, exc)
+    return sorted(out)
+
+
+async def ensure_selfie_metadata(user_id: str, date_iso: str, *, body: bytes | None = None) -> dict[str, Any] | None:
+    """Re-register a day that has local (or provided) bytes but missing/stale Mongo."""
+    date_iso = _validate_date(date_iso)
+    data = body if body is not None else read_local_selfie_bytes(user_id, date_iso)
+    if not data:
+        return None
+
+    key = selfie_object_key(user_id, date_iso)
+    # Keep local canonical; refresh S3 so other hosts can resolve after deploy.
+    _put_local(user_id, date_iso, data)
+    s3_ok = _put_s3(key, data)
+    now = datetime.now(timezone.utc)
+    url = media_api_url(date_iso)
+    doc = {
+        "user_id": user_id,
+        "date": date_iso,
+        "s3_key": key,
+        "url": url,
+        "s3_uploaded": s3_ok,
+        "bytes": len(data),
+        "content_type": "image/jpeg",
+        "updated_at": now,
+    }
+    await _col().update_one(
+        {"user_id": user_id, "date": date_iso},
+        {"$set": doc, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    return {"date": date_iso, "url": url, "updated_at": now.isoformat()}
+
+
+def _local_path(user_id: str, date_iso: str) -> Path:
+    path = _local_user_dir(user_id) / f"{_validate_date(date_iso)}.jpg"
     return path
 
 
@@ -102,6 +152,67 @@ def read_local_selfie_bytes(user_id: str, date_iso: str) -> bytes | None:
     except OSError as exc:
         logger.warning("Local selfie read failed for %s: %s", path, exc)
         return None
+
+
+def _get_s3_bytes(key: str) -> tuple[str, bytes | None]:
+    """Fetch object from S3.
+
+    Returns (status, body) where status is:
+      - "ok" — body is bytes
+      - "missing" — confirmed NoSuchKey / 404
+      - "unavailable" — credentials/policy/network; do NOT scrub Mongo
+    """
+    settings = get_hlhp_settings()
+    try:
+        client = _s3()
+        resp = client.get_object(Bucket=settings.selfie_s3_bucket, Key=key)
+        body = resp["Body"].read()
+        if not body:
+            return "missing", None
+        return "ok", body
+    except HTTPException:
+        # _s3() raises 503 when AWS credentials are missing
+        return "unavailable", None
+    except ClientError as exc:
+        code = str((exc.response or {}).get("Error", {}).get("Code", "") or "")
+        if code in {"404", "NoSuchKey", "NotFound", "NoSuchBucket"}:
+            return "missing", None
+        logger.warning(
+            "S3 get failed for s3://%s/%s (%s) — keeping Mongo pointer",
+            settings.selfie_s3_bucket,
+            key,
+            code or exc,
+        )
+        return "unavailable", None
+    except Exception as exc:
+        logger.warning("S3 get unexpected error for %s: %s", key, exc)
+        return "unavailable", None
+
+
+def resolve_selfie_bytes(
+    user_id: str,
+    date_iso: str,
+    *,
+    s3_key: str | None = None,
+) -> tuple[bytes | None, str]:
+    """Local cache first, then S3 (rehydrate cache on hit).
+
+    Returns (bytes|None, status) with status: "ok" | "missing" | "unavailable".
+    """
+    date_iso = _validate_date(date_iso)
+    local = read_local_selfie_bytes(user_id, date_iso)
+    if local:
+        return local, "ok"
+
+    key = (s3_key or "").strip() or selfie_object_key(user_id, date_iso)
+    status, body = _get_s3_bytes(key)
+    if status == "ok" and body:
+        try:
+            _put_local(user_id, date_iso, body)
+        except OSError as exc:
+            logger.warning("Failed to rehydrate local selfie cache %s: %s", key, exc)
+        return body, "ok"
+    return None, status
 
 
 async def _normalize_jpeg(upload: UploadFile) -> bytes:
@@ -231,28 +342,51 @@ async def list_selfies(user_id: str, *, date_from: str | None = None, date_to: s
         if date_to:
             date_q["$lte"] = _validate_date(date_to)
         filt["date"] = date_q
+
+    by_date: dict[str, dict[str, Any]] = {}
+
     cursor = _col().find(filt, {"_id": 0, "date": 1, "url": 1, "s3_key": 1, "updated_at": 1}).sort("date", 1)
-    rows = []
     async for doc in cursor:
         date_iso = doc["date"]
-        # Skip orphans: Mongo pointer without a serveable preview file.
-        if not read_local_selfie_bytes(user_id, date_iso):
+        # Local disk is an ephemeral cache — after deploy it is empty.
+        # Resolve via S3 before treating the row as an orphan.
+        _body, status = resolve_selfie_bytes(user_id, date_iso, s3_key=doc.get("s3_key"))
+        if status == "missing":
+            # Local may still have bytes on another host; only scrub when this
+            # host also has no local file (true orphan).
+            if read_local_selfie_bytes(user_id, date_iso):
+                repaired = await ensure_selfie_metadata(user_id, date_iso)
+                if repaired:
+                    by_date[date_iso] = repaired
+                continue
             await _scrub_orphan_selfie(user_id, date_iso, doc.get("s3_key"))
             continue
-        rows.append(
-            {
-                "date": date_iso,
-                "url": media_api_url(date_iso),
-                "updated_at": doc.get("updated_at").isoformat()
-                if isinstance(doc.get("updated_at"), datetime)
-                else doc.get("updated_at"),
-            }
-        )
-    return rows
+        by_date[date_iso] = {
+            "date": date_iso,
+            "url": media_api_url(date_iso),
+            "updated_at": doc.get("updated_at").isoformat()
+            if isinstance(doc.get("updated_at"), datetime)
+            else doc.get("updated_at"),
+        }
+
+    # Recover days that still exist on disk but were scrubbed from Mongo
+    # (happens when a deploy host listed selfies against shared Mongo).
+    for date_iso in list_local_selfie_dates(user_id):
+        if date_from and date_iso < _validate_date(date_from):
+            continue
+        if date_to and date_iso > _validate_date(date_to):
+            continue
+        if date_iso in by_date:
+            continue
+        repaired = await ensure_selfie_metadata(user_id, date_iso)
+        if repaired:
+            by_date[date_iso] = repaired
+
+    return [by_date[d] for d in sorted(by_date.keys())]
 
 
 async def _scrub_orphan_selfie(user_id: str, date_iso: str, s3_key: str | None = None) -> None:
-    """Drop metadata when the preview bytes are gone (stale S3-only / wiped cache)."""
+    """Drop metadata only when both local cache and S3 object are confirmed gone."""
     try:
         if s3_key:
             _delete_s3(s3_key)
@@ -265,16 +399,44 @@ async def _scrub_orphan_selfie(user_id: str, date_iso: str, s3_key: str | None =
 async def get_selfie_for_date(user_id: str, date_iso: str) -> dict[str, Any] | None:
     date_iso = _validate_date(date_iso)
     doc = await _col().find_one({"user_id": user_id, "date": date_iso}, {"_id": 0})
-    local = read_local_selfie_bytes(user_id, date_iso)
-    if local:
+    body, status = resolve_selfie_bytes(
+        user_id, date_iso, s3_key=(doc or {}).get("s3_key")
+    )
+    if not body and not doc:
+        # Local-only day (Mongo scrubbed earlier) — re-register if file exists.
+        repaired = await ensure_selfie_metadata(user_id, date_iso)
+        return repaired
+    if body or (doc and status == "unavailable"):
+        if not doc and body:
+            await ensure_selfie_metadata(user_id, date_iso, body=body)
         return {
             "date": date_iso,
             "url": media_api_url(date_iso),
-            "s3_key": (doc or {}).get("s3_key"),
+            "s3_key": (doc or {}).get("s3_key") or selfie_object_key(user_id, date_iso),
         }
-    if doc:
-        # Stale row from an older upload that never left a local preview.
+    if doc and status == "missing":
+        if read_local_selfie_bytes(user_id, date_iso):
+            return await ensure_selfie_metadata(user_id, date_iso)
         await _scrub_orphan_selfie(user_id, date_iso, doc.get("s3_key"))
+    return None
+
+
+async def read_selfie_bytes(user_id: str, date_iso: str) -> bytes | None:
+    """Bytes for /selfies/media — local cache or S3 rehydrate. Never scrubs."""
+    date_iso = _validate_date(date_iso)
+    doc = await _col().find_one({"user_id": user_id, "date": date_iso}, {"_id": 0, "s3_key": 1})
+    body, _status = resolve_selfie_bytes(
+        user_id, date_iso, s3_key=(doc or {}).get("s3_key")
+    )
+    if body:
+        if not doc:
+            await ensure_selfie_metadata(user_id, date_iso, body=body)
+        return body
+    # Local file may exist even when Mongo was scrubbed.
+    local = read_local_selfie_bytes(user_id, date_iso)
+    if local:
+        await ensure_selfie_metadata(user_id, date_iso, body=local)
+        return local
     return None
 
 
