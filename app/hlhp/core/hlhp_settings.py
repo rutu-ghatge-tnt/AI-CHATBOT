@@ -101,3 +101,21 @@ class HlhpSettings:
 
     def node_hlhp_payments_base(self) -> str:
         return f"{self.node_api_url}/api/v1/hlhp/payments"
+
+    def node_hlhp_goals_base(self) -> str:
+        return f"{self.node_api_url}/api/v1/hlhp/goals"
+
+    def node_consult_chats_url(self) -> str:
+        return f"{self.node_api_url}/api/v1/consult-chats"
+
+    def node_hlhp_hub_events_url(self) -> str:
+        return f"{self.node_api_url}/api/v1/hlhp/hub/events"
+
+    def node_hlhp_hub_socket_url(self) -> str:
+        """Socket.IO namespace — FE connects here (path `/socket.io`). Not raw WS."""
+        if not self.node_api_url:
+            return ""
+        from urllib.parse import urlsplit
+
+        origin = f"{urlsplit(self.node_api_url).scheme}://{urlsplit(self.node_api_url).netloc}"
+        return f"{origin}/hlhp-hub"
