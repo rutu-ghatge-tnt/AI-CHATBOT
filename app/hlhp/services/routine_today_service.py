@@ -26,12 +26,7 @@ _ALLOWED_TYPES = frozenset(
 )
 
 
-@lru_cache(maxsize=1)
-def load_routine_rules() -> list[dict[str, Any]]:
-    raw = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
-    rules = raw.get("rules") if isinstance(raw, dict) else raw
-    if not isinstance(rules, list):
-        return []
+def _normalize_rules(rules: list[Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for r in rules:
         if not isinstance(r, dict):
@@ -41,6 +36,27 @@ def load_routine_rules() -> list[dict[str, Any]]:
         item["type"] = t if t in _ALLOWED_TYPES else "KEEP"
         out.append(item)
     return out
+
+
+@lru_cache(maxsize=1)
+def load_routine_rules() -> list[dict[str, Any]]:
+    # Prefer rules embedded in the active scenario library (v3.6+).
+    try:
+        from app.hlhp.evidence.scenario_store import get_scenario_store
+
+        embedded = get_scenario_store().routine_rules
+        if embedded:
+            return _normalize_rules(list(embedded))
+    except Exception:
+        pass
+
+    if not _DATA_PATH.exists():
+        return []
+    raw = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
+    rules = raw.get("rules") if isinstance(raw, dict) else raw
+    if not isinstance(rules, list):
+        return []
+    return _normalize_rules(rules)
 
 
 def _pass_filter(rule_val: str | None, actual: str | None) -> bool:

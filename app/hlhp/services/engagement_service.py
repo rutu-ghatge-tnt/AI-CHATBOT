@@ -299,7 +299,7 @@ async def assemble_learn(
                 continue
             nid = int(row.get("n", 0) or 0)
             factor = str(row.get("factor") or "")
-            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.5")
+            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.6")
             nuggets.append(LearnNuggetOut(id=nid, text=str(text), factor=factor, source=source))
 
     symptom_keywords = [

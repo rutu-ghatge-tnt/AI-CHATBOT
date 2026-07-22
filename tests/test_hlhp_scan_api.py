@@ -90,8 +90,9 @@ def test_run_scan_guest_with_raw_env():
 
 def test_hlhp_health_store_loaded():
     store = get_scenario_store()
-    assert store.version == "3.5"
+    assert store.version == "3.6"
     assert store.master_cell_count >= 1000
+    assert len(store.age_rules) == 36
 
 
 def test_symptom_tap_guest():

@@ -380,10 +380,13 @@ def lookup_guest_single_cell(
     skin: str,
 ) -> dict[str, Any] | None:
     dom = dominant_driver(drivers)
+    # v3.5 keys: single|factor|band|skin|none — v3.6 also stores factor|band|skin
     keys = [
         f"single|{slug(dom.factor)}|{dom.band_key}|{slug(skin)}|none",
         f"single|{slug(dom.factor)}|{dom.band_key}|normal|none",
         f"single|{slug(dom.factor)}|{dom.band_key}|combination|none",
+        f"{slug(dom.factor)}|{dom.band_key}|{slug(skin)}",
+        f"{slug(dom.factor)}|{dom.band_key}|normal",
     ]
     for key in keys:
         cell = store.guest.get(key)
@@ -406,6 +409,16 @@ def lookup_guest_compound_cell(
         if cell:
             return cell
     return None
+
+
+def lookup_age_rule(
+    store: ScenarioStore,
+    age_band: str | None,
+    concern: str,
+) -> dict[str, Any] | None:
+    if not age_band or not concern or concern == GUEST_CONCERN:
+        return None
+    return store.age_rules.get(f"{slug(age_band)}|{slug(concern)}")
 
 
 def resolve_alert_cell(

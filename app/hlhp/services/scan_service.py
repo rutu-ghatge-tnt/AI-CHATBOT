@@ -1,4 +1,4 @@
-"""HLHP v2 scan orchestration — live env + v3.5 scenario library."""
+"""HLHP v2 scan orchestration — live env + v3.6 scenario library."""
 
 from __future__ import annotations
 
@@ -167,7 +167,7 @@ def _scenario_alert_tile(
         mood_verdict_tag=_mood_for_band(scenario.band),
         engagement_archetype=archetype,
         how_text=scenario.flash_alert.tip,
-        source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.5",
+        source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.6",
         factor=factor,
     )
 

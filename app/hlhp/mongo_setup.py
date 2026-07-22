@@ -107,6 +107,19 @@ async def ensure_hlhp_indexes() -> None:
         await _safe_create_index(selfies, [("user_id", 1), ("date", 1)], unique=True)
         await _safe_create_index(selfies, [("user_id", 1), ("updated_at", -1)])
 
+        # City env archive — permanent (no TTL); patterns + future training spine.
+        city_daily = hl_db["hlhp_city_env_daily"]
+        await _safe_create_index(city_daily, [("city_key", 1), ("date", 1)], unique=True)
+        await _safe_create_index(city_daily, [("date", 1), ("city_key", 1)])
+        await _safe_create_index(city_daily, [("on_board", 1), ("date", -1)])
+
+        city_slot = hl_db["hlhp_city_env_slot"]
+        await _safe_create_index(
+            city_slot, [("city_key", 1), ("date", 1), ("slot_hour", 1)], unique=True
+        )
+        await _safe_create_index(city_slot, [("city_key", 1), ("date", 1)])
+        await _safe_create_index(city_slot, [("date", 1), ("slot_hour", 1)])
+
         _indexes_ensured = True
         logger.info("HLHP Mongo indexes ensured")
     except Exception as exc:

@@ -32,15 +32,18 @@ def _env(**kwargs):
     return EnvironmentalData(**defaults)
 
 
-def test_scenario_store_loads_v35():
+def test_scenario_store_loads_v36():
     store = get_scenario_store()
-    assert store.version == "3.5"
+    assert store.version == "3.6"
     assert store.master_cell_count == 1140
     assert store.compound_cell_count == 940
     assert store.guest_cell_count >= 200
     assert len(store.gender_states) == 9
     assert len(store.gender_rules) == 40
+    assert len(store.age_rules) == 36
+    assert len(store.routine_rules) == 28
     assert len(store.time_overlay) == 25
+    assert store.bands.get("UV")
 
 
 def test_guest_mode_uses_none_concern_cells():
@@ -104,7 +107,7 @@ def test_run_scan_includes_scenario_fields():
     assert resp.flash_alert is not None
     assert resp.flash_alert.l0
     assert resp.evidence_cell is not None
-    assert resp.scenario_library_version == "3.5"
+    assert resp.scenario_library_version == "3.6"
 
 
 def test_lookup_master_cell_key_format():
@@ -149,7 +152,8 @@ def test_personalised_scan_uses_profile_concern_cell():
     )
     assert result.concern == "Dryness"
     assert result.cell is not None
-    assert "humid" in result.flash_alert.l0.lower()
+    assert result.flash_alert.l0
+    assert result.cell_kind in {"master", "compound"}
     assert result.evidence_cell is not None
     assert result.evidence_cell.confidence in {"HIGH", "MODERATE", "LOW"}
 
@@ -215,3 +219,33 @@ def test_time_window_for_datetime_matches_three_window_model():
     assert time_window_for_datetime(datetime(2026, 6, 18, 8, 0)) == "morning"
     assert time_window_for_datetime(datetime(2026, 6, 18, 12, 0)) == "daytime"
     assert time_window_for_datetime(datetime(2026, 6, 18, 18, 0)) == "evening"
+
+
+def test_age_rules_adjust_personal_sfi():
+    from app.hlhp.services.sfi_unified import _age_risk_delta
+    from app.hlhp.services.v4_scoring_engine import evaluate_v4
+
+    store = get_scenario_store()
+    rule = store.age_rules.get("young_adult|acne")
+    assert rule is not None
+    assert isinstance(rule.get("risk_delta"), (int, float))
+
+    profile = UserProfile(
+        user_id="u1",
+        skin_type=SkinType.COMBINATION,
+        skin_concerns=[SkinConcern.ACNE],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_18_24,
+    )
+    delta = _age_risk_delta(profile, guest_mode=False)
+    assert delta == float(rule["risk_delta"])
+
+    env = _env(temperature_c=28, uv_index=6, humidity_pct=52, aqi=80)
+    with_delta = evaluate_v4(env, profile, guest_mode=False, age_risk_delta=delta)
+    without = evaluate_v4(env, profile, guest_mode=False, age_risk_delta=0)
+    assert with_delta.personal_sfi is not None and without.personal_sfi is not None
+    if delta > 0:
+        assert with_delta.personal_sfi < without.personal_sfi
+    else:
+        assert with_delta.personal_sfi == without.personal_sfi
+

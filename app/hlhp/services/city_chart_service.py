@@ -232,6 +232,11 @@ async def _fetch_day_payload(query: str, date_iso: str, *, today_iso: str) -> di
         return None
 
 
+async def fetch_weatherapi_day_payload(query: str, date_iso: str, *, today_iso: str) -> dict | None:
+    """Public WeatherAPI day fetch used by city chart + city-env jobs."""
+    return await _fetch_day_payload(query, date_iso, today_iso=today_iso)
+
+
 _FETCH_SEM = asyncio.Semaphore(4)
 
 
@@ -241,6 +246,8 @@ async def _city_day_averages(
     *,
     today_iso: str,
     yesterday_iso: str,
+    on_board: bool = True,
+    persist: bool = True,
 ) -> dict[str, Any]:
     cache_key = f"hl:city-wx-avg:{city}:{today_iso}:{yesterday_iso}"
     cached = await get_cached(cache_key)
@@ -265,6 +272,23 @@ async def _city_day_averages(
     }
     if today is not None:
         await set_cached(cache_key, result, hl_settings.WEATHER_CACHE_TTL)
+
+    if persist:
+        try:
+            from app.hlhp.services.city_env_collector import persist_city_env_day_pair
+
+            await persist_city_env_day_pair(
+                city_label=city,
+                query=query,
+                today_iso=today_iso,
+                yesterday_iso=yesterday_iso,
+                today_payload=today_raw if isinstance(today_raw, dict) else None,
+                yesterday_payload=yday_raw if isinstance(yday_raw, dict) else None,
+                on_board=on_board,
+            )
+        except Exception as exc:
+            logger.warning("HLHP city env persist skipped for %s: %s", city, exc)
+
     return result
 
 
@@ -327,7 +351,14 @@ async def build_city_chart(
 
         readings = await asyncio.gather(
             *[
-                _city_day_averages(city, query, today_iso=today_iso, yesterday_iso=yesterday_iso)
+                _city_day_averages(
+                    city,
+                    query,
+                    today_iso=today_iso,
+                    yesterday_iso=yesterday_iso,
+                    on_board=True,
+                    persist=True,
+                )
                 for city, query in CITY_QUERIES.items()
             ]
         )
@@ -348,7 +379,12 @@ async def build_city_chart(
         if you_canon and not you_on_board and not any(r["is_you"] for r in rows):
             query = f"{you_canon},India"
             extra = await _city_day_averages(
-                you_canon, query, today_iso=today_iso, yesterday_iso=yesterday_iso
+                you_canon,
+                query,
+                today_iso=today_iso,
+                yesterday_iso=yesterday_iso,
+                on_board=False,
+                persist=True,
             )
             row = _row_from_reading(you_canon, extra, is_you=True, surge=surge)
             if row:
