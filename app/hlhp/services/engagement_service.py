@@ -370,6 +370,16 @@ async def run_user_log(
     sudden_tags = [str(t) for t in (body.sudden_event_tags or []) if t]
     env_source = classify_env_source(scan_req, env)
 
+    _FOOD_ALLOWED = {"home", "junk", "dairy", "spicy"}
+    food_tags: list[str] = []
+    for raw in body.food or []:
+        tag = str(raw).strip().lower()
+        if tag in _FOOD_ALLOWED and tag not in food_tags:
+            food_tags.append(tag)
+
+    sleep_val = body.sleep if body.sleep in ("good", "short") else None
+    stress_val = body.stress if body.stress in ("calm", "normal", "stressed") else None
+
     session_id = await insert_log_event(
         {
             "ts": when,
@@ -390,6 +400,9 @@ async def run_user_log(
             "sudden_event_tags": sudden_tags,
             "outdoor_exposure": body.outdoor_exposure,
             "notes": (body.notes or "").strip() or None,
+            "sleep": sleep_val,
+            "stress": stress_val,
+            "food": food_tags,
             "env_source": env_source,
         }
     )

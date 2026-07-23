@@ -10,6 +10,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+LogSleep = Literal["good", "short"]
+LogStress = Literal["calm", "normal", "stressed"]
+LogFoodTag = Literal["home", "junk", "dairy", "spicy"]
 
 
 class UserLogRequest(BaseModel):
@@ -31,6 +34,9 @@ class UserLogRequest(BaseModel):
     sudden_event_tags: Optional[list[str]] = None
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = Field(None, max_length=500)
+    sleep: Optional[LogSleep] = None
+    stress: Optional[LogStress] = None
+    food: list[LogFoodTag] = Field(default_factory=list, max_length=4)
     selfie_url: Optional[str] = Field(default=None, alias="selfieUrl")
 
     model_config = {"populate_by_name": True}

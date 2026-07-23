@@ -265,6 +265,9 @@ async def run_v4_log(body: V4LogRequest) -> V4LogResponse:
         longitude=body.longitude,
         outdoor_exposure=body.outdoor_exposure,
         notes=body.notes,
+        sleep=body.sleep,
+        stress=body.stress,
+        food=list(body.food or []),
         selfie_url=body.selfie_url,
     )
     result = await run_user_log(log_body)
