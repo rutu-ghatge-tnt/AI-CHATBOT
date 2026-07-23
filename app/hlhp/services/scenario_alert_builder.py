@@ -74,9 +74,9 @@ def _scenario_cell_id(scenario: ScenarioEvaluation) -> str:
 def _science_from_scenario(scenario: ScenarioEvaluation) -> tuple[str, str]:
     ev = scenario.evidence_cell
     if ev and ev.evidence:
-        source = "|".join(ev.pmids) if ev.pmids else "SkinBB HLHP Scenario Library v3.5"
+        source = "|".join(ev.pmids) if ev.pmids else "SkinBB HLHP Scenario Library v3.6"
         return ev.evidence, source
-    return scenario.flash_alert.l0 or scenario.flash_alert.l1, "SkinBB HLHP Scenario Library v3.5"
+    return scenario.flash_alert.l0 or scenario.flash_alert.l1, "SkinBB HLHP Scenario Library v3.6"
 
 
 def _pick_scenario_nuggets(

@@ -6,6 +6,10 @@ from datetime import datetime
 from typing import Literal, Optional
 
 OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+LogSleep = Literal["good", "short"]
+LogStress = Literal["calm", "normal", "stressed"]
+LogFoodTag = Literal["home", "junk", "dairy", "spicy"]
+
 
 from pydantic import BaseModel, Field
 
@@ -65,6 +69,9 @@ class HistoryFeelingSession(BaseModel):
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = None
     areas: list[str] = Field(default_factory=list)
+    sleep: Optional[LogSleep] = None
+    stress: Optional[LogStress] = None
+    food: list[LogFoodTag] = Field(default_factory=list)
 
 
 class HistoryResponse(BaseModel):

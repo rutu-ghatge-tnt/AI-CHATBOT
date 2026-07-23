@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.sfi_timeline import SfiTimelinePoint
-from app.hlhp.services.outdoor_ok import compute_outdoor_ok
+from app.hlhp.services.sfi_unified import outdoor_ok_from_env
 from app.hlhp.services.weatherapi_forecast import ForecastDayReading
 
 REPRESENTATIVE_SLOT_HOUR = 12
@@ -105,7 +105,7 @@ def apply_forecast_daily_env_scores(
             continue
 
         env = _forecast_reading_to_env(reading, location_name=location_name)
-        score, _ = compute_outdoor_ok(env)
+        score, _ = outdoor_ok_from_env(env, guest_mode=True)
         patched.append(
             point.model_copy(
                 update={

@@ -61,6 +61,9 @@ class V4TodayResponse(BaseModel):
 
 
 OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+LogSleep = Literal["good", "short"]
+LogStress = Literal["calm", "normal", "stressed"]
+LogFoodTag = Literal["home", "junk", "dairy", "spicy"]
 
 
 class V4LogRequest(BaseModel):
@@ -74,7 +77,9 @@ class V4LogRequest(BaseModel):
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = Field(None, max_length=500)
-    doctor_id: Optional[str] = Field(default=None, alias="doctorId")
+    sleep: Optional[LogSleep] = None
+    stress: Optional[LogStress] = None
+    food: list[LogFoodTag] = Field(default_factory=list, max_length=4)
     selfie_url: Optional[str] = Field(default=None, alias="selfieUrl")
 
     model_config = {"populate_by_name": True}

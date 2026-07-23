@@ -122,6 +122,16 @@ def _feeling_sessions_from_events(
         notes = str(notes_raw).strip() if notes_raw else None
         exposure_raw = doc.get("outdoor_exposure")
         outdoor_exposure = str(exposure_raw) if exposure_raw else None
+        sleep_raw = str(doc.get("sleep") or "").strip()
+        sleep = sleep_raw if sleep_raw in ("good", "short") else None
+        stress_raw = str(doc.get("stress") or "").strip()
+        stress = stress_raw if stress_raw in ("calm", "normal", "stressed") else None
+        food_allowed = {"home", "junk", "dairy", "spicy"}
+        food: list[str] = []
+        for raw in doc.get("food") or []:
+            tag = str(raw).strip().lower()
+            if tag in food_allowed and tag not in food:
+                food.append(tag)
         sessions.append(
             HistoryFeelingSession(
                 session_id=str(doc.get("session_id") or ""),
@@ -141,6 +151,9 @@ def _feeling_sessions_from_events(
                 outdoor_exposure=outdoor_exposure,
                 notes=notes or None,
                 areas=areas,
+                sleep=sleep,
+                stress=stress,
+                food=food,
             )
         )
     return sessions

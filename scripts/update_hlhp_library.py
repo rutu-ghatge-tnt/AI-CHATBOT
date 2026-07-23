@@ -26,7 +26,7 @@ from app.hlhp.evidence.scenario_store import reload_scenario_store, write_active
 from app.hlhp.evidence.scenario_workbook import DEFAULT_XLSX, build_scenario_snapshot
 
 DATA_DIR = ROOT / "app" / "hlhp" / "data"
-DEFAULT_OUT = DATA_DIR / "scenario_snapshot_v3_5.json"
+DEFAULT_OUT = DATA_DIR / "scenario_snapshot_v3_6.json"
 PENALTY_JSON = DATA_DIR / "skin_band_penalty.json"
 
 

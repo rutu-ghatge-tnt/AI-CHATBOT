@@ -287,7 +287,7 @@ class TestAPIHealthEndpoint:
                 body = r.json()
                 assert body["ok"] is True
                 assert body["rule_count"] >= 1140
-                assert "v3.5" in str(body.get("workbook_version", ""))
+                assert "v3.6" in str(body.get("workbook_version", ""))
                 assert body.get("scenario_library_version") == "3.5"
                 assert body.get("composition_row_count", 0) >= 940
 
@@ -322,7 +322,7 @@ class TestAPIHealthEndpoint:
                 assert "outdoor_ok_score" in data
                 assert "mood_headline" in data
                 assert "lane_state_ctas" in data
-                assert data.get("workbook_version", "").endswith("v3.5.xlsx")
+                assert "v3.6" in str(data.get("workbook_version", ""))
                 assert data.get("sfi") is not None
                 assert data.get("band")
 

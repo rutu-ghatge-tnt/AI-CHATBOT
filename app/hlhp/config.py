@@ -50,6 +50,8 @@ class HLSettings:
     }
     KNOWLEDGE_FEED_CACHE_TTL = int(os.getenv("HLHP_KNOWLEDGE_FEED_CACHE_TTL", "3600"))
     KNOWLEDGE_FEED_FETCH_LIMIT = int(os.getenv("HLHP_KNOWLEDGE_FEED_FETCH_LIMIT", "24"))
+    # In-app city-env board collector (no OS cron). Default on when weather key set.
+    # HLHP_CITY_ENV_SCHEDULER=0 to disable; HLHP_CITY_ENV_POLL_SECONDS=3600 poll interval.
 
 
 hl_settings = HLSettings()

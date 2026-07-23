@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.hlhp.evidence.scenario_workbook import DEFAULT_XLSX, build_scenario_snapshot
 
-OUT_PATH = ROOT / "app" / "hlhp" / "data" / "scenario_snapshot_v3_5.json"
+OUT_PATH = ROOT / "app" / "hlhp" / "data" / "scenario_snapshot_v3_6.json"
 
 
 def main() -> int:

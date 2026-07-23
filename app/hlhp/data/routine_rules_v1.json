@@ -1,6 +1,6 @@
 {
-  "version": "1",
-  "source": "hlhp-evidence.json routine_rules",
+  "version": "3.6",
+  "source": "hlhp-evidence.json routine_rules (v3.6)",
   "rules": [
     {
       "id": "UV-01",
@@ -483,7 +483,7 @@
       ],
       "skin": "any",
       "concern": "any",
-      "type": "KEEP",
+      "type": "—",
       "headline": "Your usual routine is perfect today",
       "why": "Nothing to change — the air's kind to your skin.",
       "timing": "—",

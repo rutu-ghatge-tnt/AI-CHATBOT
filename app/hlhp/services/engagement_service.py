@@ -50,7 +50,7 @@ from app.hlhp.services.log_event_store import (
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.sfi_unified import headline_sfi, resolve_sfi
 from app.hlhp.services.v4_scoring_engine import clamp_sfi, feeling_log_sfi_adjustment
-from app.hlhp.services.scan_service import resolve_environment
+from app.hlhp.services.scan_service import classify_env_source, resolve_environment
 from app.hlhp.coach.models import ActionTapRequest
 from app.hlhp.db_errors import HlhpStoreError
 
@@ -299,7 +299,7 @@ async def assemble_learn(
                 continue
             nid = int(row.get("n", 0) or 0)
             factor = str(row.get("factor") or "")
-            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.5")
+            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.6")
             nuggets.append(LearnNuggetOut(id=nid, text=str(text), factor=factor, source=source))
 
     symptom_keywords = [
@@ -318,8 +318,6 @@ async def assemble_learn(
 
 async def run_user_log(
     body: UserLogRequest,
-    *,
-    bearer_token: str | None = None,
 ) -> UserLogResponse:
     profile = await load_user_profile(body.user_id)
     guest_mode = profile is None or resolve_mode(profile).value == "guest"
@@ -360,11 +358,8 @@ async def run_user_log(
     env = await resolve_environment(scan_req)
     bands = bucketize_environment(env)
     band_fields = bands_snapshot(bands)
-    sfi_base = int(
-        body.outdoor_ok_score
-        if body.outdoor_ok_score is not None
-        else headline_sfi(env, profile, guest_mode=guest_mode)
-    )
+    # Always recompute server-side — ignore client outdoor_ok_score (anti-gaming).
+    sfi_base = headline_sfi(env, profile, guest_mode=guest_mode)
     log_delta = feeling_log_sfi_adjustment(
         symptoms=symptoms,
         outdoor_exposure=body.outdoor_exposure,
@@ -373,6 +368,17 @@ async def run_user_log(
     sfi = clamp_sfi(sfi_base + log_delta)
     driver = driver_key_from_env(env, profile, guest_mode=guest_mode)
     sudden_tags = [str(t) for t in (body.sudden_event_tags or []) if t]
+    env_source = classify_env_source(scan_req, env)
+
+    _FOOD_ALLOWED = {"home", "junk", "dairy", "spicy"}
+    food_tags: list[str] = []
+    for raw in body.food or []:
+        tag = str(raw).strip().lower()
+        if tag in _FOOD_ALLOWED and tag not in food_tags:
+            food_tags.append(tag)
+
+    sleep_val = body.sleep if body.sleep in ("good", "short") else None
+    stress_val = body.stress if body.stress in ("calm", "normal", "stressed") else None
 
     session_id = await insert_log_event(
         {
@@ -394,6 +400,10 @@ async def run_user_log(
             "sudden_event_tags": sudden_tags,
             "outdoor_exposure": body.outdoor_exposure,
             "notes": (body.notes or "").strip() or None,
+            "sleep": sleep_val,
+            "stress": stress_val,
+            "food": food_tags,
+            "env_source": env_source,
         }
     )
 
@@ -470,41 +480,6 @@ async def run_user_log(
         await recompute_patterns_for_user(body.user_id)
     except Exception as exc:
         logger.warning("HLHP patterns recompute after log skipped: %s", exc)
-
-    selfie_url = (body.selfie_url or "").strip() or None
-    if not selfie_url:
-        try:
-            from app.hlhp.services.selfie_service import (
-                get_selfie_for_date,
-                public_selfie_url,
-            )
-
-            existing = await get_selfie_for_date(body.user_id, date_key)
-            if existing and existing.get("s3_key"):
-                selfie_url = public_selfie_url(str(existing["s3_key"]))
-        except Exception as exc:
-            logger.debug("HLHP selfie lookup for bus log skipped: %s", exc)
-
-    try:
-        from app.hlhp.services.daily_log_bus import publish_daily_log_best_effort
-
-        await publish_daily_log_best_effort(
-            body.user_id,
-            symptoms=symptoms,
-            areas=areas,
-            sfi=sfi,
-            notes=(body.notes or "").strip() or None,
-            outdoor_exposure=body.outdoor_exposure,
-            selfie=bool(selfie_url),
-            selfie_url=selfie_url,
-            streak=current,
-            date_key=date_key,
-            doctor_id=body.doctor_id,
-            bearer_token=bearer_token,
-            ts_ms=int(when.timestamp() * 1000),
-        )
-    except Exception as exc:
-        logger.warning("HLHP daily_log bus side-effect skipped: %s", exc)
 
     return UserLogResponse(
         logged=logged_out,
