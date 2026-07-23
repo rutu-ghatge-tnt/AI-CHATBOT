@@ -149,7 +149,7 @@ async def v4_logs(
     if uid != body.user_id:
         body = body.model_copy(update={"user_id": uid})
     try:
-        return await run_v4_log(body, auth_user=user)
+        return await run_v4_log(body)
     except HlhpStoreError as exc:
         http_503_for_store_error(exc)
 

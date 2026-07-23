@@ -271,9 +271,9 @@ Legend: **Done** · **Partial** · **Missing** · **N/A**
 - Contract: `Backend Handoff.dc.html`, `backend/README.md`, `backend/react/hlhp-keys.js`
 
 ### AI-Tools
-- Routers: `app/hlhp/api/{scan,composition,v4_routes,goals_routes,chat_routes,payment_routes,doctor_routes,weather}.py`
+- Routers: `app/hlhp/api/{scan,composition,v4_routes,weather}.py`
 - Weather: `app/hlhp/services/weather_fetcher.py`, `city_chart_service.py`
-- Bus: `app/hlhp/core/bus_client.py`, `bus_contract.py`
+- Goals / chat / payments / hub: **Node only** (removed from AI-Tools)
 
 ### Seeker site
 - Fun: `src/components/hlhp/fun/**`, `src/lib/hlhp/fun/**`
@@ -289,10 +289,9 @@ Legend: **Done** · **Partial** · **Missing** · **N/A**
 |----------|-------|---------|
 | `WEATHERAPI_KEY` | AI-Tools `.env` | Live metrics + city board (strip spaces) |
 | `HL_WEATHER_API_URL` | AI-Tools | Skintruth visuals |
-| `HLHP_HUB_URL` | AI-Tools | Publish/read bus |
-| `HLHP_NODE_API_URL` | AI-Tools | Payments checkout proxy |
-| `HLHP_SELFIE_STORAGE_DIR` | AI-Tools | When selfie routes land |
-| `NEXT_PUBLIC_HLHP_HUB_URL` | Seeker web | WS/events for Goals/chat |
+| `HLHP_SELFIE_STORAGE_DIR` / S3 vars | AI-Tools | Fun coach selfies |
+| `NEXT_PUBLIC_API_URL` | Seeker web | Node goals / chat / Plus |
+| `NEXT_PUBLIC_HLHP_HUB_URL` | Seeker web | Socket.IO (optional override) |
 
 ---
 

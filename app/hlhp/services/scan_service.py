@@ -419,6 +419,11 @@ async def resolve_environment(req) -> EnvironmentalData:
         if city and env.location_name in ("Unknown", ""):
             return env.model_copy(update={"location_name": city})
         return env
+    has_client_raw = any(
+        getattr(req, key, None) is not None
+        for key in ("raw_uvi", "raw_temp", "raw_aqi", "raw_rh")
+    )
+    source = "client_raw" if has_client_raw else "synthetic_default"
     raw_uvi = getattr(req, "raw_uvi", None)
     if raw_uvi is None:
         raw_uvi = 5.0
@@ -429,8 +434,19 @@ async def resolve_environment(req) -> EnvironmentalData:
         humidity_pct=float(getattr(req, "raw_rh", None) or 50.0),
         location_name=city,
         fetched_at=local_time if isinstance(local_time, datetime) else datetime.now(timezone.utc),
-        data_sources={"weather": "client_raw", "aqi": "client_raw", "uv": "client_raw"},
+        data_sources={"weather": source, "aqi": source, "uv": source},
     )
+
+
+def classify_env_source(req, env: EnvironmentalData) -> str:
+    """Label how env readings were obtained for audit / history honesty."""
+    if getattr(req, "latitude", None) is not None and getattr(req, "longitude", None) is not None:
+        return "weatherapi"
+    sources = getattr(env, "data_sources", None) or {}
+    weather = str(sources.get("weather") or "").strip()
+    if weather in {"synthetic_default", "client_raw"}:
+        return weather
+    return weather or "unknown"
 
 
 def _snapshot_city_label(env: EnvironmentalData, req_city: str) -> str:

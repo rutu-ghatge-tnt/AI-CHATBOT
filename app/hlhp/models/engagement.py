@@ -31,7 +31,6 @@ class UserLogRequest(BaseModel):
     sudden_event_tags: Optional[list[str]] = None
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = Field(None, max_length=500)
-    doctor_id: Optional[str] = Field(default=None, alias="doctorId")
     selfie_url: Optional[str] = Field(default=None, alias="selfieUrl")
 
     model_config = {"populate_by_name": True}

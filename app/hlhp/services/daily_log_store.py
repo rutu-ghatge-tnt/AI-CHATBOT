@@ -1,4 +1,4 @@
-"""Per-day HLHP aggregates — retained for the last 30 days."""
+"""Per-day HLHP aggregates — retained for the last 60 days (aligned with scan_log TTL)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ from app.hlhp.mongo_setup import ensure_hlhp_indexes
 logger = logging.getLogger(__name__)
 
 _DAILY_LOG = "hlhp_daily_log"
-RETENTION_DAYS = 30
+# Match hlhp_scan_log TTL (60d) so aggregates do not die before source scans.
+RETENTION_DAYS = 60
 
 
 def _avg_env_readings(

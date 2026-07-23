@@ -211,7 +211,7 @@ def test_run_user_log_rejects_second_commit_within_cooldown():
         },
     )()
     async def _fake_profile(_uid):
-        return object()
+        return None
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("app.hlhp.services.log_event_store.hl_db", fake_db)

@@ -422,4 +422,4 @@ def test_returner_banner_after_gap():
 
 
 def test_history_retention_window():
-    assert RETENTION_DAYS == 30
+    assert RETENTION_DAYS == 60

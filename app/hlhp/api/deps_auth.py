@@ -105,48 +105,6 @@ def resolve_optional_personalization_user_id(
     return None
 
 
-def _user_roles(auth_user: dict[str, Any]) -> list[str]:
-    roles: list[str] = []
-    for key in ("roles", "role"):
-        raw = auth_user.get(key)
-        if isinstance(raw, list):
-            roles.extend(str(r).strip().lower() for r in raw if str(r).strip())
-        elif isinstance(raw, str) and raw.strip():
-            roles.append(raw.strip().lower())
-    ll_role = auth_user.get("_label_looker_role")
-    if isinstance(ll_role, str) and ll_role.strip():
-        roles.append(ll_role.strip().lower())
-    elif isinstance(ll_role, list):
-        roles.extend(str(r).strip().lower() for r in ll_role if str(r).strip())
-    return list(dict.fromkeys(roles))
-
-
-def user_has_doctor_role(auth_user: dict[str, Any]) -> bool:
-    return "doctor" in _user_roles(auth_user)
-
-
-async def hlhp_doctor_authenticated_user(
-    authorization: Optional[str] = Header(None),
-    access_token: Optional[str] = Header(None, alias="access-token"),
-    x_access_token: Optional[str] = Header(None, alias="x-access-token"),
-) -> dict[str, Any]:
-    user = await hlhp_authenticated_user(
-        authorization=authorization,
-        access_token=access_token,
-        x_access_token=x_access_token,
-    )
-    if not user_has_doctor_role(user):
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "hlhp_doctor_required",
-                "message": "This endpoint requires a doctor account.",
-                "action": "Sign in with a dermatologist profile or contact SkinBB support.",
-            },
-        )
-    return user
-
-
 def resolve_scan_user_id(
     client_user_id: str | None,
     auth_user: dict[str, Any] | None,

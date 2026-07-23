@@ -221,6 +221,48 @@ def test_time_window_for_datetime_matches_three_window_model():
     assert time_window_for_datetime(datetime(2026, 6, 18, 18, 0)) == "evening"
 
 
+def test_months_for_season_spec_parses_ranges_and_wrap():
+    from app.hlhp.services.scenario_engine import months_for_season_spec
+
+    assert months_for_season_spec("Apr–Jun") == {4, 5, 6}
+    assert months_for_season_spec("Jul–Sep") == {7, 8, 9}
+    assert months_for_season_spec("Nov–Jan") == {11, 12, 1}
+    assert months_for_season_spec("Mar–May, Oct–Nov") == {3, 4, 5, 10, 11}
+    assert months_for_season_spec("Jun (early)") == {6}
+    assert months_for_season_spec("any") is None
+    assert months_for_season_spec("year-round (office workers)") is None
+
+
+def test_july_does_not_select_pre_monsoon_sun_heat():
+    """Regression: compound matching used to ignore nested bands + seasons."""
+    from datetime import date
+
+    from app.hlhp.services.scenario_engine import match_compound_index, driver_states
+
+    store = get_scenario_store()
+    # Hot + very high UV + moderate AQI + low RH — C01 band fingerprint.
+    env = _env(temperature_c=36.0, uv_index=9.0, aqi=150, humidity_pct=30.0)
+    drivers = driver_states(store, env)
+
+    may = match_compound_index(store, drivers, zone="CN", when=date(2026, 5, 15))
+    july = match_compound_index(store, drivers, zone="CN", when=date(2026, 7, 23))
+
+    assert may is not None
+    assert may["name"] == "Pre-Monsoon Sun & Heat"
+    assert july is None or july["name"] != "Pre-Monsoon Sun & Heat"
+
+    july_eval = evaluate_scenario(
+        store,
+        env,
+        city="Delhi",
+        profile=None,
+        guest_mode=True,
+        local_time=datetime(2026, 7, 23, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata")),
+    )
+    assert "Pre-Monsoon" not in (july_eval.flash_alert.l0 or "")
+    assert july_eval.compound_name != "Pre-Monsoon Sun & Heat"
+
+
 def test_age_rules_adjust_personal_sfi():
     from app.hlhp.services.sfi_unified import _age_risk_delta
     from app.hlhp.services.v4_scoring_engine import evaluate_v4

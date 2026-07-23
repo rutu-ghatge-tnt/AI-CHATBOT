@@ -243,7 +243,7 @@ async def assemble_today(
     )
 
 
-async def run_v4_log(body: V4LogRequest, *, auth_user: dict | None = None) -> V4LogResponse:
+async def run_v4_log(body: V4LogRequest) -> V4LogResponse:
     when = body.local_time or datetime.now(timezone.utc)
     if body.date:
         try:
@@ -265,14 +265,9 @@ async def run_v4_log(body: V4LogRequest, *, auth_user: dict | None = None) -> V4
         longitude=body.longitude,
         outdoor_exposure=body.outdoor_exposure,
         notes=body.notes,
-        doctor_id=body.doctor_id,
         selfie_url=body.selfie_url,
     )
-    bearer = None
-    if auth_user:
-        token = auth_user.get("_label_looker_access_token")
-        bearer = str(token) if token else None
-    result = await run_user_log(log_body, bearer_token=bearer)
+    result = await run_user_log(log_body)
 
     try:
         await recompute_patterns_for_user(body.user_id)

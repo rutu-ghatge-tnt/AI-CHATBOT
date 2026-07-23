@@ -74,7 +74,6 @@ class V4LogRequest(BaseModel):
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = Field(None, max_length=500)
-    doctor_id: Optional[str] = Field(default=None, alias="doctorId")
     selfie_url: Optional[str] = Field(default=None, alias="selfieUrl")
 
     model_config = {"populate_by_name": True}
