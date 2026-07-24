@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.hlhp.config import hl_settings
+from app.hlhp.services import open_meteo_uv
 from app.hlhp.services.weatherapi_forecast import aqi_from_air_quality
 
 logger = logging.getLogger(__name__)
@@ -283,4 +284,21 @@ async def fetch_timeline_hourly_readings(
             by_epoch[row.at_epoch] = row
 
     merged = sorted(by_epoch.values(), key=lambda r: r.at_epoch)
+    if merged:
+        start = min(date.fromisoformat(r.date) for r in merged)
+        end = max(date.fromisoformat(r.date) for r in merged)
+        uv_map = await open_meteo_uv.fetch_hourly_uv_map(
+            latitude,
+            longitude,
+            start=start,
+            end=end,
+            timezone_id=tz_id or "auto",
+        )
+        merged, overrides = open_meteo_uv.apply_hourly_uv(merged, uv_map)
+        if overrides:
+            logger.debug(
+                "Open-Meteo UV applied to %s/%s timeline slots",
+                overrides,
+                len(merged),
+            )
     return merged, tz_id, location_name

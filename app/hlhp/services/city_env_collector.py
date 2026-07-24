@@ -21,6 +21,7 @@ from app.hlhp.services.city_env_store import (
     upsert_city_env_daily,
     upsert_city_env_slot,
 )
+from app.hlhp.services import open_meteo_uv
 from app.hlhp.services.sfi_unified import resolve_sfi
 from app.hlhp.services.weatherapi_forecast import aqi_from_air_quality
 from app.hlhp.services.weatherapi_timeline import SFI_SLOT_HOURS
@@ -28,7 +29,7 @@ from app.hlhp.services.weatherapi_timeline import SFI_SLOT_HOURS
 logger = logging.getLogger(__name__)
 
 _IST = ZoneInfo(CITY_ENV_TZ)
-_SOURCE = "weatherapi_slot_avg"
+_SOURCE = "weatherapi_slot_avg+open_meteo_uv"
 
 
 def _to_float(value: Any, default: float) -> float:
@@ -84,6 +85,7 @@ def extract_slot_metrics(
             continue
         out.append(
             {
+                "date": date_iso,
                 "slot_hour": int(slot),
                 "temperature_c": round(_to_float(hour_row.get("temp_c"), 25.0), 1),
                 "humidity_pct": round(_to_float(hour_row.get("humidity"), 50.0), 1),
@@ -160,6 +162,23 @@ async def persist_city_env_from_payload(
 ) -> dict[str, Any]:
     """Extract slots → upsert slot + daily rows. Returns summary for callers/jobs."""
     slots = extract_slot_metrics(payload, date_iso)
+    coords = open_meteo_uv.coords_from_weatherapi_payload(payload)
+    if slots and coords:
+        lat, lon = coords
+        try:
+            day = date.fromisoformat(date_iso)
+        except ValueError:
+            day = None
+        if day is not None:
+            uv_map = await open_meteo_uv.fetch_hourly_uv_map(
+                lat,
+                lon,
+                start=day,
+                end=day,
+                timezone_id=CITY_ENV_TZ,
+            )
+            slots, _ = open_meteo_uv.apply_hourly_uv(slots, uv_map)
+
     meta = _base_meta(
         city_label=city_label, on_board=on_board, query=query, date_iso=date_iso
     )

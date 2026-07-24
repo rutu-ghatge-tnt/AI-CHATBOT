@@ -1,19 +1,22 @@
-"""WeatherAPI.com multi-day forecast for HLHP plan-week scoring."""
+"""WeatherAPI.com multi-day forecast for HLHP plan-week scoring.
+
+UV is overridden from Open-Meteo daily uv_index_max when available.
+"""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
 
 import httpx
 
 from app.hlhp.config import hl_settings
+from app.hlhp.services import open_meteo_uv
 from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
-_CACHE_PREFIX = "hl:weatherapi:forecast"
+_CACHE_PREFIX = "hl:weatherapi:forecast:v2"
 
 
 @dataclass(frozen=True)
@@ -158,6 +161,16 @@ async def fetch_weatherapi_forecast(
             return []
         readings = _parse_forecast_payload(data, days=days)
         if readings:
+            daily_uv = await open_meteo_uv.fetch_daily_uv_max(
+                latitude, longitude, days=days
+            )
+            if daily_uv:
+                readings = [
+                    replace(row, uv_index=daily_uv[row.date])
+                    if row.date in daily_uv
+                    else row
+                    for row in readings
+                ]
             await set_cached(
                 cache_key,
                 {"readings": [r.__dict__ for r in readings]},

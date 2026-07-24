@@ -42,7 +42,7 @@ def _reading_to_env(
         humidity_pct=reading.humidity_pct,
         location_name=location_name,
         fetched_at=datetime.now(),
-        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "weatherapi"},
+        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "open_meteo"},
     )
 
 
@@ -54,7 +54,7 @@ def _slot_to_env(slot: SfiTimelinePoint, *, location_name: str) -> Environmental
         humidity_pct=slot.humidity_pct,
         location_name=location_name,
         fetched_at=datetime.now(),
-        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "weatherapi"},
+        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "open_meteo"},
     )
 
 

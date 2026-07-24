@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import httpx
-
-from app.hlhp.config import hl_settings
+from app.hlhp.services import open_meteo_uv
 from app.hlhp.utils.cache import get_cached, set_cached
 
 _CACHE_PREFIX = "hl:forecast"
@@ -43,28 +41,18 @@ async def get_forecast(latitude: float, longitude: float) -> ForecastSnapshot:
         )
 
     try:
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": latitude,
-            "longitude": longitude,
-            "daily": "uv_index_max,temperature_2m_max",
-            "timezone": "auto",
-            "forecast_days": 2,
-        }
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        daily = data.get("daily", {})
-        uvi_list = daily.get("uv_index_max") or []
-        temp_list = daily.get("temperature_2m_max") or []
-        tomorrow_uvi = float(uvi_list[1]) if len(uvi_list) > 1 else None
-        tomorrow_temp = float(temp_list[1]) if len(temp_list) > 1 else None
+        by_date = await open_meteo_uv.fetch_daily_uv_max(
+            latitude, longitude, days=2
+        )
+        # Keep temperature for coach ease check via a tiny forecast call is redundant —
+        # only UV is required for eases_next_day UV branch; temp is optional context.
+        dates = sorted(by_date.keys())
+        tomorrow_uvi = by_date[dates[1]] if len(dates) > 1 else None
         snap = ForecastSnapshot(
             captured_at=datetime.now(timezone.utc),
             tomorrow_uvi=tomorrow_uvi,
-            tomorrow_temp=tomorrow_temp,
-            is_fresh=True,
+            tomorrow_temp=None,
+            is_fresh=tomorrow_uvi is not None,
         )
         await set_cached(
             cache_key,
@@ -72,7 +60,7 @@ async def get_forecast(latitude: float, longitude: float) -> ForecastSnapshot:
                 "captured_at": snap.captured_at.isoformat(),
                 "tomorrow_uvi": tomorrow_uvi,
                 "tomorrow_aqi": None,
-                "tomorrow_temp": tomorrow_temp,
+                "tomorrow_temp": None,
             },
             _TTL,
         )
