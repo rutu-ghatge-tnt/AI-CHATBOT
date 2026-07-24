@@ -16,6 +16,8 @@ import httpx
 from app.hlhp.config import hl_settings
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.services.weather_wind import extract_wind_fields
 from app.hlhp.services.weatherapi_forecast import aqi_from_air_quality
 from app.hlhp.utils.cache import get_cached, set_cached
@@ -84,15 +86,12 @@ async def fetch_weatherapi_current(lat: float, lng: float) -> dict | None:
         logger.warning("WEATHERAPI_KEY not set — cannot fetch live weather metrics")
         return None
     params = {"key": key, "q": f"{lat},{lng}", "aqi": "yes"}
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(hl_settings.WEATHERAPI_CURRENT_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("WeatherAPI current failed for %s,%s: %s", lat, lng, exc)
-        return None
+    return await get_json(
+        hl_settings.WEATHERAPI_CURRENT_URL,
+        params=params,
+        timeout=12,
+        provider=PROVIDER_WEATHERAPI,
+    )
 
 
 async def fetch_weatherapi_current_by_query(query: str) -> dict | None:
@@ -101,16 +100,12 @@ async def fetch_weatherapi_current_by_query(query: str) -> dict | None:
     if not key:
         return None
     params = {"key": key, "q": query, "aqi": "yes"}
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(hl_settings.WEATHERAPI_CURRENT_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("WeatherAPI current failed for q=%s: %s", query, exc)
-        return None
-
+    return await get_json(
+        hl_settings.WEATHERAPI_CURRENT_URL,
+        params=params,
+        timeout=12,
+        provider=PROVIDER_WEATHERAPI,
+    )
 
 async def _fetch_skintruth_visuals(lat: float, lng: float) -> dict:
     """Skintruth location-weather — location label + imagery payload only."""

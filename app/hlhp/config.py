@@ -53,5 +53,28 @@ class HLSettings:
     # In-app city-env board collector (no OS cron). Default on when weather key set.
     # HLHP_CITY_ENV_SCHEDULER=0 to disable; HLHP_CITY_ENV_POLL_SECONDS=3600 poll interval.
 
+    # Weather quota alerts (SES email). Limits are plan ceilings you configure.
+    @property
+    def WEATHER_QUOTA_ALERTS_ENABLED(self) -> bool:
+        return os.getenv("HLHP_WEATHER_QUOTA_ALERTS", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+
+    @property
+    def WEATHERAPI_MONTHLY_LIMIT(self) -> int:
+        try:
+            return max(1, int(os.getenv("WEATHERAPI_MONTHLY_LIMIT", "1000000")))
+        except ValueError:
+            return 1_000_000
+
+    @property
+    def OPEN_METEO_DAILY_LIMIT(self) -> int:
+        try:
+            return max(1, int(os.getenv("OPEN_METEO_DAILY_LIMIT", "10000")))
+        except ValueError:
+            return 10_000
+
 
 hl_settings = HLSettings()

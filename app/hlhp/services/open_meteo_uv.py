@@ -11,9 +11,9 @@ from datetime import date, datetime, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
-import httpx
-
 from app.hlhp.config import hl_settings
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_OPEN_METEO
 from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
@@ -53,16 +53,9 @@ def _round_coord(value: float) -> float:
 
 
 async def _get_json(url: str, params: dict[str, Any]) -> dict | None:
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("Open-Meteo UV request failed (%s): %s", url, exc)
-        return None
-
+    return await get_json(
+        url, params=params, timeout=12, provider=PROVIDER_OPEN_METEO
+    )
 
 def _parse_hourly_uv(data: dict) -> dict[tuple[str, int], float]:
     hourly = data.get("hourly") if isinstance(data.get("hourly"), dict) else {}

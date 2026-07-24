@@ -8,10 +8,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, replace
 
-import httpx
-
 from app.hlhp.config import hl_settings
 from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
@@ -153,10 +153,12 @@ async def fetch_weatherapi_forecast(
         "aqi": "yes",
     }
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(hl_settings.WEATHERAPI_FORECAST_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await get_json(
+            hl_settings.WEATHERAPI_FORECAST_URL,
+            params=params,
+            timeout=12,
+            provider=PROVIDER_WEATHERAPI,
+        )
         if not isinstance(data, dict):
             return []
         readings = _parse_forecast_payload(data, days=days)
