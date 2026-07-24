@@ -20,7 +20,7 @@ def _forecast_reading_to_env(reading: ForecastDayReading, *, location_name: str)
         humidity_pct=reading.humidity_pct,
         location_name=location_name,
         fetched_at=datetime.now(),
-        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "weatherapi"},
+        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "open_meteo"},
     )
 
 

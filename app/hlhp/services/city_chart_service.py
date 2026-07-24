@@ -9,22 +9,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
-
-import httpx
 
 from app.hlhp.config import hl_settings
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.services.sfi_unified import resolve_sfi
+from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.services.weatherapi_forecast import aqi_from_air_quality
 from app.hlhp.services.weatherapi_timeline import SFI_SLOT_HOURS
 from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
-_CACHE_BOARD = "hl:city-chart:board:v2"
+_CACHE_BOARD = "hl:city-chart:board:v3"
 _IST = ZoneInfo("Asia/Kolkata")
 _BOARD_LOCKS: dict[str, asyncio.Lock] = {}
 
@@ -221,16 +222,9 @@ async def _fetch_day_payload(query: str, date_iso: str, *, today_iso: str) -> di
     else:
         url = hl_settings.WEATHERAPI_FORECAST_URL
         params = {"key": key, "q": query, "days": 1, "aqi": "yes"}
-    try:
-        async with httpx.AsyncClient(timeout=14) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("WeatherAPI day fetch failed for q=%s dt=%s: %s", query, date_iso, exc)
-        return None
-
+    return await get_json(
+        url, params=params, timeout=14, provider=PROVIDER_WEATHERAPI
+    )
 
 async def fetch_weatherapi_day_payload(query: str, date_iso: str, *, today_iso: str) -> dict | None:
     """Public WeatherAPI day fetch used by city chart + city-env jobs."""
@@ -238,6 +232,37 @@ async def fetch_weatherapi_day_payload(query: str, date_iso: str, *, today_iso: 
 
 
 _FETCH_SEM = asyncio.Semaphore(4)
+
+
+async def _with_open_meteo_slot_uv(
+    metrics: dict[str, Any] | None,
+    payload: dict | None,
+    date_iso: str,
+) -> dict[str, Any] | None:
+    """Keep WeatherAPI temp/AQI/wind; replace slot-average UV with Open-Meteo CAMS."""
+    if not isinstance(metrics, dict) or not isinstance(payload, dict):
+        return metrics
+    coords = open_meteo_uv.coords_from_weatherapi_payload(payload)
+    if not coords:
+        return metrics
+    try:
+        day = date.fromisoformat(date_iso)
+    except ValueError:
+        return metrics
+    lat, lon = coords
+    uv_map = await open_meteo_uv.fetch_hourly_uv_map(
+        lat,
+        lon,
+        start=day,
+        end=day,
+        timezone_id="Asia/Kolkata",
+    )
+    avg = open_meteo_uv.slot_uv_average(uv_map, date_iso, SFI_SLOT_HOURS)
+    if avg is None:
+        return metrics
+    updated = dict(metrics)
+    updated["uv_index"] = avg
+    return updated
 
 
 async def _city_day_averages(
@@ -249,7 +274,7 @@ async def _city_day_averages(
     on_board: bool = True,
     persist: bool = True,
 ) -> dict[str, Any]:
-    cache_key = f"hl:city-wx-avg:{city}:{today_iso}:{yesterday_iso}"
+    cache_key = f"hl:city-wx-avg:v2:{city}:{today_iso}:{yesterday_iso}"
     cached = await get_cached(cache_key)
     if cached and isinstance(cached, dict) and "today" in cached:
         return cached
@@ -263,6 +288,12 @@ async def _city_day_averages(
     today = _average_slot_metrics(today_raw, today_iso) if isinstance(today_raw, dict) else None
     yesterday = (
         _average_slot_metrics(yday_raw, yesterday_iso) if isinstance(yday_raw, dict) else None
+    )
+    today = await _with_open_meteo_slot_uv(
+        today, today_raw if isinstance(today_raw, dict) else None, today_iso
+    )
+    yesterday = await _with_open_meteo_slot_uv(
+        yesterday, yday_raw if isinstance(yday_raw, dict) else None, yesterday_iso
     )
     result = {
         "city": city,
@@ -396,7 +427,7 @@ async def build_city_chart(
 
         payload = {
             "cities": rows,
-            "source": "weatherapi_slot_avg",
+            "source": "weatherapi_slot_avg+open_meteo_uv",
             "slots": list(SFI_SLOT_HOURS),
             "you_city": you_canon,
             "fetched_at": datetime.now(timezone.utc).isoformat(),

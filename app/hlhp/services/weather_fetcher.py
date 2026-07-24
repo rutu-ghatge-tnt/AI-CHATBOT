@@ -1,6 +1,7 @@
 """HLHP environmental fetch.
 
-Metrics (temp / humidity / UV / AQI / wind) come from WeatherAPI (`WEATHERAPI_KEY`).
+Metrics (temp / humidity / AQI / wind) come from WeatherAPI (`WEATHERAPI_KEY`).
+UV comes from Open-Meteo CAMS (WeatherAPI UV kept only as fallback).
 Skintruth location-weather is used only for place labels + background/animal imagery.
 """
 
@@ -14,13 +15,16 @@ import httpx
 
 from app.hlhp.config import hl_settings
 from app.hlhp.models.environmental import EnvironmentalData
+from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.services.weather_wind import extract_wind_fields
 from app.hlhp.services.weatherapi_forecast import aqi_from_air_quality
 from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
-CACHE_KEY_PREFIX = "hl:weather"
+CACHE_KEY_PREFIX = "hl:weather:v2"
 
 
 def _pick_first(data: dict, keys: list[str], default=None):
@@ -82,15 +86,12 @@ async def fetch_weatherapi_current(lat: float, lng: float) -> dict | None:
         logger.warning("WEATHERAPI_KEY not set — cannot fetch live weather metrics")
         return None
     params = {"key": key, "q": f"{lat},{lng}", "aqi": "yes"}
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(hl_settings.WEATHERAPI_CURRENT_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("WeatherAPI current failed for %s,%s: %s", lat, lng, exc)
-        return None
+    return await get_json(
+        hl_settings.WEATHERAPI_CURRENT_URL,
+        params=params,
+        timeout=12,
+        provider=PROVIDER_WEATHERAPI,
+    )
 
 
 async def fetch_weatherapi_current_by_query(query: str) -> dict | None:
@@ -99,16 +100,12 @@ async def fetch_weatherapi_current_by_query(query: str) -> dict | None:
     if not key:
         return None
     params = {"key": key, "q": query, "aqi": "yes"}
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(hl_settings.WEATHERAPI_CURRENT_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("WeatherAPI current failed for q=%s: %s", query, exc)
-        return None
-
+    return await get_json(
+        hl_settings.WEATHERAPI_CURRENT_URL,
+        params=params,
+        timeout=12,
+        provider=PROVIDER_WEATHERAPI,
+    )
 
 async def _fetch_skintruth_visuals(lat: float, lng: float) -> dict:
     """Skintruth location-weather — location label + imagery payload only."""
@@ -150,8 +147,11 @@ async def fetch_environmental_data(lat: float, lng: float) -> EnvironmentalData:
 
     wa_task = asyncio.create_task(fetch_weatherapi_current(lat, lng))
     st_task = asyncio.create_task(_fetch_skintruth_visuals(lat, lng))
+    uv_task = asyncio.create_task(open_meteo_uv.fetch_current_uv(lat, lng))
 
-    wa_raw, st_meta = await asyncio.gather(wa_task, st_task, return_exceptions=True)
+    wa_raw, st_meta, om_uv = await asyncio.gather(
+        wa_task, st_task, uv_task, return_exceptions=True
+    )
 
     metrics: dict | None = None
     if isinstance(wa_raw, dict):
@@ -191,6 +191,13 @@ async def fetch_environmental_data(lat: float, lng: float) -> EnvironmentalData:
     else:
         metrics_source = "weatherapi"
 
+    uv_source = metrics_source
+    if isinstance(om_uv, (int, float)):
+        metrics["uv_index"] = round(max(0.0, float(om_uv)), 1)
+        uv_source = open_meteo_uv.SOURCE
+    elif isinstance(om_uv, Exception):
+        logger.warning("Open-Meteo UV failed for %s,%s: %s", lat, lng, om_uv)
+
     location_name = skintruth_location or metrics.get("location_name") or "Unknown"
     from_live = metrics_source == "weatherapi"
 
@@ -207,7 +214,7 @@ async def fetch_environmental_data(lat: float, lng: float) -> EnvironmentalData:
         data_sources={
             "weather": metrics_source,
             "aqi": metrics_source,
-            "uv": metrics_source,
+            "uv": uv_source,
             "location": "skintruth" if skintruth_location else metrics_source,
             "visuals": "skintruth" if raw_payload else "none",
         },

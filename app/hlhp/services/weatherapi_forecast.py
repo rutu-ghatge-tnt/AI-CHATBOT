@@ -1,19 +1,22 @@
-"""WeatherAPI.com multi-day forecast for HLHP plan-week scoring."""
+"""WeatherAPI.com multi-day forecast for HLHP plan-week scoring.
+
+UV is overridden from Open-Meteo daily uv_index_max when available.
+"""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
-
-import httpx
+from dataclasses import dataclass, replace
 
 from app.hlhp.config import hl_settings
+from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
-_CACHE_PREFIX = "hl:weatherapi:forecast"
+_CACHE_PREFIX = "hl:weatherapi:forecast:v2"
 
 
 @dataclass(frozen=True)
@@ -150,14 +153,26 @@ async def fetch_weatherapi_forecast(
         "aqi": "yes",
     }
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            resp = await client.get(hl_settings.WEATHERAPI_FORECAST_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await get_json(
+            hl_settings.WEATHERAPI_FORECAST_URL,
+            params=params,
+            timeout=12,
+            provider=PROVIDER_WEATHERAPI,
+        )
         if not isinstance(data, dict):
             return []
         readings = _parse_forecast_payload(data, days=days)
         if readings:
+            daily_uv = await open_meteo_uv.fetch_daily_uv_max(
+                latitude, longitude, days=days
+            )
+            if daily_uv:
+                readings = [
+                    replace(row, uv_index=daily_uv[row.date])
+                    if row.date in daily_uv
+                    else row
+                    for row in readings
+                ]
             await set_cached(
                 cache_key,
                 {"readings": [r.__dict__ for r in readings]},
