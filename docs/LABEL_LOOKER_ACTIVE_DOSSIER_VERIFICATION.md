@@ -19,6 +19,7 @@
 | Chemical class | Branded: resolve `chemical_class_ids` → `ingre_chemical_classes.chemicalClassName` · INCI: usually empty (no class field on docs) |
 | Branded hit but not Active | Do **not** fall through to INCI for that same candidate |
 | Prompt | Extend existing analysis prompt only |
+| **Match scoring** | Active dossiers also feed `build_product_benefit_signals` → `evaluate_suitability` (not prompt-only) |
 
 ---
 
