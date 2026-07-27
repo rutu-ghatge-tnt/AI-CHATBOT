@@ -13,6 +13,7 @@ from app.hlhp.core.profile_mode import resolve_mode
 
 from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
 from app.hlhp.composition.explore import pick_learn_nuggets
+from app.hlhp.composition.content_feeds import assemble_ranked_content_feeds
 from app.hlhp.composition.symptom import assemble_symptom_explainer
 from app.hlhp.composition.vocabulary import symptom_chips
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
@@ -49,7 +50,6 @@ from app.hlhp.services.log_event_store import (
 )
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.sfi_unified import headline_sfi, resolve_sfi
-from app.hlhp.services.v4_scoring_engine import clamp_sfi, feeling_log_sfi_adjustment
 from app.hlhp.services.scan_service import classify_env_source, resolve_environment
 from app.hlhp.coach.models import ActionTapRequest
 from app.hlhp.db_errors import HlhpStoreError
@@ -307,9 +307,21 @@ async def assemble_learn(
         for c in symptom_chips(resolved_concern, selected=selected)
     ]
 
+    knowledge_feed, blogs = await assemble_ranked_content_feeds(
+        concern_id=resolved_concern,
+        bands=bands,
+        when=now,
+        user_id=user_id or None,
+        profile=profile,
+        knowledge_limit=4,
+        blog_limit=4,
+    )
+
     return LearnResponse(
         explainers=explainers,
         nuggets=nuggets,
+        knowledge_feed=knowledge_feed,
+        blogs=blogs,
         concern_id=resolved_concern,
         city=resolved_city,
         symptom_keywords=symptom_keywords,
@@ -359,13 +371,8 @@ async def run_user_log(
     bands = bucketize_environment(env)
     band_fields = bands_snapshot(bands)
     # Always recompute server-side — ignore client outdoor_ok_score (anti-gaming).
-    sfi_base = headline_sfi(env, profile, guest_mode=guest_mode)
-    log_delta = feeling_log_sfi_adjustment(
-        symptoms=symptoms,
-        outdoor_exposure=body.outdoor_exposure,
-        notes=body.notes,
-    )
-    sfi = clamp_sfi(sfi_base + log_delta)
+    # Feeling log is an outcome signal and must not modify the SFI number.
+    sfi = headline_sfi(env, profile, guest_mode=guest_mode)
     driver = driver_key_from_env(env, profile, guest_mode=guest_mode)
     sudden_tags = [str(t) for t in (body.sudden_event_tags or []) if t]
     env_source = classify_env_source(scan_req, env)

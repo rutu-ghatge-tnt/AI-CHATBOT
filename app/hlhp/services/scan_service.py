@@ -139,12 +139,12 @@ def _scenario_alert_tile(
 ) -> AlertTile:
     cell = scenario.cell or {}
     body = scenario.flash_alert.l1 or scenario.flash_alert.l0
-    title = scenario.flash_alert.l0 or (body.split(".")[0].strip() if body else scenario.band)
+    title = scenario.flash_alert.l0 or (body.split(".")[0].strip() if body else scenario.flash_alert.mode)
     if day_phase == "evening":
         lower = f"{title} {body}".lower()
         if any(tok in lower for tok in _NIGHT_BLOCK):
             body = scenario.flash_alert.tip or body
-            title = scenario.band
+            title = scenario.flash_alert.mode
     pmids = scenario.evidence_cell.pmids if scenario.evidence_cell else []
     phase_label = "evening_recovery" if day_phase == "evening" else "morning_prep"
     archetype = {
@@ -164,7 +164,7 @@ def _scenario_alert_tile(
         l1=title,
         l2=body,
         phase_used=phase_label,  # type: ignore[arg-type]
-        mood_verdict_tag=_mood_for_band(scenario.band),
+        mood_verdict_tag=_mood_for_band(scenario.flash_alert.mode),
         engagement_archetype=archetype,
         how_text=scenario.flash_alert.tip,
         source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.6",

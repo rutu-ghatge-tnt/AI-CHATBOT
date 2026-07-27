@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
-
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -123,6 +121,8 @@ class LearnSymptomChipOut(BaseModel):
 class LearnResponse(BaseModel):
     explainers: list[LearnExplainerOut] = Field(default_factory=list)
     nuggets: list[LearnNuggetOut] = Field(default_factory=list)
+    knowledge_feed: list[dict[str, Any]] = Field(default_factory=list)
+    blogs: list[dict[str, Any]] = Field(default_factory=list)
     concern_id: Optional[str] = None
     city: Optional[str] = None
     symptom_keywords: list[LearnSymptomChipOut] = Field(default_factory=list)

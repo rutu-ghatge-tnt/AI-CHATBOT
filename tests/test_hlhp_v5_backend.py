@@ -1,4 +1,4 @@
-"""Tests for weather wind extraction and surge detection."""
+"""Tests for weather wind extraction and surge detection (adverse vs surge split)."""
 
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.services.surge_detector import assess_surge
@@ -41,9 +41,10 @@ def test_surge_from_rolling_delta():
     assert result.active
     assert "heat_surge" in result.tags
     assert "humidity_surge" in result.tags
+    assert result.alert_level == "L2"
 
 
-def test_surge_absolute_aqi():
+def test_adverse_absolute_aqi_is_not_a_surge():
     env = EnvironmentalData(
         uv_index=5,
         temperature_c=28,
@@ -53,8 +54,10 @@ def test_surge_absolute_aqi():
         location_name="Delhi",
     )
     result = assess_surge(env)
-    assert result.active
-    assert "pollution_surge" in result.tags
+    assert result.active is False
+    assert result.adverse is True
+    assert "pollution_adverse" in result.adverse_tags
+    assert result.alert_level == "L1"
 
 
 def test_surge_force_demo():
@@ -69,6 +72,7 @@ def test_surge_force_demo():
     result = assess_surge(env, force=True)
     assert result.active
     assert result.forced
+    assert result.alert_level == "L2"
 
 
 def test_scene_windy_with_wind_kph():
@@ -93,6 +97,5 @@ def test_skin_band_penalty_dry_very_low_humidity():
         location_name="Jaipur",
     )
     bands = band_map(env)
-    score = personal_sfi(bands, "Eczema", "Dry")
-    # Weighted base minus dry/very_low humidity penalty (10)
+    score = personal_sfi(bands, "barrier_led", "dry")
     assert score < 100

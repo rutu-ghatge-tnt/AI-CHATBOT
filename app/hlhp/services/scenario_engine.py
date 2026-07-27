@@ -627,7 +627,15 @@ def evaluate_scenario(
     local_time: datetime | None = None,
 ) -> ScenarioEvaluation:
     drivers = driver_states(store, env)
-    sfi = sum(d.points for d in drivers)
+    # Canonical SFI comes from the unified V4 SFI engine.
+    # This avoids any confusion with the legacy "sum(d.points)" scheme.
+    from app.hlhp.services.v4_scoring_engine import evaluate_v4
+
+    v4_eval = evaluate_v4(env, profile, guest_mode=guest_mode, surge=force_surge)
+    sfi = v4_eval.headline_sfi
+    band = v4_eval.mode
+    personal_sfi = v4_eval.personal_sfi
+
     dom = dominant_driver(drivers)
     skin = resolve_skin(profile, guest_mode)
     library_concerns = resolve_library_concerns(profile, guest_mode)
@@ -645,22 +653,35 @@ def evaluate_scenario(
         when=when,
     )
 
-    life_stage = None if guest_mode else resolve_life_stage(profile)
-    gender_rule = lookup_gender_rule(store, life_stage, concern)
-    sfi = apply_gender_rule_to_sfi(sfi, gender_rule)
-    band = band_for_sfi(sfi)
+    # Life-stage modifiers adjust cell risk + L2 copy only — never the SFI number.
+    # Lazy import avoids circular dependency with sfi_unified.
+    from app.hlhp.services.sfi_unified import apply_addenda_to_l2, resolve_life_stage_adjustment
+
     time_window = time_window_for_datetime(local_time)
     time_clause = time_overlay_clause(store, dom, time_window)
 
     risk = _risk_int(cell, surge=force_surge)
-    personal_sfi = clamp_sfi(sfi - risk * RISK_TO_SFI_SCALE) if cell else None
+    life_adj = resolve_life_stage_adjustment(
+        risk,
+        profile,
+        guest_mode=guest_mode,
+        concern=concern,
+    )
+    risk = life_adj.adjusted_risk
     flash = build_flash_alert(
         cell,
         band=band,
         surge=force_surge,
         time_clause=time_clause,
-        gender_rule=gender_rule,
     )
+    if life_adj.addenda or life_adj.actions:
+        flash = FlashAlert(
+            level=flash.level,
+            mode=flash.mode,
+            l0=flash.l0,
+            l1=apply_addenda_to_l2(flash.l1, life_adj),
+            tip=(life_adj.actions[0] if life_adj.actions else flash.tip),
+        )
     impacts = [
         ImpactLine(driver=d.key, name=d.name, level=points_to_level(d.points), value=d.value)
         for d in drivers
@@ -684,6 +705,8 @@ def evaluate_scenario(
         sudden.append(SUDDEN_TAG_BY_FACTOR.get(dom.factor, "heat_surge"))
     if cell_kind in {"compound", "guest_compound"} and compound_name:
         sudden.append(compound_name.lower().replace(" ", "_")[:32])
+
+    life_stage = None if guest_mode else resolve_life_stage(profile)
 
     return ScenarioEvaluation(
         sfi=sfi,

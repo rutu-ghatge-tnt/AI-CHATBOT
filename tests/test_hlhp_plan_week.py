@@ -160,7 +160,7 @@ def test_apply_forecast_daily_env_scores_patches_noon_forward_days():
     patched = apply_forecast_daily_env_scores(points, readings, location_name="London")
     noon = next(p for p in patched if p.slot_hour == 12)
     afternoon = next(p for p in patched if p.slot_hour == 15)
-    # V4 environmental SFI for UV extreme + otherwise mild env (~62), not legacy Outdoor-OK floor.
-    assert noon.sfi_env == 62
+    # V4 environmental SFI for UV extreme + otherwise mild env (54), not legacy Outdoor-OK floor.
+    assert noon.sfi_env == 54
     assert noon.uv_index == 11.7
     assert afternoon.sfi_env == 40

@@ -18,10 +18,9 @@ from app.hlhp.db_errors import HlhpStoreError
 
 from app.hlhp.composition.concern import assemble_concern_deepdive
 from app.hlhp.composition.explore import assemble_event_guides, assemble_explore
-from app.hlhp.composition.knowledge_feed_rank import rank_knowledge_feed_posts
+from app.hlhp.composition.content_feeds import assemble_ranked_content_feeds
 from app.hlhp.core.bands import bucketize_environment
 from app.hlhp.models.environmental import EnvironmentalData
-from app.hlhp.services.knowledge_feed_client import fetch_knowledge_feed_pool
 from app.hlhp.composition.forecast import assemble_week_ahead
 from app.hlhp.composition.plan_week import assemble_plan_week
 from app.hlhp.composition.sfi_timeline import assemble_sfi_timeline
@@ -121,16 +120,18 @@ async def explore_lane(
         profile=profile,
         bands=bands,
     )
-    pool = await fetch_knowledge_feed_pool()
-    payload["knowledge_feed"] = rank_knowledge_feed_posts(
-        pool,
+    when = datetime.now().astimezone()
+    knowledge_feed, blogs = await assemble_ranked_content_feeds(
         concern_id=payload.get("concern_id"),
         bands=bands,
-        when=datetime.now().astimezone(),
+        when=when,
         user_id=resolved_user_id,
         profile=profile,
-        limit=4,
+        knowledge_limit=4,
+        blog_limit=4,
     )
+    payload["knowledge_feed"] = knowledge_feed
+    payload["blogs"] = blogs
     return payload
 
 
