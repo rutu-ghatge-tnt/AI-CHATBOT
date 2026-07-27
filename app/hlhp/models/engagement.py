@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
-
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+LogSleep = Literal["good", "short"]
+LogStress = Literal["calm", "normal", "stressed"]
+LogFoodTag = Literal["home", "junk", "dairy", "spicy"]
 
 
 class UserLogRequest(BaseModel):
@@ -31,6 +32,12 @@ class UserLogRequest(BaseModel):
     sudden_event_tags: Optional[list[str]] = None
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = Field(None, max_length=500)
+    sleep: Optional[LogSleep] = None
+    stress: Optional[LogStress] = None
+    food: list[LogFoodTag] = Field(default_factory=list, max_length=4)
+    selfie_url: Optional[str] = Field(default=None, alias="selfieUrl")
+
+    model_config = {"populate_by_name": True}
 
 
 class LoggedEventOut(BaseModel):
@@ -114,6 +121,8 @@ class LearnSymptomChipOut(BaseModel):
 class LearnResponse(BaseModel):
     explainers: list[LearnExplainerOut] = Field(default_factory=list)
     nuggets: list[LearnNuggetOut] = Field(default_factory=list)
+    knowledge_feed: list[dict[str, Any]] = Field(default_factory=list)
+    blogs: list[dict[str, Any]] = Field(default_factory=list)
     concern_id: Optional[str] = None
     city: Optional[str] = None
     symptom_keywords: list[LearnSymptomChipOut] = Field(default_factory=list)

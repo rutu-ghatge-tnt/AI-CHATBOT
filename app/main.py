@@ -478,6 +478,24 @@ async def create_indexes():
         print(f"Warning: Could not create indexes: {e}")
         # Don't fail startup if indexes already exist
 
+    # City-env board archive (no OS cron): wake hourly, collect when gaps remain.
+    try:
+        from app.hlhp.services.city_env_scheduler import start_city_env_scheduler
+
+        start_city_env_scheduler()
+    except Exception as e:
+        print(f"Warning: HLHP city-env scheduler not started: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_hlhp_scheduler():
+    try:
+        from app.hlhp.services.city_env_scheduler import stop_city_env_scheduler
+
+        await stop_city_env_scheduler()
+    except Exception:
+        pass
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to SkinBB AI Chatbot API. Use POST /api/chat to interact v1."}

@@ -3,6 +3,11 @@
 test_load.py
 verify_embeddings.py
 
+# Local scratch / extraction leftovers (never commit)
+_tmp*/
+_tmp*
+tmp_*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -197,3 +202,14 @@ datasets/
 checkpoints/
 
 Product_portfolio/
+
+# ---- HLHP design / reference prototypes (local only — do not push) ----
+/new-hlhp-ref-with-goals/
+/app/hlhp/final-ref/
+/app/hlhp/new-changes/
+/app/hlhp/HLHP Suite Release/
+/app/hlhp/Latest-SFI-calculation ref/
+/app/hlhp/HLHP Seeker App*.html
+/app/hlhp/patterns/*.html
+/app/hlhp/final-ref/
+/app/hlhp/HLHP Suite Release/

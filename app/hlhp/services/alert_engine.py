@@ -1,5 +1,5 @@
 """
-Unified HLHP engine — scenario library v3.5 is the single source of truth.
+Unified HLHP engine — scenario library v3.6 is the single source of truth.
 """
 
 from app.hlhp.evidence.scenario_store import get_scenario_store
@@ -56,7 +56,7 @@ def evaluate(
     if scenario.evidence_cell:
         l3 = "|".join(scenario.evidence_cell.pmids) or scenario.evidence_cell.evidence
     if not l3:
-        l3 = "SkinBB HLHP Scenario Library v3.5"
+        l3 = "SkinBB HLHP Scenario Library v3.6"
 
     alert = Alert(l1=l1, l2=l2, l3=l3)
     science_fact = scenario.evidence_cell.evidence if scenario.evidence_cell else l1

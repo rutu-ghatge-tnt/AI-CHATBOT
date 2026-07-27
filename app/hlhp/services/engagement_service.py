@@ -13,6 +13,7 @@ from app.hlhp.core.profile_mode import resolve_mode
 
 from app.hlhp.coach.state_store import fetch_selected_symptoms, record_symptom_feeling
 from app.hlhp.composition.explore import pick_learn_nuggets
+from app.hlhp.composition.content_feeds import assemble_ranked_content_feeds
 from app.hlhp.composition.symptom import assemble_symptom_explainer
 from app.hlhp.composition.vocabulary import symptom_chips
 from app.hlhp.core.bands import EnvironmentBands, bucketize_environment
@@ -49,8 +50,7 @@ from app.hlhp.services.log_event_store import (
 )
 from app.hlhp.services.profile_loader import load_user_profile
 from app.hlhp.services.sfi_unified import headline_sfi, resolve_sfi
-from app.hlhp.services.v4_scoring_engine import clamp_sfi, feeling_log_sfi_adjustment
-from app.hlhp.services.scan_service import resolve_environment
+from app.hlhp.services.scan_service import classify_env_source, resolve_environment
 from app.hlhp.coach.models import ActionTapRequest
 from app.hlhp.db_errors import HlhpStoreError
 
@@ -299,7 +299,7 @@ async def assemble_learn(
                 continue
             nid = int(row.get("n", 0) or 0)
             factor = str(row.get("factor") or "")
-            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.5")
+            source = str(row.get("source") or "SkinBB HLHP Scenario Library v3.6")
             nuggets.append(LearnNuggetOut(id=nid, text=str(text), factor=factor, source=source))
 
     symptom_keywords = [
@@ -307,16 +307,30 @@ async def assemble_learn(
         for c in symptom_chips(resolved_concern, selected=selected)
     ]
 
+    knowledge_feed, blogs = await assemble_ranked_content_feeds(
+        concern_id=resolved_concern,
+        bands=bands,
+        when=now,
+        user_id=user_id or None,
+        profile=profile,
+        knowledge_limit=4,
+        blog_limit=4,
+    )
+
     return LearnResponse(
         explainers=explainers,
         nuggets=nuggets,
+        knowledge_feed=knowledge_feed,
+        blogs=blogs,
         concern_id=resolved_concern,
         city=resolved_city,
         symptom_keywords=symptom_keywords,
     )
 
 
-async def run_user_log(body: UserLogRequest) -> UserLogResponse:
+async def run_user_log(
+    body: UserLogRequest,
+) -> UserLogResponse:
     profile = await load_user_profile(body.user_id)
     guest_mode = profile is None or resolve_mode(profile).value == "guest"
 
@@ -356,19 +370,22 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
     env = await resolve_environment(scan_req)
     bands = bucketize_environment(env)
     band_fields = bands_snapshot(bands)
-    sfi_base = int(
-        body.outdoor_ok_score
-        if body.outdoor_ok_score is not None
-        else headline_sfi(env, profile, guest_mode=guest_mode)
-    )
-    log_delta = feeling_log_sfi_adjustment(
-        symptoms=symptoms,
-        outdoor_exposure=body.outdoor_exposure,
-        notes=body.notes,
-    )
-    sfi = clamp_sfi(sfi_base + log_delta)
+    # Always recompute server-side — ignore client outdoor_ok_score (anti-gaming).
+    # Feeling log is an outcome signal and must not modify the SFI number.
+    sfi = headline_sfi(env, profile, guest_mode=guest_mode)
     driver = driver_key_from_env(env, profile, guest_mode=guest_mode)
     sudden_tags = [str(t) for t in (body.sudden_event_tags or []) if t]
+    env_source = classify_env_source(scan_req, env)
+
+    _FOOD_ALLOWED = {"home", "junk", "dairy", "spicy"}
+    food_tags: list[str] = []
+    for raw in body.food or []:
+        tag = str(raw).strip().lower()
+        if tag in _FOOD_ALLOWED and tag not in food_tags:
+            food_tags.append(tag)
+
+    sleep_val = body.sleep if body.sleep in ("good", "short") else None
+    stress_val = body.stress if body.stress in ("calm", "normal", "stressed") else None
 
     session_id = await insert_log_event(
         {
@@ -390,6 +407,10 @@ async def run_user_log(body: UserLogRequest) -> UserLogResponse:
             "sudden_event_tags": sudden_tags,
             "outdoor_exposure": body.outdoor_exposure,
             "notes": (body.notes or "").strip() or None,
+            "sleep": sleep_val,
+            "stress": stress_val,
+            "food": food_tags,
+            "env_source": env_source,
         }
     )
 

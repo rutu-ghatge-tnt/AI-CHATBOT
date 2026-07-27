@@ -20,6 +20,10 @@ from app.label_looker.modules.product_analysis.analysis_service_impl import (
     _normalize_product_ref,
 )
 from app.label_looker.prompts_controller import ingredient_analysis_user_message
+from app.label_looker.services.active_ingredient_dossiers import (
+    format_active_dossiers_for_prompt,
+    resolve_active_ingredient_dossiers,
+)
 from app.label_looker.services.product_analysis_store import (
     find_product_analysis,
     is_successful_product_analysis,
@@ -77,12 +81,19 @@ async def run_claude_product_analysis(
     if not main_benefit and product:
         main_benefit = _best_main_benefit(product)
 
+    active_dossiers = await resolve_active_ingredient_dossiers(
+        ingredient_names=[str(x) for x in ing_list],
+        product=product,
+    )
+    active_dossiers_text = format_active_dossiers_for_prompt(active_dossiers)
+
     user_msg = ingredient_analysis_user_message(
         ingredients_text="\n".join(ing_list),
         specific_type=specific_type,
         main_benefit=main_benefit,
         langauge=str(language),
         personalization_context=personalization_context if personalized else None,
+        active_dossiers_text=active_dossiers_text or None,
     )
     msg = await cl.messages.create(
         model=model,

@@ -11,7 +11,8 @@ from typing import Any
 from app.hlhp.config import hl_settings
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-_DEFAULT_SNAPSHOT = _DATA_DIR / "scenario_snapshot_v3_5.json"
+_DEFAULT_SNAPSHOT = _DATA_DIR / "scenario_snapshot_v3_6.json"
+_FALLBACK_SNAPSHOT = _DATA_DIR / "scenario_snapshot_v3_5.json"
 _ACTIVE_POINTER = _DATA_DIR / "scenario_snapshot_active.json"
 
 
@@ -19,7 +20,8 @@ def resolve_snapshot_path() -> Path:
     """
     Resolve the active scenario library snapshot.
 
-    Priority: HL_SCENARIO_SNAPSHOT env → active pointer file → default v3.5 path.
+    Priority: HL_SCENARIO_SNAPSHOT env → active pointer file → default v3.6 path
+    → v3.5 fallback.
     """
     if hl_settings.HL_SCENARIO_SNAPSHOT:
         return Path(hl_settings.HL_SCENARIO_SNAPSHOT)
@@ -35,7 +37,34 @@ def resolve_snapshot_path() -> Path:
                     return p
         except (json.JSONDecodeError, OSError):
             pass
-    return _DEFAULT_SNAPSHOT
+    if _DEFAULT_SNAPSHOT.exists():
+        return _DEFAULT_SNAPSHOT
+    return _FALLBACK_SNAPSHOT
+
+
+def _slug(s: str) -> str:
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "_", (s or "").strip().lower()).strip("_")
+
+
+def _normalize_guest(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Accept v3.5 ``guest`` or v3.6 ``guest_mode`` + ``guest_compounds``."""
+    guest = dict(snapshot.get("guest") or {})
+    if guest:
+        return guest
+    for key, cell in (snapshot.get("guest_mode") or {}).items():
+        if isinstance(cell, dict):
+            guest[f"single|{key}|none"] = cell
+            guest[str(key)] = cell
+    for cell in snapshot.get("guest_compounds") or []:
+        if not isinstance(cell, dict):
+            continue
+        name = str(cell.get("factor") or cell.get("scenario") or "").strip()
+        skin = str(cell.get("skin") or "Normal").strip()
+        if name:
+            guest[f"compound|{_slug(name)}|{_slug(skin)}|none"] = cell
+    return guest
 
 
 class ScenarioStore:
@@ -43,7 +72,7 @@ class ScenarioStore:
 
     def __init__(self, snapshot: dict[str, Any]) -> None:
         self.meta = snapshot.get("meta", {})
-        self.version = str(self.meta.get("version", "3.5"))
+        self.version = str(self.meta.get("version", "3.6"))
         self.source = self.meta.get("source", "")
         self.bands: dict[str, list[dict[str, Any]]] = snapshot.get("bands", {})
         self.skins: list[str] = snapshot.get("skins", [])
@@ -55,12 +84,15 @@ class ScenarioStore:
         self.master: dict[str, dict[str, Any]] = snapshot.get("master", {})
         self.compounds = snapshot.get("compounds", [])
         self.compound_cells: dict[str, dict[str, Any]] = snapshot.get("compound_cells", {})
-        self.guest: dict[str, dict[str, Any]] = snapshot.get("guest", {})
+        self.guest: dict[str, dict[str, Any]] = _normalize_guest(snapshot)
         self.nuggets = snapshot.get("nuggets", [])
         self.nutrition = snapshot.get("nutrition", [])
         self.lifestyle = snapshot.get("lifestyle", [])
         self.gender_states = snapshot.get("gender_states", [])
         self.gender_rules: dict[str, dict[str, Any]] = snapshot.get("gender_rules", {})
+        self.age_bands = snapshot.get("age_bands", [])
+        self.age_rules: dict[str, dict[str, Any]] = snapshot.get("age_rules", {})
+        self.routine_rules: list[dict[str, Any]] = list(snapshot.get("routine_rules") or [])
         self.time_overlay: dict[str, dict[str, str]] = snapshot.get("time_overlay", {})
         self.skin_band_penalty: dict[str, Any] = snapshot.get("skin_band_penalty", {})
 

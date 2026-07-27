@@ -12,6 +12,17 @@ from app.hlhp.mongo_setup import ensure_hlhp_indexes
 logger = logging.getLogger(__name__)
 
 _SCAN_LOG = "hlhp_scan_log"
+# Same precision as weather cache keys — avoid full float geolocation in Mongo.
+_COORD_DECIMALS = 2
+
+
+def round_coord(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return round(float(value), _COORD_DECIMALS)
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_dt(value) -> datetime:
@@ -59,8 +70,8 @@ async def record_scan_log(
         "alert_rule_ids": list(alert_rule_ids or []),
         "concern_id": concern_id,
         "snapshot_version": snapshot_version,
-        "latitude": latitude,
-        "longitude": longitude,
+        "latitude": round_coord(latitude),
+        "longitude": round_coord(longitude),
     }
     try:
         await hl_db[_SCAN_LOG].insert_one(doc)

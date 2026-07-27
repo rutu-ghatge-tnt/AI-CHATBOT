@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 
 from app.hlhp.api.deps_auth import (
     hlhp_authenticated_user,
     hlhp_optional_authenticated_user,
     resolve_optional_personalization_user_id,
+    user_id_from_auth,
     verify_client_user_id,
 )
 from app.hlhp.api.store_http import http_503_for_store_error
@@ -24,6 +26,14 @@ from app.hlhp.models.v4_api import (
     V4TodayResponse,
 )
 from app.hlhp.services.patterns_engine_service import recompute_patterns_for_user
+from app.hlhp.services.city_chart_service import build_city_chart
+from app.hlhp.services.selfie_service import (
+    delete_daily_selfie,
+    get_selfie_for_date,
+    list_selfies,
+    read_selfie_bytes,
+    upsert_daily_selfie,
+)
 from app.hlhp.services.v4_api_service import (
     assemble_learn_v4,
     assemble_recap,
@@ -33,6 +43,70 @@ from app.hlhp.services.v4_api_service import (
 )
 
 router = APIRouter(prefix="/v2", tags=["HLHP V4 — Prototype API"])
+
+
+@router.get("/cities")
+async def v4_cities(
+    city: str = Query("Pune", description="Your city — flags the YOU row"),
+    surge: bool = Query(False, description="Apply surge drill to your city"),
+):
+    """City SFI leaderboard from WeatherAPI slot averages (11 fixed cities + optional YOU)."""
+    return await build_city_chart(you_city=city, surge=surge)
+
+
+@router.post("/selfies")
+async def upload_selfie(
+    file: UploadFile = File(...),
+    date: str = Form(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    """Upsert today's selfie — one per user+day under s3://…/HLHP-LOG/{user}/{date}.jpg."""
+    uid = user_id_from_auth(user)
+    return await upsert_daily_selfie(uid, date, file)
+
+
+@router.get("/selfies/media")
+async def get_selfie_media(
+    date: str = Query(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    """Serve the day's selfie JPEG (local cache, rehydrated from S3 after deploy)."""
+    uid = user_id_from_auth(user)
+    data = await read_selfie_bytes(uid, date)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "not_found", "message": "No selfie for that day."},
+        )
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.get("/selfies")
+async def get_selfies(
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+    date: str | None = Query(None, description="Single day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = user_id_from_auth(user)
+    if date:
+        row = await get_selfie_for_date(uid, date)
+        return {"selfies": [row] if row else []}
+    rows = await list_selfies(uid, date_from=date_from, date_to=date_to)
+    return {"selfies": rows}
+
+
+@router.delete("/selfies")
+async def remove_selfie(
+    date: str = Query(..., description="Local calendar day YYYY-MM-DD"),
+    user: dict = Depends(hlhp_authenticated_user),
+):
+    uid = user_id_from_auth(user)
+    return await delete_daily_selfie(uid, date)
 
 
 @router.get("/today", response_model=V4TodayResponse)
@@ -75,7 +149,7 @@ async def v4_logs(
     if uid != body.user_id:
         body = body.model_copy(update={"user_id": uid})
     try:
-        return await run_v4_log(body, auth_user=user)
+        return await run_v4_log(body)
     except HlhpStoreError as exc:
         http_503_for_store_error(exc)
 
@@ -135,7 +209,24 @@ async def v4_learn(
     user_id: str = Query(...),
     city: str | None = Query(None),
     concern_id: str | None = Query(None),
+    raw_uvi: float | None = Query(None, ge=0),
+    raw_aqi: int | None = Query(None, ge=0),
+    raw_rh: float | None = Query(None, ge=0, le=100),
+    raw_temp: float | None = Query(None),
     user: dict = Depends(hlhp_authenticated_user),
 ) -> V4LearnResponse:
     uid = verify_client_user_id(user, user_id)
-    return await assemble_learn_v4(uid, city=city, concern_id=concern_id)
+    bands = None
+    if raw_uvi is not None and raw_aqi is not None and raw_rh is not None and raw_temp is not None:
+        from app.hlhp.core.bands import bucketize_environment
+        from app.hlhp.models.environmental import EnvironmentalData
+
+        env = EnvironmentalData(
+            uv_index=raw_uvi,
+            temperature_c=raw_temp,
+            aqi=raw_aqi,
+            humidity_pct=raw_rh,
+            location_name=city or "",
+        )
+        bands = bucketize_environment(env)
+    return await assemble_learn_v4(uid, city=city, concern_id=concern_id, bands=bands)

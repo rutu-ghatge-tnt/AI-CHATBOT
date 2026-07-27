@@ -1,0 +1,94 @@
+{
+  "photo_led": {
+    "UV": {
+      "moderate": 1,
+      "high": 3,
+      "very_high": 6,
+      "extreme": 8
+    },
+    "Temperature": {
+      "warm": 1,
+      "hot": 3,
+      "extreme_heat": 4
+    },
+    "AQI": {
+      "moderate": 1,
+      "poor": 2,
+      "very_poor": 3,
+      "severe": 4
+    },
+    "Humidity": {}
+  },
+  "sebum_led": {
+    "Humidity": {
+      "high": 2,
+      "very_high": 4,
+      "extreme": 5
+    },
+    "Temperature": {
+      "warm": 2,
+      "hot": 4,
+      "extreme_heat": 5
+    },
+    "AQI": {
+      "moderate": 1,
+      "poor": 2,
+      "very_poor": 3,
+      "severe": 4
+    },
+    "UV": {
+      "very_high": 1,
+      "extreme": 1
+    }
+  },
+  "barrier_led": {
+    "Humidity": {
+      "low": 2,
+      "very_low": 5,
+      "critical_low": 7
+    },
+    "Temperature": {
+      "cool": 1,
+      "cold": 3,
+      "extreme_cold": 5,
+      "hot": 2,
+      "extreme_heat": 3
+    },
+    "AQI": {
+      "moderate": 1,
+      "poor": 2,
+      "very_poor": 3,
+      "severe": 4
+    },
+    "UV": {
+      "high": 1,
+      "very_high": 2,
+      "extreme": 2
+    }
+  },
+  "thermal_humid": {
+    "Temperature": {
+      "warm": 2,
+      "hot": 5,
+      "extreme_heat": 6
+    },
+    "Humidity": {
+      "high": 2,
+      "very_high": 5,
+      "extreme": 6
+    },
+    "AQI": {
+      "moderate": 1,
+      "poor": 1,
+      "very_poor": 2,
+      "severe": 2
+    },
+    "UV": {}
+  },
+  "neutral": {
+    "UV": {},
+    "Humidity": {},
+    "Temperature": {},
+    "AQI": {}
+  }
+}

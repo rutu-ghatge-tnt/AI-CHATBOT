@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from app.hlhp.core.local_date import calendar_date_key, today_local
 from app.hlhp.core.profile_mode import resolve_mode
+from app.hlhp.core.bands import EnvironmentBands
 from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.models.scan import ScanRequest
@@ -25,6 +26,7 @@ from app.hlhp.models.v4_api import (
     V4RecapDay,
     V4RecapResponse,
     V4ShareResponse,
+    V4SfiAdjustments,
     V4SfiOut,
     V4TodayResponse,
     V4Weather,
@@ -48,44 +50,45 @@ from app.hlhp.services.scenario_engine import (
 )
 from app.hlhp.services.scan_log_store import env_baseline_7d
 from app.hlhp.services.surge_detector import assess_surge
-from app.hlhp.services.log_event_store import fetch_latest_log_for_date
 from app.hlhp.services.scan_service import resolve_environment
-from app.hlhp.services.sfi_unified import resolve_sfi
-from app.hlhp.services.v4_scoring_engine import V4Evaluation, feeling_log_sfi_adjustment, clamp_sfi, mode_for_sfi
+from app.hlhp.services.sfi_unified import (
+    apply_addenda_to_l2,
+    resolve_life_stage_adjustment,
+    resolve_sfi,
+)
+from app.hlhp.services.v4_scoring_engine import BAND_RANGES, V4Evaluation, to_driver_states
 from app.hlhp.models.engagement import UserLogRequest
 
 logger = logging.getLogger(__name__)
 
 _SYMPTOM_ALLOW = frozenset({"normal", "dry", "oily", "dull", "breakout", "spots"})
 _NEEDS_AREA = frozenset({"breakout", "spots"})
+_ALERT_RANK = {"L0": 0, "L1": 1, "L2": 2}
 
 
 def _v4_drivers_to_states(eval_: V4Evaluation) -> list[DriverState]:
-    names = {
-        "Temperature": "Heat",
-        "UV": "UV",
-        "Humidity": "Humidity",
-        "AQI": "Air (AQI)",
-    }
-    keys = {
-        "Temperature": "temp",
-        "UV": "uv",
-        "Humidity": "humidity",
-        "AQI": "aqi",
-    }
     return [
         DriverState(
-            factor=d.factor,
-            key=keys[d.factor],
-            name=names[d.factor],
-            value=d.value,
-            band_label=d.label,
-            band_key=d.key,
-            band_range="",
-            points=d.points,
+            factor=str(d["factor"]),
+            key=str(d["key"]),
+            name=str(d["name"]),
+            value=float(d["value"]),
+            band_label=str(d["band_label"]),
+            band_key=str(d["band_key"]),
+            band_range=str(d.get("band_range") or ""),
+            points=int(d["points"]),
         )
-        for d in eval_.drivers
+        for d in to_driver_states(eval_)
     ]
+
+
+def _max_alert_level(*levels: str) -> str:
+    best = "L0"
+    for level in levels:
+        key = str(level or "L0")
+        if _ALERT_RANK.get(key, 0) > _ALERT_RANK.get(best, 0):
+            best = key
+    return best
 
 
 def _format_date_en_in(d: date) -> str:
@@ -128,6 +131,7 @@ async def assemble_today(
         baseline = await env_baseline_7d(user_id, before=local_time)
 
     surge_assessment = assess_surge(env, baseline=baseline, force=force_surge)
+    # Scene uses true delta-driven surge only (not absolute adverse conditions).
     surge_active = surge_assessment.active
 
     if force_surge:
@@ -165,37 +169,42 @@ async def assemble_today(
         zone=zone,
         concern_candidates=concerns,
     )
+
+    base_risk = int(cell["risk"]) if cell and isinstance(cell.get("risk"), (int, float)) else (3 if surge_active else 1)
+    life_adj = resolve_life_stage_adjustment(
+        base_risk,
+        profile,
+        guest_mode=guest_mode,
+        concern=concerns[0],
+    )
     flash = build_flash_alert(
         cell,
         band=eval_.mode,  # type: ignore[arg-type]
         surge=surge_active,
     )
-    level = "L2" if surge_active else flash.level
+    elevated_copy = apply_addenda_to_l2(flash.l1, life_adj)
+    tip = (life_adj.actions[0] if life_adj.actions else flash.tip)
+    level = _max_alert_level(
+        surge_assessment.alert_level,
+        life_adj.alert_level,
+        flash.level,
+    )
 
     city_label = (env.location_name or city or "Unknown").split(",")[0].strip()
     day_key = calendar_date_key(local_time)
 
+    # Feeling log is an outcome signal — never a term in the SFI.
     env_sfi = eval_.environmental_sfi
     personal_sfi = eval_.personal_sfi
     headline_sfi = eval_.headline_sfi
     mode_name = eval_.mode
-
-    if user_id:
-        day_log = await fetch_latest_log_for_date(user_id, day_key)
-        if day_log:
-            log_delta = feeling_log_sfi_adjustment(
-                symptoms=list(day_log.get("symptoms") or []),
-                outdoor_exposure=day_log.get("outdoor_exposure"),
-                notes=day_log.get("notes"),
-            )
-            if log_delta:
-                env_sfi = clamp_sfi(env_sfi + log_delta)
-                if personal_sfi is not None:
-                    personal_sfi = clamp_sfi(personal_sfi + log_delta)
-                    headline_sfi = personal_sfi
-                else:
-                    headline_sfi = clamp_sfi(headline_sfi + log_delta)
-                mode_name = mode_for_sfi(headline_sfi)
+    adjustments = None
+    if not guest_mode and eval_.personal_sfi is not None:
+        adjustments = V4SfiAdjustments(
+            concern=int(eval_.rho_concern),
+            skin_type=int(eval_.rho_skin),
+            archetype=eval_.archetype,
+        )
 
     return V4TodayResponse(
         city=city_label,
@@ -218,6 +227,7 @@ async def assemble_today(
                 points=d.points,
                 level=d.level,
                 dominant=d.dominant,
+                band_range=BAND_RANGES.get(d.factor, {}).get(d.key, ""),
             )
             for d in eval_.drivers
         ],
@@ -225,13 +235,14 @@ async def assemble_today(
             environmental=env_sfi,
             personal=personal_sfi,
             headline=headline_sfi,
+            adjustments=adjustments,
         ),
         mode=mode_name,
         alert=V4AlertOut(
             level=level,  # type: ignore[arg-type]
             l0=flash.l0,
-            l1=flash.l1,
-            tip=flash.tip,
+            l1=elevated_copy,
+            tip=tip,
             evidence=V4AlertEvidence(
                 confidence=str(cell.get("confidence", "")) if cell else "",
                 pmids=list(cell.get("pmids") or []) if cell else [],
@@ -240,10 +251,12 @@ async def assemble_today(
         compound=compound_name if cell_kind in {"compound", "guest_compound"} else None,
         surge=surge_active,
         surge_tags=surge_assessment.tags,
+        adverse=surge_assessment.adverse,
+        adverse_tags=surge_assessment.adverse_tags,
     )
 
 
-async def run_v4_log(body: V4LogRequest, *, auth_user: dict | None = None) -> V4LogResponse:
+async def run_v4_log(body: V4LogRequest) -> V4LogResponse:
     when = body.local_time or datetime.now(timezone.utc)
     if body.date:
         try:
@@ -265,6 +278,10 @@ async def run_v4_log(body: V4LogRequest, *, auth_user: dict | None = None) -> V4
         longitude=body.longitude,
         outdoor_exposure=body.outdoor_exposure,
         notes=body.notes,
+        sleep=body.sleep,
+        stress=body.stress,
+        food=list(body.food or []),
+        selfie_url=body.selfie_url,
     )
     result = await run_user_log(log_body)
 
@@ -426,8 +443,9 @@ async def assemble_learn_v4(
     *,
     city: str | None = None,
     concern_id: str | None = None,
+    bands: EnvironmentBands | None = None,
 ) -> V4LearnResponse:
-    base = await assemble_learn(user_id, city=city, concern_id=concern_id)
+    base = await assemble_learn(user_id, city=city, concern_id=concern_id, bands=bands)
     store = get_scenario_store()
 
     levers: list[V4LearnLeverOut] = []
@@ -456,6 +474,9 @@ async def assemble_learn_v4(
         explainers=[e.model_dump() for e in base.explainers],
         nuggets=[n.model_dump() for n in base.nuggets],
         levers=levers,
+        knowledge_feed=list(base.knowledge_feed or []),
+        blogs=list(base.blogs or []),
         concern_id=base.concern_id,
         city=base.city,
+        symptom_keywords=[c.model_dump() for c in base.symptom_keywords],
     )

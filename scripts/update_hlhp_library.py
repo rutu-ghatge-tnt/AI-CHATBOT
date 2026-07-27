@@ -26,7 +26,7 @@ from app.hlhp.evidence.scenario_store import reload_scenario_store, write_active
 from app.hlhp.evidence.scenario_workbook import DEFAULT_XLSX, build_scenario_snapshot
 
 DATA_DIR = ROOT / "app" / "hlhp" / "data"
-DEFAULT_OUT = DATA_DIR / "scenario_snapshot_v3_5.json"
+DEFAULT_OUT = DATA_DIR / "scenario_snapshot_v3_6.json"
 PENALTY_JSON = DATA_DIR / "skin_band_penalty.json"
 
 
@@ -87,6 +87,10 @@ def main() -> int:
         print(f"  skin_band_penalty: updated {PENALTY_JSON.name}")
     else:
         print("  skin_band_penalty: unchanged (not in workbook snapshot)")
+
+    if hasattr(v4_scoring_data, "reload_concern_penalty"):
+        v4_scoring_data.reload_concern_penalty()
+        print("  concern_penalty   : cache cleared")
 
     if args.activate and not args.no_activate:
         write_active_pointer(out_path, version=str(meta.get("version", "")))

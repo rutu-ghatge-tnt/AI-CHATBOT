@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from app.hlhp.evidence.scenario_store import get_scenario_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.scan import ScanRequest, SymptomTapRequest
-from app.hlhp.services.outdoor_ok import compute_outdoor_ok, uv_penalty
+from app.hlhp.services.sfi_unified import outdoor_ok_from_env
 from app.hlhp.services.scan_service import _snapshot_city_label, run_scan, run_symptom_tap
 
 
@@ -26,23 +26,27 @@ def _env_data(**kwargs):
 
 
 def test_outdoor_ok_penalties():
-    score, band = compute_outdoor_ok(
-        _env_data(uv_index=0, aqi=40, temperature_c=22, humidity_pct=50)
+    score, band = outdoor_ok_from_env(
+        _env_data(uv_index=0, aqi=40, temperature_c=22, humidity_pct=50),
+        guest_mode=True,
     )
     assert score >= 95
-    assert "Easy" in band
+    assert band == "Paradise Mode"
 
-    harsh, band_h = compute_outdoor_ok(
-        _env_data(uv_index=11, aqi=400, temperature_c=39, humidity_pct=20)
+    harsh, band_h = outdoor_ok_from_env(
+        _env_data(uv_index=11, aqi=400, temperature_c=39, humidity_pct=20),
+        guest_mode=True,
     )
     assert harsh < 25
-    assert "Hard" in band_h
+    assert band_h == "Code Red"
 
-
-def test_uv_penalty_monotonic():
-    assert uv_penalty(0) == 0
-    assert uv_penalty(11) == 60
-    assert uv_penalty(5) < uv_penalty(9)
+def test_uv_effect_monotonic_on_outdoor_score():
+    # With other factors held constant, higher UV should not increase outdoor score.
+    base_env = _env_data(aqi=40, temperature_c=22, humidity_pct=50)
+    s0, _ = outdoor_ok_from_env(base_env.model_copy(update={"uv_index": 0}), guest_mode=True)
+    s9, _ = outdoor_ok_from_env(base_env.model_copy(update={"uv_index": 9}), guest_mode=True)
+    s11, _ = outdoor_ok_from_env(base_env.model_copy(update={"uv_index": 11}), guest_mode=True)
+    assert s0 >= s9 >= s11
 
 
 def test_snapshot_city_prefers_api_location_over_client_city():
@@ -90,8 +94,9 @@ def test_run_scan_guest_with_raw_env():
 
 def test_hlhp_health_store_loaded():
     store = get_scenario_store()
-    assert store.version == "3.5"
+    assert store.version == "3.7"
     assert store.master_cell_count >= 1000
+    assert len(store.age_rules) == 36
 
 
 def test_symptom_tap_guest():

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.hlhp.services.daily_log_store import RETENTION_DAYS, upsert_from_scan
+from app.hlhp.services.daily_log_store import upsert_from_scan
 from app.hlhp.services.history_service import assemble_catchup, assemble_history
 
 
@@ -421,5 +421,8 @@ def test_returner_banner_after_gap():
     assert result.returner_banner.show is True
 
 
-def test_history_retention_window():
-    assert RETENTION_DAYS == 30
+def test_history_ui_window():
+    from app.hlhp.services.daily_log_store import HISTORY_UI_DAYS, RETENTION_DAYS
+
+    assert HISTORY_UI_DAYS == 60
+    assert RETENTION_DAYS == HISTORY_UI_DAYS

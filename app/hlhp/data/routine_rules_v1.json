@@ -1,0 +1,495 @@
+{
+  "version": "3.6",
+  "source": "hlhp-evidence.json routine_rules (v3.6)",
+  "rules": [
+    {
+      "id": "UV-01",
+      "factor": "UV",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "REINFORCE",
+      "headline": "Reapply your sunscreen at midday",
+      "why": "Sweat strips up to ~40% of your protection — one morning layer won't last.",
+      "timing": "Midday",
+      "priority": 1,
+      "kind": "behaviour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "UV-02",
+      "factor": "UV",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "PROTECT",
+      "headline": "Hat, sunglasses & shade 11–3",
+      "why": "Cover-up adds real protection beyond any SPF number.",
+      "timing": "Daytime",
+      "priority": 2,
+      "kind": "behaviour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "UV-03",
+      "factor": "UV",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SKIP",
+      "headline": "Skip exfoliation & strong actives tonight",
+      "why": "They raise sun sensitivity — give skin the night off.",
+      "timing": "PM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "UV-04",
+      "factor": "UV",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "Melasma|Uneven Skin Tone / Tan|Dark Marks (Post-Acne / PIH)",
+      "type": "ADD",
+      "headline": "Add an antioxidant / protect step this morning",
+      "why": "Helps defend melanin-rich skin from the UV that drives dark spots.",
+      "timing": "AM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "HUM-01",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SWAP",
+      "headline": "Switch to a lighter moisturiser today",
+      "why": "Heavy creams trap sweat & sebum in humidity → congestion.",
+      "timing": "PM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "HUM-02",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "Oily",
+      "concern": "any",
+      "type": "SWAP",
+      "headline": "Switch to a lighter moisturiser today",
+      "why": "Oily skin congests fastest in humidity — go light.",
+      "timing": "PM",
+      "priority": 1,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "HUM-03",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "except:Dry",
+      "concern": "any",
+      "type": "MANAGE",
+      "headline": "Blot midday shine — don't over-wash",
+      "why": "Blotting controls oil without stripping; over-washing rebounds oilier.",
+      "timing": "Midday",
+      "priority": 3,
+      "kind": "behaviour",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "HUM-04",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "Dry",
+      "concern": "any",
+      "type": "MANAGE",
+      "headline": "Still moisturise — just lighter",
+      "why": "Humid + AC air quietly dehydrates; skipping cream backfires.",
+      "timing": "AM/PM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "HUM-05",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "Acne",
+      "type": "ADD",
+      "headline": "Double-cleanse tonight",
+      "why": "Sweat + oil + grime cling in humidity and clog pores.",
+      "timing": "PM",
+      "priority": 1,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "HUM-06",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "Acne",
+      "type": "MANAGE",
+      "headline": "Fresh pillowcase, hands off your face",
+      "why": "Cuts the bacteria + friction that spark humid-day breakouts.",
+      "timing": "Bedtime",
+      "priority": 2,
+      "kind": "behaviour",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "HUM-07",
+      "factor": "Humidity",
+      "bands": [
+        "high",
+        "very_high",
+        "extreme"
+      ],
+      "skin": "any",
+      "concern": "except:Acne",
+      "type": "REINFORCE",
+      "headline": "Cleanse well tonight",
+      "why": "Muggy days leave sweat, salt & grime on skin — clear it before bed.",
+      "timing": "PM",
+      "priority": 3,
+      "kind": "behaviour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "HEA-01",
+      "factor": "Temperature",
+      "bands": [
+        "hot",
+        "extreme_heat"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SWAP",
+      "headline": "Switch to a lighter moisturiser today",
+      "why": "Heat doubles oil; light gel textures sit better.",
+      "timing": "PM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "HEA-02",
+      "factor": "Temperature",
+      "bands": [
+        "hot",
+        "extreme_heat"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "MANAGE",
+      "headline": "Blot shine & hydrate (drink water)",
+      "why": "Heat + sweat load the skin — manage shine, replace fluids.",
+      "timing": "Midday",
+      "priority": 3,
+      "kind": "behaviour",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "COL-01",
+      "factor": "Temperature",
+      "bands": [
+        "cold",
+        "extreme_cold"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SWAP",
+      "headline": "Switch to a richer moisturiser tonight",
+      "why": "Cold, dry air pulls water out fast — your skin needs more.",
+      "timing": "PM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "COL-02",
+      "factor": "Temperature",
+      "bands": [
+        "cold",
+        "extreme_cold"
+      ],
+      "skin": "Dry",
+      "concern": "any",
+      "type": "SWAP",
+      "headline": "Switch to a richer moisturiser tonight",
+      "why": "Dry skin loses water fastest in the cold.",
+      "timing": "PM",
+      "priority": 1,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "COL-03",
+      "factor": "Temperature",
+      "bands": [
+        "cold",
+        "extreme_cold"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "ADD",
+      "headline": "Add an overnight seal step",
+      "why": "Locks moisture in overnight when the air's driest.",
+      "timing": "PM",
+      "priority": 3,
+      "kind": "product",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "COL-04",
+      "factor": "Temperature",
+      "bands": [
+        "cold",
+        "extreme_cold"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SKIP",
+      "headline": "Ease off exfoliation this week",
+      "why": "Exfoliating is harsher on an already stressed barrier.",
+      "timing": "Weekly",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "COL-05",
+      "factor": "Temperature",
+      "bands": [
+        "cold",
+        "extreme_cold"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "MANAGE",
+      "headline": "Lukewarm water & a humidifier indoors",
+      "why": "Hot water and heaters strip and dry skin further.",
+      "timing": "All day",
+      "priority": 3,
+      "kind": "behaviour",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "DRY-01",
+      "factor": "Humidity",
+      "bands": [
+        "low",
+        "very_low",
+        "critical_low"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SWAP",
+      "headline": "Switch to a richer, more hydrating moisturiser",
+      "why": "Very dry air pulls moisture straight out of the skin.",
+      "timing": "PM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "DRY-02",
+      "factor": "Humidity",
+      "bands": [
+        "low",
+        "very_low",
+        "critical_low"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "ADD",
+      "headline": "Add a hydration layer before moisturiser",
+      "why": "Extra water-phase step buffers a moisture-hungry day.",
+      "timing": "AM/PM",
+      "priority": 3,
+      "kind": "product",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "DRY-03",
+      "factor": "Humidity",
+      "bands": [
+        "low",
+        "very_low",
+        "critical_low"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "SKIP",
+      "headline": "Ease off exfoliation this week",
+      "why": "Low humidity + exfoliation compounds barrier stress.",
+      "timing": "Weekly",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "AQI-01",
+      "factor": "AQI",
+      "bands": [
+        "poor",
+        "very_poor",
+        "severe"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "ADD",
+      "headline": "Double-cleanse tonight",
+      "why": "Polluted air halves skin's protective oils; every +10 PM2.5 raises spot scores ~9%.",
+      "timing": "PM",
+      "priority": 1,
+      "kind": "product",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "AQI-02",
+      "factor": "AQI",
+      "bands": [
+        "poor",
+        "very_poor",
+        "severe"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "ADD",
+      "headline": "Antioxidant / protect step in the morning",
+      "why": "Helps neutralise pollution's free-radical load through the day.",
+      "timing": "AM",
+      "priority": 2,
+      "kind": "product",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "AQI-03",
+      "factor": "AQI",
+      "bands": [
+        "poor",
+        "very_poor",
+        "severe"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "REINFORCE",
+      "headline": "Cleanse as soon as you're home",
+      "why": "Don't let the day's grime sit on skin all evening.",
+      "timing": "Evening",
+      "priority": 3,
+      "kind": "behaviour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "SEN-01",
+      "factor": "any",
+      "bands": [
+        "(any adverse)"
+      ],
+      "skin": "Sensitive",
+      "concern": "any",
+      "type": "MANAGE",
+      "headline": "Keep it gentle & simple today",
+      "why": "Sensitive skin does best with fewer, calmer steps in tough weather.",
+      "timing": "All day",
+      "priority": 1,
+      "kind": "behaviour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "MED-01",
+      "factor": "any",
+      "bands": [
+        "(any adverse)"
+      ],
+      "skin": "any",
+      "concern": "Eczema",
+      "type": "PROTECT",
+      "headline": "Flare-prone? Check with your dermatologist",
+      "why": "Weather swings can trigger eczema — a pro can tailor your plan.",
+      "timing": "—",
+      "priority": 9,
+      "kind": "behaviour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": "MED-02",
+      "factor": "any",
+      "bands": [
+        "(any adverse)"
+      ],
+      "skin": "any",
+      "concern": "Fungal Infection (Sweat & Folds)",
+      "type": "MANAGE",
+      "headline": "Keep skin cool, dry & breathable today",
+      "why": "Sweat in folds feeds fungal flares — lighter, airier is safer.",
+      "timing": "All day",
+      "priority": 1,
+      "kind": "behaviour",
+      "confidence": "MODERATE"
+    },
+    {
+      "id": "GOOD-01",
+      "factor": "any",
+      "bands": [
+        "(no adverse bands)"
+      ],
+      "skin": "any",
+      "concern": "any",
+      "type": "—",
+      "headline": "Your usual routine is perfect today",
+      "why": "Nothing to change — the air's kind to your skin.",
+      "timing": "—",
+      "priority": 9,
+      "kind": "—",
+      "confidence": "HIGH"
+    }
+  ]
+}

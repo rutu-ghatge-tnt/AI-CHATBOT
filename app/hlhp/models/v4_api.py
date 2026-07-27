@@ -24,12 +24,20 @@ class V4DriverOut(BaseModel):
     points: int
     level: Literal["Low", "Medium", "High"]
     dominant: bool = False
+    band_range: str = ""
+
+
+class V4SfiAdjustments(BaseModel):
+    concern: int = 0
+    skin_type: int = 0
+    archetype: Optional[str] = None
 
 
 class V4SfiOut(BaseModel):
     environmental: int
     personal: Optional[int] = None
     headline: int
+    adjustments: Optional[V4SfiAdjustments] = None
 
 
 class V4AlertEvidence(BaseModel):
@@ -58,9 +66,14 @@ class V4TodayResponse(BaseModel):
     compound: Optional[str] = None
     surge: bool = False
     surge_tags: list[str] = Field(default_factory=list)
+    adverse: bool = False
+    adverse_tags: list[str] = Field(default_factory=list)
 
 
 OutdoorExposure = Literal["in", "<1", "1-3", "3+"]
+LogSleep = Literal["good", "short"]
+LogStress = Literal["calm", "normal", "stressed"]
+LogFoodTag = Literal["home", "junk", "dairy", "spicy"]
 
 
 class V4LogRequest(BaseModel):
@@ -74,6 +87,12 @@ class V4LogRequest(BaseModel):
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     outdoor_exposure: Optional[OutdoorExposure] = None
     notes: Optional[str] = Field(None, max_length=500)
+    sleep: Optional[LogSleep] = None
+    stress: Optional[LogStress] = None
+    food: list[LogFoodTag] = Field(default_factory=list, max_length=4)
+    selfie_url: Optional[str] = Field(default=None, alias="selfieUrl")
+
+    model_config = {"populate_by_name": True}
 
     @model_validator(mode="after")
     def validate_symptoms(self):
@@ -133,5 +152,8 @@ class V4LearnResponse(BaseModel):
     explainers: list[dict[str, Any]] = Field(default_factory=list)
     nuggets: list[dict[str, Any]] = Field(default_factory=list)
     levers: list[V4LearnLeverOut] = Field(default_factory=list)
+    knowledge_feed: list[dict[str, Any]] = Field(default_factory=list)
+    blogs: list[dict[str, Any]] = Field(default_factory=list)
     concern_id: Optional[str] = None
     city: Optional[str] = None
+    symptom_keywords: list[dict[str, Any]] = Field(default_factory=list)

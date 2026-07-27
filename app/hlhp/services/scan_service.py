@@ -1,4 +1,4 @@
-"""HLHP v2 scan orchestration — live env + v3.5 scenario library."""
+"""HLHP v2 scan orchestration — live env + v3.6 scenario library."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ from app.hlhp.models.scan import (
     SymptomTapResponse,
     WeatherVisuals,
 )
+from app.hlhp.services.routine_today_service import select_routine_today
 from app.hlhp.services.scenario_engine import (
     ScenarioEvaluation,
     evaluate_scenario,
@@ -138,12 +139,12 @@ def _scenario_alert_tile(
 ) -> AlertTile:
     cell = scenario.cell or {}
     body = scenario.flash_alert.l1 or scenario.flash_alert.l0
-    title = scenario.flash_alert.l0 or (body.split(".")[0].strip() if body else scenario.band)
+    title = scenario.flash_alert.l0 or (body.split(".")[0].strip() if body else scenario.flash_alert.mode)
     if day_phase == "evening":
         lower = f"{title} {body}".lower()
         if any(tok in lower for tok in _NIGHT_BLOCK):
             body = scenario.flash_alert.tip or body
-            title = scenario.band
+            title = scenario.flash_alert.mode
     pmids = scenario.evidence_cell.pmids if scenario.evidence_cell else []
     phase_label = "evening_recovery" if day_phase == "evening" else "morning_prep"
     archetype = {
@@ -163,10 +164,10 @@ def _scenario_alert_tile(
         l1=title,
         l2=body,
         phase_used=phase_label,  # type: ignore[arg-type]
-        mood_verdict_tag=_mood_for_band(scenario.band),
+        mood_verdict_tag=_mood_for_band(scenario.flash_alert.mode),
         engagement_archetype=archetype,
         how_text=scenario.flash_alert.tip,
-        source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.5",
+        source_citation="|".join(pmids) if pmids else "SkinBB HLHP Scenario Library v3.6",
         factor=factor,
     )
 
@@ -189,6 +190,9 @@ def _scenario_scan_fields(
     store: ScenarioStore,
     scenario: ScenarioEvaluation,
     v4_eval: V4Evaluation,
+    *,
+    profile: UserProfile | None = None,
+    guest_mode: bool = False,
 ) -> dict:
     flash = scenario.flash_alert
     ev = scenario.evidence_cell
@@ -197,6 +201,9 @@ def _scenario_scan_fields(
         "personal_sfi": v4_eval.personal_sfi,
         "band": v4_eval.mode,
         "action_cluster": scenario.action_cluster,
+        "whats_different": select_routine_today(
+            v4_eval, profile, guest_mode=guest_mode
+        ),
         "risk": scenario.risk,
         "risk_label": scenario.risk_label,
         "confidence": scenario.confidence,
@@ -412,6 +419,11 @@ async def resolve_environment(req) -> EnvironmentalData:
         if city and env.location_name in ("Unknown", ""):
             return env.model_copy(update={"location_name": city})
         return env
+    has_client_raw = any(
+        getattr(req, key, None) is not None
+        for key in ("raw_uvi", "raw_temp", "raw_aqi", "raw_rh")
+    )
+    source = "client_raw" if has_client_raw else "synthetic_default"
     raw_uvi = getattr(req, "raw_uvi", None)
     if raw_uvi is None:
         raw_uvi = 5.0
@@ -422,8 +434,19 @@ async def resolve_environment(req) -> EnvironmentalData:
         humidity_pct=float(getattr(req, "raw_rh", None) or 50.0),
         location_name=city,
         fetched_at=local_time if isinstance(local_time, datetime) else datetime.now(timezone.utc),
-        data_sources={"weather": "client_raw", "aqi": "client_raw", "uv": "client_raw"},
+        data_sources={"weather": source, "aqi": source, "uv": source},
     )
+
+
+def classify_env_source(req, env: EnvironmentalData) -> str:
+    """Label how env readings were obtained for audit / history honesty."""
+    if getattr(req, "latitude", None) is not None and getattr(req, "longitude", None) is not None:
+        return "weatherapi"
+    sources = getattr(env, "data_sources", None) or {}
+    weather = str(sources.get("weather") or "").strip()
+    if weather in {"synthetic_default", "client_raw"}:
+        return weather
+    return weather or "unknown"
 
 
 def _snapshot_city_label(env: EnvironmentalData, req_city: str) -> str:
@@ -564,7 +587,13 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
         profile_nudge=profile_nudge,
         **_weather_fields(env),
         **ui,
-        **_scenario_scan_fields(scenario_store, scenario, v4_eval),
+        **_scenario_scan_fields(
+            scenario_store,
+            scenario,
+            v4_eval,
+            profile=profile,
+            guest_mode=guest_mode,
+        ),
         scene=v4_eval.scene,
     )
     await _maybe_record_scan(req=req, response=resp, env=env, profile=profile, guest_mode=guest_mode)

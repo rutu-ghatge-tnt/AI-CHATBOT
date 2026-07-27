@@ -1,9 +1,9 @@
-"""Per-day HLHP aggregates — retained for the last 30 days."""
+"""Per-day HLHP aggregates — stored indefinitely for training; UI reads a window."""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.hlhp.core.local_date import calendar_date_key
@@ -18,7 +18,9 @@ from app.hlhp.mongo_setup import ensure_hlhp_indexes
 logger = logging.getLogger(__name__)
 
 _DAILY_LOG = "hlhp_daily_log"
-RETENTION_DAYS = 30
+# Product query window only (History / patterns). Storage is permanent — no prune/TTL.
+HISTORY_UI_DAYS = 60
+RETENTION_DAYS = HISTORY_UI_DAYS  # backwards-compatible alias for callers/tests
 
 
 def _avg_env_readings(
@@ -70,14 +72,6 @@ def _parse_dt(value) -> datetime:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
     return datetime.now(timezone.utc)
-
-
-async def _prune_old(user_id: str, *, keep_days: int = RETENTION_DAYS) -> None:
-    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=keep_days)).isoformat()
-    try:
-        await hl_db[_DAILY_LOG].delete_many({"user_id": user_id, "date": {"$lt": cutoff}})
-    except Exception as exc:
-        logger.warning("HLHP daily_log prune failed for user=%s: %s", user_id, exc)
 
 
 async def upsert_from_scan(
@@ -145,7 +139,6 @@ async def upsert_from_scan(
             {"$set": doc},
             upsert=True,
         )
-        await _prune_old(user_id)
     except Exception as exc:
         logger.warning("HLHP daily_log upsert failed for user=%s: %s", user_id, exc)
 
@@ -245,7 +238,6 @@ async def upsert_user_log_day(
             {"$set": doc},
             upsert=True,
         )
-        await _prune_old(user_id)
     except Exception as exc:
         fail_write(_DAILY_LOG, "upsert_user_log_day", exc)
 
@@ -254,7 +246,7 @@ async def fetch_daily_logs(
     user_id: str,
     *,
     since: datetime,
-    limit: int = RETENTION_DAYS,
+    limit: int = HISTORY_UI_DAYS,
 ) -> list[dict[str, Any]]:
     if not user_id:
         return []
@@ -323,7 +315,6 @@ async def backfill_from_scans(user_id: str, scans: list[dict[str, Any]]) -> None
             )
         except Exception as exc:
             logger.warning("HLHP daily_log backfill failed for %s %s: %s", user_id, date_key, exc)
-    await _prune_old(user_id)
 
 
 def average_daily_scores(docs: list[dict[str, Any]]) -> Optional[float]:

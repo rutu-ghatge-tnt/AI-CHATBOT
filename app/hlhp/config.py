@@ -6,7 +6,12 @@ class HLSettings:
         "HL_WEATHER_API_URL",
         "https://api.skintruth.in/api/v1/weathers/location-weather",
     )
-    WEATHERAPI_KEY = os.getenv("WEATHERAPI_KEY") or os.getenv("WEATHER_API_KEY") or ""
+
+    @property
+    def WEATHERAPI_KEY(self) -> str:
+        # Read live so dotenv / process env updates are picked up; strip whitespace.
+        return (os.getenv("WEATHERAPI_KEY") or os.getenv("WEATHER_API_KEY") or "").strip()
+
     WEATHERAPI_FORECAST_URL = os.getenv(
         "WEATHERAPI_FORECAST_URL",
         "https://api.weatherapi.com/v1/forecast.json",
@@ -45,7 +50,38 @@ class HLSettings:
     }
     KNOWLEDGE_FEED_CACHE_TTL = int(os.getenv("HLHP_KNOWLEDGE_FEED_CACHE_TTL", "3600"))
     KNOWLEDGE_FEED_FETCH_LIMIT = int(os.getenv("HLHP_KNOWLEDGE_FEED_FETCH_LIMIT", "24"))
+    BLOG_FEED_ENABLED = os.getenv("HLHP_BLOG_FEED_ENABLED", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+    BLOG_FEED_CACHE_TTL = int(os.getenv("HLHP_BLOG_FEED_CACHE_TTL", "3600"))
+    BLOG_FEED_FETCH_LIMIT = int(os.getenv("HLHP_BLOG_FEED_FETCH_LIMIT", "24"))
+    # In-app city-env board collector (no OS cron). Default on when weather key set.
+    # HLHP_CITY_ENV_SCHEDULER=0 to disable; HLHP_CITY_ENV_POLL_SECONDS=3600 poll interval.
+
+    # Weather quota alerts (SES email). Limits are plan ceilings you configure.
+    @property
+    def WEATHER_QUOTA_ALERTS_ENABLED(self) -> bool:
+        return os.getenv("HLHP_WEATHER_QUOTA_ALERTS", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+
+    @property
+    def WEATHERAPI_MONTHLY_LIMIT(self) -> int:
+        try:
+            return max(1, int(os.getenv("WEATHERAPI_MONTHLY_LIMIT", "1000000")))
+        except ValueError:
+            return 1_000_000
+
+    @property
+    def OPEN_METEO_DAILY_LIMIT(self) -> int:
+        try:
+            return max(1, int(os.getenv("OPEN_METEO_DAILY_LIMIT", "10000")))
+        except ValueError:
+            return 10_000
 
 
 hl_settings = HLSettings()
-

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -38,12 +38,40 @@ DEFAULT_CONCERN = "Acne"
 GUEST_CONCERN = "None"
 GUEST_SKIN = "Normal"
 
-COMPOUND_BAND_FIELDS = (
-    ("temp_band", "Temperature"),
-    ("uv_band", "UV"),
-    ("aqi_band", "AQI"),
-    ("rh_band", "Humidity"),
+# Compound index rows store bands as {"temp","uv","aqi","rh"} keys (not flat *_band).
+COMPOUND_BAND_KEYS = (
+    ("temp", "Temperature"),
+    ("uv", "UV"),
+    ("aqi", "AQI"),
+    ("rh", "Humidity"),
 )
+
+_MONTH_ALIASES: dict[str, int] = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
 
 CONCERN_TO_LIBRARY: dict[SkinConcern, str] = {
     SkinConcern.ACNE: "Acne",
@@ -324,11 +352,15 @@ def match_compound_index(
     drivers: list[DriverState],
     *,
     zone: str | None,
+    when: date | None = None,
 ) -> dict[str, Any] | None:
     by_factor = _drivers_by_factor(drivers)
+    anchor = when or date.today()
     matches: list[dict[str, Any]] = []
     for row in store.compounds:
         if not _compound_index_matches(row, by_factor):
+            continue
+        if not _compound_in_season(row, anchor):
             continue
         if zone and row.get("zones"):
             zones = {z.strip().upper() for z in row.get("zones", []) if z}
@@ -342,18 +374,86 @@ def match_compound_index(
 
 
 def _compound_index_matches(row: dict[str, Any], by_factor: dict[str, DriverState]) -> bool:
-    for field, factor in COMPOUND_BAND_FIELDS:
-        expected = norm_band_label(str(row.get(field, "")))
-        if not expected or expected.lower() == "any":
+    bands = row.get("bands") if isinstance(row.get("bands"), dict) else {}
+    checked = 0
+    for band_key, factor in COMPOUND_BAND_KEYS:
+        expected_raw = bands.get(band_key)
+        if expected_raw is None:
+            # Legacy flat keys (temp_band / uv_band / …) if present.
+            expected_raw = row.get(f"{band_key}_band")
+        expected = norm_band_label(str(expected_raw or ""))
+        if not expected or expected == "any":
             continue
-        actual = norm_band_label(by_factor[factor].band_label)
+        driver = by_factor.get(factor)
+        if driver is None:
+            return False
+        actual = norm_band_label(driver.band_key) or norm_band_label(driver.band_label)
         if expected != actual:
             return False
-    return True
+        checked += 1
+    # Require at least one real band constraint so empty/broken rows cannot match everything.
+    return checked > 0
+
+
+def _month_token(token: str) -> int | None:
+    cleaned = (
+        token.strip()
+        .lower()
+        .replace(".", "")
+        .split("(")[0]
+        .strip()
+    )
+    return _MONTH_ALIASES.get(cleaned)
+
+
+def _expand_month_range(start: int, end: int) -> set[int]:
+    if start <= end:
+        return set(range(start, end + 1))
+    return set(range(start, 13)) | set(range(1, end + 1))
+
+
+def months_for_season_spec(spec: str | None) -> set[int] | None:
+    """Parse compound ``seasons`` text into calendar months.
+
+    Returns ``None`` when the compound applies year-round / any month.
+    """
+    text = str(spec or "").strip().lower()
+    if not text or text == "any" or text.startswith("year-round"):
+        return None
+
+    # Drop parenthetical notes: "jun (early)", "oct–nov (diwali week)"
+    text = text.replace("(", " ").replace(")", " ")
+    text = text.replace("–", "-").replace("—", "-").replace("/", "-")
+    months: set[int] = set()
+    for chunk in text.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "-" in chunk:
+            left, right = chunk.split("-", 1)
+            start = _month_token(left)
+            end = _month_token(right)
+            if start and end:
+                months |= _expand_month_range(start, end)
+            continue
+        # Single month token (ignore leftover words like "early").
+        for part in chunk.replace("-", " ").split():
+            month = _month_token(part)
+            if month:
+                months.add(month)
+                break
+    return months or None
+
+
+def _compound_in_season(row: dict[str, Any], when: date) -> bool:
+    months = months_for_season_spec(str(row.get("seasons") or ""))
+    if months is None:
+        return True
+    return when.month in months
 
 
 def norm_band_label(label: str) -> str:
-    return label.split("(")[0].strip().lower()
+    return label.split("(")[0].strip().lower().replace(" ", "_")
 
 
 def lookup_compound_cell(
@@ -380,10 +480,13 @@ def lookup_guest_single_cell(
     skin: str,
 ) -> dict[str, Any] | None:
     dom = dominant_driver(drivers)
+    # v3.5 keys: single|factor|band|skin|none — v3.6 also stores factor|band|skin
     keys = [
         f"single|{slug(dom.factor)}|{dom.band_key}|{slug(skin)}|none",
         f"single|{slug(dom.factor)}|{dom.band_key}|normal|none",
         f"single|{slug(dom.factor)}|{dom.band_key}|combination|none",
+        f"{slug(dom.factor)}|{dom.band_key}|{slug(skin)}",
+        f"{slug(dom.factor)}|{dom.band_key}|normal",
     ]
     for key in keys:
         cell = store.guest.get(key)
@@ -408,6 +511,16 @@ def lookup_guest_compound_cell(
     return None
 
 
+def lookup_age_rule(
+    store: ScenarioStore,
+    age_band: str | None,
+    concern: str,
+) -> dict[str, Any] | None:
+    if not age_band or not concern or concern == GUEST_CONCERN:
+        return None
+    return store.age_rules.get(f"{slug(age_band)}|{slug(concern)}")
+
+
 def resolve_alert_cell(
     store: ScenarioStore,
     drivers: list[DriverState],
@@ -417,9 +530,10 @@ def resolve_alert_cell(
     guest_mode: bool,
     zone: str | None,
     concern_candidates: list[str] | None = None,
+    when: date | None = None,
 ) -> tuple[dict[str, Any] | None, str, str | None]:
     """Return (cell, cell_kind, compound_name)."""
-    compound_index = match_compound_index(store, drivers, zone=zone)
+    compound_index = match_compound_index(store, drivers, zone=zone, when=when)
     compound_name = str(compound_index.get("name", "")) if compound_index else None
     candidates = concern_candidates or [concern]
 
@@ -513,12 +627,21 @@ def evaluate_scenario(
     local_time: datetime | None = None,
 ) -> ScenarioEvaluation:
     drivers = driver_states(store, env)
-    sfi = sum(d.points for d in drivers)
+    # Canonical SFI comes from the unified V4 SFI engine.
+    # This avoids any confusion with the legacy "sum(d.points)" scheme.
+    from app.hlhp.services.v4_scoring_engine import evaluate_v4
+
+    v4_eval = evaluate_v4(env, profile, guest_mode=guest_mode, surge=force_surge)
+    sfi = v4_eval.headline_sfi
+    band = v4_eval.mode
+    personal_sfi = v4_eval.personal_sfi
+
     dom = dominant_driver(drivers)
     skin = resolve_skin(profile, guest_mode)
     library_concerns = resolve_library_concerns(profile, guest_mode)
     concern = library_concerns[0]
     zone = store.city_zone.get((city or "").lower())
+    when = local_time.date() if local_time is not None else date.today()
     cell, cell_kind, compound_name = resolve_alert_cell(
         store,
         drivers,
@@ -527,24 +650,38 @@ def evaluate_scenario(
         guest_mode=guest_mode,
         zone=zone,
         concern_candidates=library_concerns,
+        when=when,
     )
 
-    life_stage = None if guest_mode else resolve_life_stage(profile)
-    gender_rule = lookup_gender_rule(store, life_stage, concern)
-    sfi = apply_gender_rule_to_sfi(sfi, gender_rule)
-    band = band_for_sfi(sfi)
+    # Life-stage modifiers adjust cell risk + L2 copy only — never the SFI number.
+    # Lazy import avoids circular dependency with sfi_unified.
+    from app.hlhp.services.sfi_unified import apply_addenda_to_l2, resolve_life_stage_adjustment
+
     time_window = time_window_for_datetime(local_time)
     time_clause = time_overlay_clause(store, dom, time_window)
 
     risk = _risk_int(cell, surge=force_surge)
-    personal_sfi = clamp_sfi(sfi - risk * RISK_TO_SFI_SCALE) if cell else None
+    life_adj = resolve_life_stage_adjustment(
+        risk,
+        profile,
+        guest_mode=guest_mode,
+        concern=concern,
+    )
+    risk = life_adj.adjusted_risk
     flash = build_flash_alert(
         cell,
         band=band,
         surge=force_surge,
         time_clause=time_clause,
-        gender_rule=gender_rule,
     )
+    if life_adj.addenda or life_adj.actions:
+        flash = FlashAlert(
+            level=flash.level,
+            mode=flash.mode,
+            l0=flash.l0,
+            l1=apply_addenda_to_l2(flash.l1, life_adj),
+            tip=(life_adj.actions[0] if life_adj.actions else flash.tip),
+        )
     impacts = [
         ImpactLine(driver=d.key, name=d.name, level=points_to_level(d.points), value=d.value)
         for d in drivers
@@ -568,6 +705,8 @@ def evaluate_scenario(
         sudden.append(SUDDEN_TAG_BY_FACTOR.get(dom.factor, "heat_surge"))
     if cell_kind in {"compound", "guest_compound"} and compound_name:
         sudden.append(compound_name.lower().replace(" ", "_")[:32])
+
+    life_stage = None if guest_mode else resolve_life_stage(profile)
 
     return ScenarioEvaluation(
         sfi=sfi,

@@ -37,9 +37,9 @@ def _env(**kwargs) -> EnvironmentalData:
     return EnvironmentalData(**defaults)
 
 
-def test_unified_sfi_matches_v4_handoff():
+def test_unified_sfi_matches_weighted_engine():
     eval_ = resolve_sfi(_env(), None, guest_mode=True)
-    assert eval_.environmental_sfi == 67
+    assert eval_.environmental_sfi == 64
     assert eval_.mode == "Guard Up"
 
 
@@ -54,9 +54,9 @@ def test_scan_uses_v4_sfi_and_scene():
         raw_temp=28.0,
     )
     resp = asyncio.run(run_scan(req))
-    assert resp.sfi == 67
+    assert resp.sfi == 64
     assert resp.band == "Guard Up"
-    assert resp.outdoor_ok_score == 67
+    assert resp.outdoor_ok_score == 64
     assert resp.scene in {"clear", "rain", "windy", "heat", "haze", "snow", "storm"}
     assert len(resp.impacts) == 4
 
@@ -76,11 +76,13 @@ def test_v4_today_payload_shape():
     assert resp.city
     assert resp.date == "2026-07-08"
     assert resp.mode_of_use == "guest"
-    assert resp.sfi.environmental == 67
-    assert resp.sfi.headline == 67
+    assert resp.sfi.environmental == 64
+    assert resp.sfi.headline == 64
     assert len(resp.drivers) == 4
     assert resp.alert.l0 or resp.alert.l1
     assert resp.weather.wind_kmh >= 0
+    assert resp.adverse is False or resp.adverse is True
+    assert isinstance(resp.adverse_tags, list)
 
 
 def test_share_caption_en_in_format():
@@ -113,12 +115,29 @@ def test_v4_recap_month_structure():
     assert len(recap.days) == 31
 
 
-def test_feeling_log_sfi_adjustment():
-    from app.hlhp.services.v4_scoring_engine import feeling_log_sfi_adjustment
+def test_feeling_log_is_not_an_sfi_input():
+    import app.hlhp.services.v4_scoring_engine as engine
 
-    assert feeling_log_sfi_adjustment(symptoms=["normal"]) == 0
-    assert feeling_log_sfi_adjustment(symptoms=["breakout"], outdoor_exposure="3+") == -19
-    assert feeling_log_sfi_adjustment(symptoms=["dry"], notes="bad sleep") == -5
+    assert not hasattr(engine, "feeling_log_sfi_adjustment")
+
+
+def test_life_stage_adjusts_cell_risk_not_sfi():
+    from app.hlhp.services.sfi_unified import resolve_life_stage_adjustment, resolve_sfi
+
+    profile = UserProfile(
+        user_id="u1",
+        skin_type=SkinType.COMBINATION,
+        skin_concerns=[SkinConcern.ACNE],
+        gender=Gender.FEMALE,
+        age_bracket=AgeBracket.AGE_18_24,
+    )
+    env = _env()
+    score = resolve_sfi(env, profile, guest_mode=False)
+    adj = resolve_life_stage_adjustment(2, profile, guest_mode=False, concern="Acne")
+    # SFI path must not accept life-stage kwargs; risk path may move 0-5 risk.
+    assert 0 <= adj.adjusted_risk <= 5
+    assert score.personal_sfi is not None
+    assert score.personal_sfi == score.environmental_sfi - score.rho_concern - score.rho_skin
 
 
 def test_v4_log_request_rejects_normal_with_others():
@@ -166,7 +185,7 @@ class TestV4HttpRoutes:
         resp = asyncio.run(_call())
         assert resp.status_code == 200
         data = resp.json()
-        assert data["sfi"]["environmental"] == 67
+        assert data["sfi"]["environmental"] == 64
         assert "scene" in data
         assert "drivers" in data
 

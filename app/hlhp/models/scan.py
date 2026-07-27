@@ -138,6 +138,18 @@ class EvidenceCellOut(BaseModel):
     action: str = ""
 
 
+class WhatsDifferentItem(BaseModel):
+    """One V7 routine-change rule for What's Different Today."""
+
+    id: str
+    type: str
+    headline: str
+    why: str = ""
+    timing: str = ""
+    factor: str = "any"
+    priority: int = 9
+
+
 class ScanResponse(BaseModel):
     snapshot_version: str
     workbook_version: Optional[str] = None
@@ -169,6 +181,7 @@ class ScanResponse(BaseModel):
     personal_sfi: Optional[int] = None
     band: Optional[SeverityBandName] = None
     action_cluster: Optional[str] = None
+    whats_different: list[WhatsDifferentItem] = Field(default_factory=list)
     risk: Optional[int] = None
     risk_label: Optional[str] = None
     confidence: Optional[str] = None

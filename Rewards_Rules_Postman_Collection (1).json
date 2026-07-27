@@ -1,0 +1,803 @@
+{
+  "info": {
+    "name": "SkinBB - Rewards Rules (Create)",
+    "_postman_id": "a6c7f8b4-0000-0000-0000-rewards-rules",
+    "description": "Collection to create reward rules from the Excel. Set variables baseUrl and adminToken before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "adminToken",
+      "value": "<PASTE_ADMIN_JWT_HERE>"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Rule - Pathfinder",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Pathfinder\",\n  \"code\": \"PATHFINDER\",\n  \"type\": \"One-time\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Profile\",\n  \"description\": \"Awarded for completing the demographics profile\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Skin Sleuth",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Skin Sleuth\",\n  \"code\": \"SKIN_SLEUTH\",\n  \"type\": \"One-time\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Profile\",\n  \"description\": \"Awarded for completing the skin survey\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Tress Trailblazer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Tress Trailblazer\",\n  \"code\": \"TRESS_TRAILBLAZER\",\n  \"type\": \"One-time\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Profile\",\n  \"description\": \"Awarded for completing the hair survey\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Wellness Wanderer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Wellness Wanderer\",\n  \"code\": \"WELLNESS_WANDERER\",\n  \"type\": \"One-time\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Profile\",\n  \"description\": \"Awarded for completing the lifestyle survey\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Regimen Ranger",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Regimen Ranger\",\n  \"code\": \"REGIMEN_RANGER\",\n  \"type\": \"One-time\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Profile\",\n  \"description\": \"Awarded for creating the first skincare routine\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Social Spark",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Social Spark\",\n  \"code\": \"SOCIAL_SPARK\",\n  \"type\": \"One-time\",\n  \"points\": 200,\n  \"isActive\": true,\n  \"category\": \"Profile\",\n  \"description\": \"Awarded for making the profile public\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Skincare Sharer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Skincare Sharer\",\n  \"code\": \"SKINCARE_SHARER\",\n  \"type\": \"One-time\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Milestone\",\n  \"description\": \"Awarded for making a skincare routine public for the first time\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Metric Maven",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Metric Maven\",\n  \"code\": \"METRIC_MAVEN\",\n  \"type\": \"One-time\",\n  \"points\": 50,\n  \"isActive\": true,\n  \"category\": \"Milestone\",\n  \"description\": \"Awarded for entering daily progress data for the first time\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Portrait Pioneer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Portrait Pioneer\",\n  \"code\": \"PORTRAIT_PIONEER\",\n  \"type\": \"One-time\",\n  \"points\": 200,\n  \"isActive\": true,\n  \"category\": \"Milestone\",\n  \"description\": \"Awarded for taking the first selfie\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Inquiry Instigator",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Inquiry Instigator\",\n  \"code\": \"INQUIRY_INSTIGATOR\",\n  \"type\": \"One-time\",\n  \"points\": 50,\n  \"isActive\": true,\n  \"category\": \"Milestone\",\n  \"description\": \"Awarded for posting the first question in the community\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Survey Master",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Survey Master\",\n  \"code\": \"SURVEY_MASTER\",\n  \"type\": \"Recurrent\",\n  \"points\": 500,\n  \"isActive\": true,\n  \"category\": \"Event\",\n  \"description\": \"Awarded for completing all surveys (skin, hair, lifestyle)\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Streak Star 1",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Streak Star 1\",\n  \"code\": \"STREAK_STAR_1\",\n  \"type\": \"Recurrent\",\n  \"points\": 50,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Enter daily progress data for 7 consecutive days\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Streak Star 2",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Streak Star 2\",\n  \"code\": \"STREAK_STAR_2\",\n  \"type\": \"Recurrent\",\n  \"points\": 60,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Enter daily progress data for 14 consecutive days\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Streak Star 3",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Streak Star 3\",\n  \"code\": \"STREAK_STAR_3\",\n  \"type\": \"Recurrent\",\n  \"points\": 70,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Enter daily progress data for 21 consecutive days\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Streak Star 4",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Streak Star 4\",\n  \"code\": \"STREAK_STAR_4\",\n  \"type\": \"Recurrent\",\n  \"points\": 80,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Enter daily progress data for 28 consecutive days\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Streak Star 5+",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Streak Star 5+\",\n  \"code\": \"STREAK_STAR_5\",\n  \"type\": \"Recurrent\",\n  \"points\": 90,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Enter daily progress data for 35 consecutive days and beyond\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Progress Pic Pro 2",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Progress Pic Pro 2\",\n  \"code\": \"PROGRESS_PIC_PRO_2\",\n  \"type\": \"Recurrent\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Take the second selfie after 7 days\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Progress Pic Pro 3",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Progress Pic Pro 3\",\n  \"code\": \"PROGRESS_PIC_PRO_3\",\n  \"type\": \"Recurrent\",\n  \"points\": 150,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Take the third selfie after another 7 days\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Progress Pic Pro 4+",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Progress Pic Pro 4+\",\n  \"code\": \"PROGRESS_PIC_PRO_4\",\n  \"type\": \"Recurrent\",\n  \"points\": 200,\n  \"isActive\": true,\n  \"category\": \"Streak\",\n  \"description\": \"Each subsequent selfie taken at least 7 days apart\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Community Helper",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Community Helper\",\n  \"code\": \"COMMUNITY_HELPER\",\n  \"type\": \"Recurrent\",\n  \"points\": 50,\n  \"isActive\": true,\n  \"category\": \"Milestone\",\n  \"description\": \"Answer every 5th question in the community\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Skincare Pro",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Skincare Pro\",\n  \"code\": \"SKINCARE_PRO\",\n  \"type\": \"Recurrent\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Milestone\",\n  \"description\": \"First purchase\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - Skincare Pro 2",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewards/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewards",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Skincare Pro 2\",\n  \"code\": \"SKINCARE_PRO_2\",\n  \"type\": \"Recurrent\",\n  \"points\": 100,\n  \"isActive\": true,\n  \"category\": \"Recurrent\",\n  \"description\": \"Every purchase thereafter\",\n  \"caps\": {\n    \"perDay\": 1,\n    \"perUserTotal\": 0\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Rule - HLHP Summit (30-day streak · 100 coins)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/rewardsAdmin/rules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "rewardsAdmin",
+            "rules"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"HLHP_STREAK_30\",\n  \"name\": \"HLHP Summit\",\n  \"type\": \"badge\",\n  \"trigger\": \"event\",\n  \"points\": 100,\n  \"period\": \"lifetime\",\n  \"capPerPeriod\": 0,\n  \"oncePerUser\": true,\n  \"isActive\": true,\n  \"sort\": 165,\n  \"metadata\": {\n    \"event\": \"hlhp.streak.30.days\",\n    \"category\": \"Streak\",\n    \"description\": \"HLHP: complete a 30-day consecutive streak — 100 coins, awarded only at day 30\",\n    \"source\": \"hlhp\",\n    \"thresholdDays\": 30\n  }\n}"
+        },
+        "description": "Canonical create path is POST /api/v1/rewardsAdmin/rules (matches RewardRule model). Creating the rule alone does not award coins — HLHP claims via POST /api/v1/rewardsUser/me/earn { ruleCode: HLHP_STREAK_30 } once streak >= 30, or fires event hlhp.streak.30.days."
+      }
+    }
+  ]
+}

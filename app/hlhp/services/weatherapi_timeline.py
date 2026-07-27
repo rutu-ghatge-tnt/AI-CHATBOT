@@ -8,9 +8,10 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import httpx
-
 from app.hlhp.config import hl_settings
+from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.weather_http import get_json
+from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.services.weatherapi_forecast import aqi_from_air_quality
 
 logger = logging.getLogger(__name__)
@@ -147,16 +148,12 @@ async def _get_json(url: str, params: dict[str, Any]) -> dict | None:
     if not key:
         logger.warning("WEATHERAPI_KEY not set — SFI timeline unavailable")
         return None
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, params={**params, "key": key, "aqi": "yes"})
-            resp.raise_for_status()
-            data = resp.json()
-        return data if isinstance(data, dict) else None
-    except Exception as exc:
-        logger.warning("WeatherAPI request failed (%s): %s", url, exc)
-        return None
-
+    return await get_json(
+        url,
+        params={**params, "key": key, "aqi": "yes"},
+        timeout=15,
+        provider=PROVIDER_WEATHERAPI,
+    )
 
 async def fetch_forecast_payload(
     latitude: float,
@@ -283,4 +280,21 @@ async def fetch_timeline_hourly_readings(
             by_epoch[row.at_epoch] = row
 
     merged = sorted(by_epoch.values(), key=lambda r: r.at_epoch)
+    if merged:
+        start = min(date.fromisoformat(r.date) for r in merged)
+        end = max(date.fromisoformat(r.date) for r in merged)
+        uv_map = await open_meteo_uv.fetch_hourly_uv_map(
+            latitude,
+            longitude,
+            start=start,
+            end=end,
+            timezone_id=tz_id or "auto",
+        )
+        merged, overrides = open_meteo_uv.apply_hourly_uv(merged, uv_map)
+        if overrides:
+            logger.debug(
+                "Open-Meteo UV applied to %s/%s timeline slots",
+                overrides,
+                len(merged),
+            )
     return merged, tz_id, location_name

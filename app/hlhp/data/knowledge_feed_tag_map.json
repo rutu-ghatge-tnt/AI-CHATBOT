@@ -36,7 +36,10 @@
     "aging": ["aging"],
     "sun-protection": ["skin_tan", "pigmentation_pih"],
     "spf": ["skin_tan", "pigmentation_pih"],
-    "pores": ["open_pores"]
+    "pores": ["open_pores"],
+    "skincare-routine": ["acne", "dullness", "dryness", "sensitivity"],
+    "self-care": ["sensitivity", "dullness"],
+    "healthy-skin": ["dullness", "dryness", "sensitivity"]
   },
   "tag_to_situations": {
     "pollution": ["aqi_high", "air_quality_spike"],

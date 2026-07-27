@@ -14,7 +14,8 @@ from app.hlhp.evidence.composition_store import get_composition_store
 from app.hlhp.models.environmental import EnvironmentalData
 from app.hlhp.models.profile import UserProfile
 from app.hlhp.models.sfi_timeline import SfiTimelinePoint
-from app.hlhp.services.outdoor_ok import compute_outdoor_ok, pick_mood_verdict
+from app.hlhp.services.outdoor_ok import pick_mood_verdict
+from app.hlhp.services.sfi_unified import outdoor_band_for_score, outdoor_ok_from_env
 from app.hlhp.services.weatherapi_forecast import ForecastDayReading, fetch_weatherapi_forecast
 from app.hlhp.services.weatherapi_timeline import fetch_timeline_hourly_readings
 
@@ -41,7 +42,7 @@ def _reading_to_env(
         humidity_pct=reading.humidity_pct,
         location_name=location_name,
         fetched_at=datetime.now(),
-        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "weatherapi"},
+        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "open_meteo"},
     )
 
 
@@ -53,7 +54,7 @@ def _slot_to_env(slot: SfiTimelinePoint, *, location_name: str) -> Environmental
         humidity_pct=slot.humidity_pct,
         location_name=location_name,
         fetched_at=datetime.now(),
-        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "weatherapi"},
+        data_sources={"weather": "weatherapi", "aqi": "weatherapi", "uv": "open_meteo"},
     )
 
 
@@ -82,14 +83,15 @@ def assemble_plan_week_days(
             humidity_pct = worst.humidity_pct
         else:
             env = _reading_to_env(reading, location_name=location)
-            score, _ = compute_outdoor_ok(env)
+            score, band_text = outdoor_ok_from_env(env, guest_mode=True)
             uv_index = reading.uv_index
             temp_c = reading.temp_c
             aqi = reading.aqi
             humidity_pct = reading.humidity_pct
 
         bands = bucketize_environment(env)
-        _, band_text = compute_outdoor_ok(env)
+        if worst is not None:
+            band_text = outdoor_band_for_score(score)
         mood = pick_mood_verdict(bands)
         hit = _match_template(
             templates,
