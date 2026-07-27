@@ -34,7 +34,7 @@ def _env(**kwargs):
 
 def test_scenario_store_loads_v36():
     store = get_scenario_store()
-    assert store.version == "3.6"
+    assert store.version == "3.7"
     assert store.master_cell_count == 1140
     assert store.compound_cell_count == 940
     assert store.guest_cell_count >= 200
@@ -107,7 +107,7 @@ def test_run_scan_includes_scenario_fields():
     assert resp.flash_alert is not None
     assert resp.flash_alert.l0
     assert resp.evidence_cell is not None
-    assert resp.scenario_library_version == "3.6"
+    assert resp.scenario_library_version == "3.7"
 
 
 def test_lookup_master_cell_key_format():
@@ -158,7 +158,7 @@ def test_personalised_scan_uses_profile_concern_cell():
     assert result.evidence_cell.confidence in {"HIGH", "MODERATE", "LOW"}
 
 
-def test_gender_rule_lowers_sfi_for_pcos_acne():
+def test_gender_rule_adjusts_risk_and_copy_not_sfi():
     store = get_scenario_store()
     env = _env(uv_index=4.0, temperature_c=28, humidity_pct=52, aqi=80)
     profile = UserProfile(
@@ -186,9 +186,10 @@ def test_gender_rule_lowers_sfi_for_pcos_acne():
         ),
         guest_mode=False,
     )
-    assert adjusted.sfi == baseline.sfi - 8
+    # Environmental band-sum SFI in evaluate_scenario is life-stage free.
+    assert adjusted.sfi == baseline.sfi
+    assert adjusted.risk >= baseline.risk
     assert "testosterone" in adjusted.flash_alert.l1.lower() or adjusted.flash_alert.tip
-
 
 def test_time_overlay_appends_morning_clause():
     store = get_scenario_store()
@@ -263,9 +264,8 @@ def test_july_does_not_select_pre_monsoon_sun_heat():
     assert july_eval.compound_name != "Pre-Monsoon Sun & Heat"
 
 
-def test_age_rules_adjust_personal_sfi():
-    from app.hlhp.services.sfi_unified import _age_risk_delta
-    from app.hlhp.services.v4_scoring_engine import evaluate_v4
+def test_age_rules_adjust_cell_risk_not_sfi():
+    from app.hlhp.services.sfi_unified import resolve_life_stage_adjustment, resolve_sfi
 
     store = get_scenario_store()
     rule = store.age_rules.get("young_adult|acne")
@@ -279,15 +279,13 @@ def test_age_rules_adjust_personal_sfi():
         gender=Gender.FEMALE,
         age_bracket=AgeBracket.AGE_18_24,
     )
-    delta = _age_risk_delta(profile, guest_mode=False)
-    assert delta == float(rule["risk_delta"])
-
     env = _env(temperature_c=28, uv_index=6, humidity_pct=52, aqi=80)
-    with_delta = evaluate_v4(env, profile, guest_mode=False, age_risk_delta=delta)
-    without = evaluate_v4(env, profile, guest_mode=False, age_risk_delta=0)
-    assert with_delta.personal_sfi is not None and without.personal_sfi is not None
-    if delta > 0:
-        assert with_delta.personal_sfi < without.personal_sfi
-    else:
-        assert with_delta.personal_sfi == without.personal_sfi
+    scored = resolve_sfi(env, profile, guest_mode=False)
+    adj = resolve_life_stage_adjustment(2, profile, guest_mode=False, concern="Acne")
 
+    assert scored.personal_sfi is not None
+    # Age/gender must not be baked into the SFI arithmetic.
+    assert scored.personal_sfi == scored.environmental_sfi - scored.rho_concern - scored.rho_skin
+    expected = max(0, min(5, 2 + int(adj.gender_delta) + int(adj.age_delta)))
+    assert adj.adjusted_risk == expected
+    assert adj.age_rule_found or adj.gender_rule_found or adj.coverage_gap

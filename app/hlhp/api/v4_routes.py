@@ -209,7 +209,24 @@ async def v4_learn(
     user_id: str = Query(...),
     city: str | None = Query(None),
     concern_id: str | None = Query(None),
+    raw_uvi: float | None = Query(None, ge=0),
+    raw_aqi: int | None = Query(None, ge=0),
+    raw_rh: float | None = Query(None, ge=0, le=100),
+    raw_temp: float | None = Query(None),
     user: dict = Depends(hlhp_authenticated_user),
 ) -> V4LearnResponse:
     uid = verify_client_user_id(user, user_id)
-    return await assemble_learn_v4(uid, city=city, concern_id=concern_id)
+    bands = None
+    if raw_uvi is not None and raw_aqi is not None and raw_rh is not None and raw_temp is not None:
+        from app.hlhp.core.bands import bucketize_environment
+        from app.hlhp.models.environmental import EnvironmentalData
+
+        env = EnvironmentalData(
+            uv_index=raw_uvi,
+            temperature_c=raw_temp,
+            aqi=raw_aqi,
+            humidity_pct=raw_rh,
+            location_name=city or "",
+        )
+        bands = bucketize_environment(env)
+    return await assemble_learn_v4(uid, city=city, concern_id=concern_id, bands=bands)

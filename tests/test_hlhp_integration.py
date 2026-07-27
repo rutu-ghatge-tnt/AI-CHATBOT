@@ -26,7 +26,7 @@ from app.hlhp.models.profile import (
 )
 from app.hlhp.models.scan import ScanRequest, SymptomTapRequest
 from app.hlhp.services.action_tap_service import run_action_tap
-from app.hlhp.services.outdoor_ok import compute_outdoor_ok
+from app.hlhp.services.sfi_unified import outdoor_ok_from_env
 from app.hlhp.services.scan_service import run_scan, run_symptom_tap
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -66,7 +66,7 @@ def _profile(**kwargs) -> UserProfile:
 class TestScenarioLibraryIntegrity:
     def test_scenario_store_loads_v35(self):
         store = get_scenario_store()
-        assert store.version == "3.5"
+        assert store.version == "3.7"
         assert store.master_cell_count == 1140
         assert len(store.nuggets) >= 20
 
@@ -92,7 +92,7 @@ class TestSpecScenarioPriyaMumbaiMorning:
         assert 0 <= resp.outdoor_ok_score <= 100
         assert resp.sfi is not None
         assert resp.band
-        assert resp.scenario_library_version == "3.5"
+        assert resp.scenario_library_version == "3.7"
         assert len(resp.alerts) == 1
         assert len(resp.candidate_alerts) == 0
         if resp.alerts:
@@ -138,22 +138,22 @@ class TestSpecScenarioGuestMode:
         resp = asyncio.run(run_scan(req))
         assert resp.mode == "guest"
         assert resp.profile_nudge is not None
-        assert resp.scenario_library_version == "3.5"
+        assert resp.scenario_library_version == "3.7"
 
 
 class TestOutdoorOkAndFireBudget:
     def test_outdoor_ok_in_manageable_range_for_mumbai_sample(self):
         """Mumbai pre-monsoon combo stress — score should be low, not 'manageable'."""
         env = _env(uv_index=8.0, aqi=145, temperature_c=31.0, humidity_pct=72.0)
-        score, band_text = compute_outdoor_ok(env)
-        assert 0 <= score <= 25
-        assert "Hard" in band_text or "Plan around" in band_text
+        score, band_text = outdoor_ok_from_env(env, guest_mode=True)
+        assert 0 <= score <= 60
+        assert band_text == "Battle Stations"
 
     def test_outdoor_ok_comfortable_day(self):
         env = _env(uv_index=2.0, aqi=45, temperature_c=24.0, humidity_pct=50.0)
-        score, band_text = compute_outdoor_ok(env)
+        score, band_text = outdoor_ok_from_env(env, guest_mode=True)
         assert score >= 80
-        assert "Easy" in band_text or "Comfortable" in band_text
+        assert band_text == "Paradise Mode"
 
 
 class TestPhaseSelection:
@@ -287,8 +287,8 @@ class TestAPIHealthEndpoint:
                 body = r.json()
                 assert body["ok"] is True
                 assert body["rule_count"] >= 1140
-                assert "v3.6" in str(body.get("workbook_version", ""))
-                assert body.get("scenario_library_version") == "3.5"
+                assert "v3.7" in str(body.get("workbook_version", ""))
+                assert body.get("scenario_library_version") == "3.7"
                 assert body.get("composition_row_count", 0) >= 940
 
         asyncio.run(_call())
@@ -322,7 +322,7 @@ class TestAPIHealthEndpoint:
                 assert "outdoor_ok_score" in data
                 assert "mood_headline" in data
                 assert "lane_state_ctas" in data
-                assert "v3.6" in str(data.get("workbook_version", ""))
+                assert "v3.7" in str(data.get("workbook_version", ""))
                 assert data.get("sfi") is not None
                 assert data.get("band")
 

@@ -409,6 +409,7 @@ def assemble_explore(
         "event_guides": guides,
         "science_nugget": science_nugget,
         "knowledge_feed": [],
+        "blogs": [],
         "symptom_keywords": symptom_chips(resolved_concern, selected=selected_symptoms or set()),
         "snapshot_version": store.version,
     }

@@ -88,6 +88,10 @@ def main() -> int:
     else:
         print("  skin_band_penalty: unchanged (not in workbook snapshot)")
 
+    if hasattr(v4_scoring_data, "reload_concern_penalty"):
+        v4_scoring_data.reload_concern_penalty()
+        print("  concern_penalty   : cache cleared")
+
     if args.activate and not args.no_activate:
         write_active_pointer(out_path, version=str(meta.get("version", "")))
         store = reload_scenario_store()

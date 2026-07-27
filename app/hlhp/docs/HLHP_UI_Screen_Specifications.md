@@ -263,11 +263,12 @@ Quantified day-read. The SFI score gives the user one number; the breakdown give
 
 | Score | Outlook text |
 |---|---|
-| 80-100 | Easy day to be outside |
-| 60-79 | Comfortable with sunscreen |
-| 40-59 | Manageable — protect the basics |
-| 20-39 | Plan around it — multiple stressors today |
-| 0-19 | Hard outdoor day — head-to-toe protection helps most |
+| 85-100 | Paradise Mode |
+| 70-84 | Smooth Sailing |
+| 55-69 | Guard Up |
+| 40-54 | Battle Stations |
+| 25-39 | Hostile Mode |
+| 0-24 | Code Red |
 
 ### Skin-language band notes
 
