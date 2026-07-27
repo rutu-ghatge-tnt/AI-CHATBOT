@@ -8,7 +8,25 @@ from app.label_looker.engines.base_formula.types import BaseFormulaRecord, Runti
 
 _TERM_ALIASES: dict[str, set[str]] = {
     "hydration": {"hydrate", "hydrating", "moisture", "moisturizing", "plumping"},
-    "brightening": {"glow", "radiance", "radiant", "tone", "uneven tone", "depigmenting", "depigmentation"},
+    "brightening": {
+        "glow",
+        "radiance",
+        "radiant",
+        "tone",
+        "uneven tone",
+        "depigmenting",
+        "depigmentation",
+        "brightens",
+        "brightens and evens skin tone",
+        "even skin tone",
+        "even tone",
+        "uneven skintone",
+        "uneven-skintone",
+        "uneven skin tone",
+        "lighter",
+        "radiant skin",
+        "natural glow",
+    },
     "dark spots": {"dark-spot", "dark spots", "pigmentation", "hyperpigmentation", "spots", "dark-spots"},
     "dark circles": {"dark-circles", "dark circles", "under-eye", "under eye"},
     "acne": {"pimples", "breakouts", "blemish"},
@@ -18,7 +36,9 @@ _TERM_ALIASES: dict[str, set[str]] = {
     "oil control": {"sebum", "shine control", "mattifying", "less oil", "less_oil"},
     "dullness": {"dull", "dull skin"},
     "spot fading": {"spot_fading", "spot fading", "fade spots"},
+    "anti-aging": {"anti aging", "antiageing", "anti-ageing", "aging", "anti wrinkle", "anti-wrinkle"},
 }
+
 
 _LIFESTYLE_CONCERN_TERMS: set[str] = {
     "sleep deprivation",

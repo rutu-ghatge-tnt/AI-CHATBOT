@@ -29,6 +29,7 @@ from app.label_looker.services.product_marketing_signals import (
     build_product_benefit_signals,
     resolve_product_tag_names,
 )
+from app.label_looker.services.active_ingredient_dossiers import resolve_active_ingredient_dossiers
 from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
 from app.label_looker.services.user_profile_flow import load_full_user_profile, merge_auth_user_details, resolve_users_collection_id, user_details_lookup_filter
 
@@ -703,6 +704,19 @@ async def _score_product_impl(
         tile_product["key_ingredients"] = await _resolve_ingredients_from_rows(rows=product.get("keyIngredients"), branded_ingredients_coll=branded_ingredient_coll, ingredient_coll=ingredient_coll)
     if isinstance(product.get("ingredients"), list):
         tile_product["ingredients"] = await _resolve_ingredients_from_rows(rows=product.get("ingredients"), branded_ingredients_coll=branded_ingredient_coll, ingredient_coll=ingredient_coll)
+
+    ingredient_names: list[str] = []
+    for row in (tile_product.get("ingredients") or []) + (tile_product.get("key_ingredients") or []):
+        if isinstance(row, dict):
+            n = str(row.get("inci_name") or row.get("ingredient_name") or row.get("name") or "").strip()
+            if n:
+                ingredient_names.append(n)
+    active_dossiers = await resolve_active_ingredient_dossiers(
+        ingredient_names=ingredient_names,
+        product=product,
+        db=db,
+    )
+
     runtime_context = resolve_runtime_context(
         {"id": str(user_id), "skin_type": type_value.lower(), "age": age if isinstance(age, int) else None, "concerns": concerns, "benefits": benefits, "self_declared_flags": conditions, "life_stages": life_stages},
         _safe_scalar(body.get("pin_code") or body.get("pinCode")) or None,
@@ -714,18 +728,20 @@ async def _score_product_impl(
     if state == "gate":
         scoring: dict[str, Any] = {"state": "gate", "score": None, "band": "gate", "breakdown": [], "unmet_needs": concerns[:1]}
     else:
+        product_benefits = build_product_benefit_signals(
+            product=product,
+            tile_product=tile_product,
+            tag_names=tag_names,
+            mode=mode,
+            active_dossiers=active_dossiers,
+        )
         suitability = profile_match_engines.evaluate_suitability(
             skin_type=type_value.lower(),
             concerns=concerns,
             benefits=benefits,
             declared_types=declared_types,
             product_primary=str(product.get("primaryConcern") or ""),
-            product_benefits=build_product_benefit_signals(
-                product=product,
-                tile_product=tile_product,
-                tag_names=tag_names,
-                mode=mode,
-            ),
+            product_benefits=product_benefits,
             runtime_context=runtime_context,
             base_formula=base_formula,
             safety_severity=str(safety.get("severity") or "clear"),
@@ -748,6 +764,8 @@ async def _score_product_impl(
             "overrides_applied": (suitability.get("override_result") or {}).get("overrides_applied", []),
             "fit_axes": suitability.get("fit_axes", []),
             "works_for_user": suitability.get("works_for_user"),
+            "active_dossier_count": len(active_dossiers),
+            "active_dossier_names": [str(d.get("name") or "") for d in active_dossiers if d.get("name")],
         }
 
     tile_user = {"mode": mode, "age": age if age is not None else "—", "gender": gender or "—", "skin_type": type_value.lower() if type_value else "—", "hair_type": type_value.lower() if mode == "haircare" and type_value else "—", "concerns": concerns, "benefits": benefits, "life_stages": life_stages}

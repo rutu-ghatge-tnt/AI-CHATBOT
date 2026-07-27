@@ -155,6 +155,7 @@ def build_product_benefit_signals(
     tile_product: dict[str, Any],
     tag_names: list[str] | None = None,
     mode: str = "skincare",
+    active_dossiers: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     out: list[str] = []
     for key in ("benefit", "benefits", "claims", "claim"):
@@ -184,8 +185,31 @@ def build_product_benefit_signals(
         inci_name = str(row.get("inci_name") or "").lower()
         if any(k in inci_name for k in ("hyaluron", "glycerin", "panthenol", "betaine", "sodium pca", "urea")):
             out.append("hydration")
-        if any(k in inci_name for k in ("niacinamide", "ascorb", "vitamin c", "arbutin", "tranexamic")):
+        if any(
+            k in inci_name
+            for k in (
+                "niacinamide",
+                "ascorb",
+                "vitamin c",
+                "arbutin",
+                "tranexamic",
+                "tetrahydrocurcumin",
+                "curcumin",
+                "glutamylcysteine",
+                "glyteine",
+                "tocopheryl",
+                "tocopherol",
+            )
+        ):
             out.append("brightening")
+            out.append("Brightens and evens skin tone")
+            out.append("anti-aging")
         if "keratin" in inci_name:
             out.append("Repair")
+
+    if active_dossiers:
+        from app.label_looker.services.active_ingredient_dossiers import benefit_signals_from_active_dossiers
+
+        out.extend(benefit_signals_from_active_dossiers(active_dossiers, mode=mode))
+
     return list(dict.fromkeys(x for x in out if isinstance(x, str) and x.strip()))

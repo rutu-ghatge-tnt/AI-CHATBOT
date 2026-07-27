@@ -271,6 +271,131 @@ def format_active_dossiers_for_prompt(dossiers: list[dict[str, Any]]) -> str:
     return "\n".join(blocks)
 
 
+# Functional category / dossier text → match-engine benefit signals
+_FUNCTIONALITY_SIGNAL_MAP: dict[str, tuple[str, ...]] = {
+    "antioxidant": ("antioxidant", "brightening", "anti-aging", "Brightens and evens skin tone"),
+    "skin conditioning agent": ("barrier repair", "soothing", "skin conditioning"),
+    "skin conditioning": ("barrier repair", "soothing", "skin conditioning"),
+    "anti-aging": ("anti-aging", "brightening"),
+    "anti ageing": ("anti-aging", "brightening"),
+    "brightening": ("brightening", "Brightens and evens skin tone", "uneven skin tone", "uneven-skintone"),
+    "whitening": ("brightening", "Brightens and evens skin tone"),
+    "lightening": ("brightening", "Brightens and evens skin tone"),
+    "humectant": ("hydration", "moisturizing"),
+    "moisturising": ("hydration", "moisturizing"),
+    "moisturizing": ("hydration", "moisturizing"),
+    "emollient": ("barrier repair", "moisturizing"),
+    "soothing": ("soothing", "calming"),
+    "anti-inflammatory": ("soothing", "calming"),
+    "protective agent": ("antioxidant", "anti-aging"),
+}
+
+_BRIGHTENING_CORPUS_HINTS = (
+    "brighten",
+    "brightening",
+    "radiant",
+    "radiance",
+    "glow",
+    "even tone",
+    "even-toned",
+    "uneven",
+    "pigment",
+    "glutathione",
+    "depigment",
+    "lighter",
+    "luminosity",
+    "tone correction",
+)
+
+_HYDRATION_CORPUS_HINTS = (
+    "hydrat",
+    "moisture",
+    "humectant",
+    "moisturiz",
+    "moisturis",
+)
+
+
+def _dossier_corpus(dossiers: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for d in dossiers:
+        name = str(d.get("name") or "").strip()
+        if name:
+            parts.append(name)
+        for fn in d.get("functionality") or []:
+            if str(fn).strip():
+                parts.append(str(fn).strip())
+        for chem in d.get("chemicalClasses") or []:
+            if str(chem).strip():
+                parts.append(str(chem).strip())
+        desc = str(d.get("description") or "").strip()
+        if desc:
+            parts.append(desc)
+    return " ".join(parts).lower()
+
+
+def benefit_signals_from_active_dossiers(
+    dossiers: list[dict[str, Any]],
+    *,
+    mode: str = "skincare",
+) -> list[str]:
+    """
+    Convert Active ingredient dossiers into product benefit signals for Match My Profile scoring.
+    """
+    if not dossiers:
+        return []
+
+    out: list[str] = []
+    for d in dossiers:
+        for fn in d.get("functionality") or []:
+            label = str(fn).strip()
+            if not label:
+                continue
+            out.append(label)
+            mapped = _FUNCTIONALITY_SIGNAL_MAP.get(label.lower())
+            if mapped:
+                out.extend(mapped)
+
+    corpus = _dossier_corpus(dossiers)
+    if any(hint in corpus for hint in _BRIGHTENING_CORPUS_HINTS):
+        out.extend(
+            [
+                "brightening",
+                "Brightens and evens skin tone",
+                "uneven skin tone",
+                "uneven-skintone",
+                "pigmentation",
+                "anti-aging",
+            ]
+        )
+    if any(hint in corpus for hint in _HYDRATION_CORPUS_HINTS):
+        out.extend(["hydration", "moisturizing", "dryness"])
+
+    # Taxonomy catalog labels from dossier text (same needle matching as marketing claims)
+    try:
+        from app.label_looker.services.product_marketing_signals import match_benefit_labels_from_marketing
+
+        fake_product = {
+            "name": "",
+            "description": corpus,
+            "benefit": [],
+            "benefits": [],
+            "claims": [],
+            "claim": [],
+        }
+        out.extend(
+            match_benefit_labels_from_marketing(
+                product=fake_product,
+                tag_names=[],
+                mode=mode,
+            )
+        )
+    except Exception:
+        pass
+
+    return list(dict.fromkeys(x for x in out if isinstance(x, str) and x.strip()))
+
+
 async def resolve_active_ingredient_dossiers(
     *,
     ingredient_names: list[str],
