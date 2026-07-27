@@ -39,12 +39,16 @@ def _resolve_uri(*, production: bool, mongo_uri: str | None) -> str:
         return mongo_uri.strip()
     if production:
         uri = (os.getenv("PRODUCTION_MONGO_URI") or os.getenv("PROD_MONGO_URI") or "").strip()
-        if not uri:
-            raise SystemExit(
-                "Production mode requires PRODUCTION_MONGO_URI (or PROD_MONGO_URI) in .env, "
-                "or pass --mongo-uri"
-            )
-        return uri
+        if uri:
+            return uri
+        # On prod app hosts, MONGO_URI often already points at 10.0.128.233
+        fallback = (os.getenv("MONGODB_URI") or os.getenv("MONGO_URI") or "").strip()
+        if fallback and "10.0.128.233" in fallback:
+            return fallback
+        raise SystemExit(
+            "Production mode requires PRODUCTION_MONGO_URI (or PROD_MONGO_URI) in .env, "
+            "or a MONGO_URI pointing at 10.0.128.233, or pass --mongo-uri"
+        )
     uri = (os.getenv("MONGODB_URI") or os.getenv("MONGO_URI") or "").strip()
     if not uri:
         raise SystemExit("MONGO_URI / MONGODB_URI is required")
