@@ -156,3 +156,4 @@ class V4LearnResponse(BaseModel):
     blogs: list[dict[str, Any]] = Field(default_factory=list)
     concern_id: Optional[str] = None
     city: Optional[str] = None
+    symptom_keywords: list[dict[str, Any]] = Field(default_factory=list)

@@ -478,4 +478,5 @@ async def assemble_learn_v4(
         blogs=list(base.blogs or []),
         concern_id=base.concern_id,
         city=base.city,
+        symptom_keywords=[c.model_dump() for c in base.symptom_keywords],
     )

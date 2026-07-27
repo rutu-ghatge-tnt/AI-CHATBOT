@@ -23,16 +23,30 @@ def ingredient_analysis_user_message(
     main_benefit: str | None,
     langauge: str,
     personalization_context: str | None = None,
+    active_dossiers_text: str | None = None,
 ) -> str:
     st = specific_type or ""
     mb = main_benefit or ""
     lg = langauge or "English"
+    dossiers_block = ""
+    if active_dossiers_text and str(active_dossiers_text).strip():
+        dossiers_block = f"""
+
+Authoritative Active ingredient dossiers from SkinBB DB (prefer these facts; do not contradict them).
+These are Active-only ingredients resolved from branded ingredients first, then INCI.
+When writing keyIngredients and formula commentary, ground claims in the functionality, chemical class, and description below - do not invent conflicting mechanisms or benefits.
+Do not invent active percentages.
+
+Active dossiers:
+{active_dossiers_text.strip()}
+"""
     base = f"""You must respond with ONLY valid JSON. Do not include any explanatory text before or after the JSON.
 Analyze the following {st} formula for {mb}. Generate a response in {lg}. Retain ingredient names in {lg} and structure as follows:
  
         1.  Opinion on product efficacy in minimum 30 words. => with key "opinion" for json object       
  
         2. Key Ingredients: List top 3-5 active ingredients with names and one key benefit. => with key "keyIngredients" for json object       
+           Prefer Active dossiers when present; phrase the key benefit from functionality / description.
  
         3. Benefits Offered: State 2-3 most important benefits offered by the whole formula. => with key "benefitsOffered" for json object
  
@@ -55,7 +69,7 @@ Analyze the following {st} formula for {mb}. Generate a response in {lg}. Retain
         Note: Do not include water in any category
  
         Ingredient list:  {ingredients_text}
-        
+{dossiers_block}
         IMPORTANT: Return ONLY valid JSON. Start your response with {{ and end with }}. Do not include any text before or after the JSON object."""
     if personalization_context:
         base += f"""

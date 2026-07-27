@@ -100,10 +100,14 @@ def test_assemble_learn_includes_feeds():
     assert result.knowledge_feed[0]["slug"] == "spf-jargon"
     assert len(result.blogs) == 1
     assert result.blogs[0]["content_type"] == "Blog"
+    assert len(result.symptom_keywords) >= 1
+    assert all(hasattr(c, "keyword") for c in result.symptom_keywords)
 
 
 def test_assemble_learn_v4_passes_feeds():
     from app.hlhp.services.v4_api_service import assemble_learn_v4
+
+    from app.hlhp.models.engagement import LearnSymptomChipOut
 
     base = LearnResponse(
         explainers=[],
@@ -112,7 +116,10 @@ def test_assemble_learn_v4_passes_feeds():
         blogs=[_blog("routine-blog", title="Routine")],
         concern_id="acne",
         city="Pune",
-        symptom_keywords=[],
+        symptom_keywords=[
+            LearnSymptomChipOut(keyword="oily", highlighted=True),
+            LearnSymptomChipOut(keyword="dry", highlighted=False),
+        ],
     )
     with patch(
         "app.hlhp.services.v4_api_service.assemble_learn",
@@ -124,3 +131,5 @@ def test_assemble_learn_v4_passes_feeds():
     assert len(result.knowledge_feed) == 1
     assert len(result.blogs) == 1
     assert result.blogs[0]["slug"] == "routine-blog"
+    assert len(result.symptom_keywords) == 2
+    assert result.symptom_keywords[0] == {"keyword": "oily", "highlighted": True}
