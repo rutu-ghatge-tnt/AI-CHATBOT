@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 
 from app.hlhp.config import hl_settings
 from app.hlhp.services import open_meteo_uv
+from app.hlhp.services.cpcb_aqi import aqi_from_weatherapi_air_quality
 from app.hlhp.services.weather_http import get_json
 from app.hlhp.services.weather_quota import PROVIDER_WEATHERAPI
 from app.hlhp.utils.cache import get_cached, set_cached
@@ -49,25 +50,8 @@ def _to_int(value, default: int) -> int:
 
 
 def aqi_from_air_quality(aq: dict | None, *, fallback: int = 50) -> int:
-    """Map WeatherAPI air_quality block to a single AQI integer (CPCB-ish scale)."""
-    if not aq:
-        return fallback
-    pm25 = aq.get("pm2_5")
-    if pm25 is not None:
-        v = float(pm25)
-        if v <= 30:
-            return max(1, int(round(v * 1.6)))
-        if v <= 60:
-            return int(round(48 + (v - 30) * 1.4))
-        if v <= 90:
-            return int(round(90 + (v - 60) * 1.5))
-        if v <= 120:
-            return int(round(135 + (v - 90) * 1.7))
-        return int(round(min(400, 186 + (v - 120) * 2.0)))
-    epa = aq.get("us-epa-index")
-    if epa is not None:
-        return {1: 45, 2: 90, 3: 140, 4: 200, 5: 300, 6: 400}.get(int(epa), fallback)
-    return fallback
+    """Map WeatherAPI air_quality block to CPCB National AQI (0–500)."""
+    return aqi_from_weatherapi_air_quality(aq, fallback=fallback)
 
 
 def _aqi_from_hourly(hours: list[dict], *, fallback: int) -> int:

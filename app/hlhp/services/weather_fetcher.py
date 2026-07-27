@@ -1,6 +1,7 @@
 """HLHP environmental fetch.
 
 Metrics (temp / humidity / AQI / wind) come from WeatherAPI (`WEATHERAPI_KEY`).
+AQI is CPCB National AQI computed from WeatherAPI pollutant concentrations.
 UV comes from Open-Meteo CAMS (WeatherAPI UV kept only as fallback).
 Skintruth location-weather is used only for place labels + background/animal imagery.
 """
