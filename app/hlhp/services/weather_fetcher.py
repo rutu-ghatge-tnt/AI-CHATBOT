@@ -25,7 +25,8 @@ from app.hlhp.utils.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
-CACHE_KEY_PREFIX = "hl:weather:v2"
+# v3: CPCB NAQI from all WeatherAPI pollutants (invalidates old pm2.5-shortcut cache)
+CACHE_KEY_PREFIX = "hl:weather:v3"
 
 
 def _pick_first(data: dict, keys: list[str], default=None):
