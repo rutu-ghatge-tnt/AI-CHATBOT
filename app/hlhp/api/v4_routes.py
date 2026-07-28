@@ -60,7 +60,7 @@ async def upload_selfie(
     date: str = Form(..., description="Local calendar day YYYY-MM-DD"),
     user: dict = Depends(hlhp_authenticated_user),
 ):
-    """Upsert today's selfie — one per user+day under s3://…/HLHP-LOG/{user}/{date}.jpg."""
+    """Upsert today's selfie — one per user+day under s3://…/HLHP-LOG/{user}/{date}_{HHMMSS}.jpg."""
     uid = user_id_from_auth(user)
     return await upsert_daily_selfie(uid, date, file)
 

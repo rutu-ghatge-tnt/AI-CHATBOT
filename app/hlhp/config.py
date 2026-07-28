@@ -38,11 +38,16 @@ class HLSettings:
         "false",
         "no",
     }
-    SKINBB_API_BASE_URL = (
-        os.getenv("SKINBB_API_BASE_URL")
-        or os.getenv("NEXT_PUBLIC_API_URL")
-        or "https://api.skintruth.in"
-    ).rstrip("/")
+    # Same Node API base as Label Looker — no separate Learn-only env var.
+    # Property so dotenv / process env updates are picked up after import.
+    @property
+    def SKINBB_API_BASE_URL(self) -> str:
+        return (
+            os.getenv("SKIN_BB_BASE_URL")
+            or os.getenv("CREDITS_API_BASE_URL")
+            or os.getenv("SERVER_URL")
+            or "https://api.skintruth.in"
+        ).strip().rstrip("/")
     KNOWLEDGE_FEED_ENABLED = os.getenv("HLHP_KNOWLEDGE_FEED_ENABLED", "true").lower() not in {
         "0",
         "false",
