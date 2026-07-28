@@ -55,9 +55,25 @@ def _validate_date(date_iso: str) -> str:
     return d
 
 
-def selfie_object_key(user_id: str, date_iso: str) -> str:
+def legacy_selfie_object_key(user_id: str, date_iso: str) -> str:
+    """Pre-timestamp path: HLHP-LOG/{user}/{YYYY-MM-DD}.jpg"""
     settings = get_hlhp_settings()
     return f"{settings.selfie_s3_prefix}/{_safe_user_id(user_id)}/{_validate_date(date_iso)}.jpg"
+
+
+def selfie_object_key(
+    user_id: str,
+    date_iso: str,
+    *,
+    when: datetime | None = None,
+) -> str:
+    """S3 key with calendar day + UTC time: HLHP-LOG/{user}/{YYYY-MM-DD}_{HHMMSS}.jpg"""
+    settings = get_hlhp_settings()
+    stamp = (when or datetime.now(timezone.utc)).astimezone(timezone.utc).strftime("%H%M%S")
+    return (
+        f"{settings.selfie_s3_prefix}/{_safe_user_id(user_id)}/"
+        f"{_validate_date(date_iso)}_{stamp}.jpg"
+    )
 
 
 def public_selfie_url(key: str) -> str:
@@ -99,11 +115,15 @@ async def ensure_selfie_metadata(user_id: str, date_iso: str, *, body: bytes | N
     if not data:
         return None
 
-    key = selfie_object_key(user_id, date_iso)
+    now = datetime.now(timezone.utc)
+    existing = await _col().find_one({"user_id": user_id, "date": date_iso}, {"s3_key": 1})
+    # Prefer the stored key so repair does not orphan a timed S3 object.
+    key = str((existing or {}).get("s3_key") or "").strip() or selfie_object_key(
+        user_id, date_iso, when=now
+    )
     # Keep local canonical; refresh S3 so other hosts can resolve after deploy.
     _put_local(user_id, date_iso, data)
     s3_ok = _put_s3(key, data)
-    now = datetime.now(timezone.utc)
     url = media_api_url(date_iso)
     doc = {
         "user_id": user_id,
@@ -204,15 +224,26 @@ def resolve_selfie_bytes(
     if local:
         return local, "ok"
 
-    key = (s3_key or "").strip() or selfie_object_key(user_id, date_iso)
-    status, body = _get_s3_bytes(key)
-    if status == "ok" and body:
-        try:
-            _put_local(user_id, date_iso, body)
-        except OSError as exc:
-            logger.warning("Failed to rehydrate local selfie cache %s: %s", key, exc)
-        return body, "ok"
-    return None, status
+    key = (s3_key or "").strip()
+    keys_to_try = [key] if key else []
+    # Legacy date-only objects (no Mongo s3_key / pre-timestamp uploads).
+    legacy = legacy_selfie_object_key(user_id, date_iso)
+    if legacy not in keys_to_try:
+        keys_to_try.append(legacy)
+
+    last_status = "missing"
+    for try_key in keys_to_try:
+        status, body = _get_s3_bytes(try_key)
+        last_status = status
+        if status == "ok" and body:
+            try:
+                _put_local(user_id, date_iso, body)
+            except OSError as exc:
+                logger.warning("Failed to rehydrate local selfie cache %s: %s", try_key, exc)
+            return body, "ok"
+        if status == "unavailable":
+            return None, "unavailable"
+    return None, last_status
 
 
 async def _normalize_jpeg(upload: UploadFile) -> bytes:
@@ -306,15 +337,20 @@ def _delete_s3(key: str) -> None:
 async def upsert_daily_selfie(user_id: str, date_iso: str, upload: UploadFile) -> dict[str, Any]:
     """One selfie per user+day. Local cache for previews; S3 when credentials allow."""
     date_iso = _validate_date(date_iso)
-    key = selfie_object_key(user_id, date_iso)
+    now = datetime.now(timezone.utc)
+    key = selfie_object_key(user_id, date_iso, when=now)
     body = await _normalize_jpeg(upload)
 
+    existing = await _col().find_one({"user_id": user_id, "date": date_iso}, {"s3_key": 1})
+    old_key = str((existing or {}).get("s3_key") or "").strip()
+    # Drop previous timed object + legacy date-only key so retakes do not leave orphans.
+    for stale in {old_key, legacy_selfie_object_key(user_id, date_iso)} - {"", key}:
+        _delete_s3(stale)
+
     _put_local(user_id, date_iso, body)
-    _delete_s3(key)
     s3_ok = _put_s3(key, body)
 
     url = media_api_url(date_iso)
-    now = datetime.now(timezone.utc)
     doc = {
         "user_id": user_id,
         "date": date_iso,
@@ -412,7 +448,8 @@ async def get_selfie_for_date(user_id: str, date_iso: str) -> dict[str, Any] | N
         return {
             "date": date_iso,
             "url": media_api_url(date_iso),
-            "s3_key": (doc or {}).get("s3_key") or selfie_object_key(user_id, date_iso),
+            "s3_key": (doc or {}).get("s3_key")
+            or legacy_selfie_object_key(user_id, date_iso),
         }
     if doc and status == "missing":
         if read_local_selfie_bytes(user_id, date_iso):
@@ -442,11 +479,13 @@ async def read_selfie_bytes(user_id: str, date_iso: str) -> bytes | None:
 
 async def delete_daily_selfie(user_id: str, date_iso: str) -> dict[str, Any]:
     date_iso = _validate_date(date_iso)
-    key = selfie_object_key(user_id, date_iso)
     doc = await _col().find_one({"user_id": user_id, "date": date_iso})
-    if doc and doc.get("s3_key"):
-        key = doc["s3_key"]
-    _delete_s3(key)
+    keys = {
+        str((doc or {}).get("s3_key") or "").strip(),
+        legacy_selfie_object_key(user_id, date_iso),
+    }
+    for key in keys - {""}:
+        _delete_s3(key)
     _delete_local(user_id, date_iso)
     result = await _col().delete_one({"user_id": user_id, "date": date_iso})
     return {"date": date_iso, "deleted": result.deleted_count > 0 or True}
