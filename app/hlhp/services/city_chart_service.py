@@ -238,6 +238,8 @@ async def _with_open_meteo_slot_uv(
     metrics: dict[str, Any] | None,
     payload: dict | None,
     date_iso: str,
+    *,
+    uv_map: dict[tuple[str, int], float] | None = None,
 ) -> dict[str, Any] | None:
     """Keep WeatherAPI temp/AQI/wind; replace slot-average UV with Open-Meteo CAMS."""
     if not isinstance(metrics, dict) or not isinstance(payload, dict):
@@ -250,19 +252,62 @@ async def _with_open_meteo_slot_uv(
     except ValueError:
         return metrics
     lat, lon = coords
-    uv_map = await open_meteo_uv.fetch_hourly_uv_map(
-        lat,
-        lon,
-        start=day,
-        end=day,
-        timezone_id="Asia/Kolkata",
-    )
+    if uv_map is None:
+        uv_map = await open_meteo_uv.fetch_hourly_uv_map(
+            lat,
+            lon,
+            start=day,
+            end=day,
+            timezone_id="Asia/Kolkata",
+        )
     avg = open_meteo_uv.slot_uv_average(uv_map, date_iso, SFI_SLOT_HOURS)
     if avg is None:
         return metrics
     updated = dict(metrics)
     updated["uv_index"] = avg
     return updated
+
+
+async def _apply_open_meteo_uv_pair(
+    today: dict[str, Any] | None,
+    yesterday: dict[str, Any] | None,
+    today_raw: dict | None,
+    yday_raw: dict | None,
+    today_iso: str,
+    yesterday_iso: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """One Open-Meteo range fetch for today+yesterday when coords are available."""
+    payload = today_raw if isinstance(today_raw, dict) else (
+        yday_raw if isinstance(yday_raw, dict) else None
+    )
+    coords = open_meteo_uv.coords_from_weatherapi_payload(payload)
+    if not coords:
+        return today, yesterday
+    try:
+        start = date.fromisoformat(yesterday_iso)
+        end = date.fromisoformat(today_iso)
+    except ValueError:
+        return today, yesterday
+    if end < start:
+        start, end = end, start
+    lat, lon = coords
+    uv_map = await open_meteo_uv.fetch_hourly_uv_map(
+        lat,
+        lon,
+        start=start,
+        end=end,
+        timezone_id="Asia/Kolkata",
+    )
+    today = await _with_open_meteo_slot_uv(
+        today, today_raw if isinstance(today_raw, dict) else None, today_iso, uv_map=uv_map
+    )
+    yesterday = await _with_open_meteo_slot_uv(
+        yesterday,
+        yday_raw if isinstance(yday_raw, dict) else None,
+        yesterday_iso,
+        uv_map=uv_map,
+    )
+    return today, yesterday
 
 
 async def _city_day_averages(
@@ -289,11 +334,13 @@ async def _city_day_averages(
     yesterday = (
         _average_slot_metrics(yday_raw, yesterday_iso) if isinstance(yday_raw, dict) else None
     )
-    today = await _with_open_meteo_slot_uv(
-        today, today_raw if isinstance(today_raw, dict) else None, today_iso
-    )
-    yesterday = await _with_open_meteo_slot_uv(
-        yesterday, yday_raw if isinstance(yday_raw, dict) else None, yesterday_iso
+    today, yesterday = await _apply_open_meteo_uv_pair(
+        today,
+        yesterday,
+        today_raw if isinstance(today_raw, dict) else None,
+        yday_raw if isinstance(yday_raw, dict) else None,
+        today_iso,
+        yesterday_iso,
     )
     result = {
         "city": city,

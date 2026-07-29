@@ -88,5 +88,21 @@ class HLSettings:
         except ValueError:
             return 10_000
 
+    @property
+    def OPEN_METEO_MAX_CONCURRENT(self) -> int:
+        """Max in-flight Open-Meteo HTTP calls per process (1 = fully serial)."""
+        try:
+            return max(1, int(os.getenv("HLHP_OPEN_METEO_MAX_CONCURRENT", "1")))
+        except ValueError:
+            return 1
+
+    @property
+    def OPEN_METEO_MIN_INTERVAL_MS(self) -> int:
+        """Minimum gap between Open-Meteo requests (ms). 0 disables pacing."""
+        try:
+            return max(0, int(os.getenv("HLHP_OPEN_METEO_MIN_INTERVAL_MS", "200")))
+        except ValueError:
+            return 200
+
 
 hl_settings = HLSettings()
