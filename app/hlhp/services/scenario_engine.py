@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Literal
@@ -171,8 +173,25 @@ class ScenarioEvaluation:
     life_stage: str | None = None
 
 
+def _normalize_band_range(range_str: str) -> str:
+    """Strip units / dashes so '<5°C', '20–27°C', '11+' parse cleanly."""
+    r = (
+        str(range_str)
+        .replace("°C", "")
+        .replace("%", "")
+        .replace("–", "-")
+        .replace("—", "-")
+        .strip()
+    )
+    # Drop a lone trailing C left by broken degree glyphs (e.g. "5-14C").
+    if re.search(r"\dC$", r, flags=re.IGNORECASE):
+        r = r[:-1]
+    return r.strip()
+
+
 def value_in_band(range_str: str, val: float) -> bool:
-    r = str(range_str).replace("°C", "").replace("%", "").replace("–", "-").replace("—", "-").strip()
+    """Exact inclusive match against a single library range string."""
+    r = _normalize_band_range(range_str)
     if r.startswith("<"):
         return val < float(r[1:])
     if r.endswith("+"):
@@ -185,12 +204,53 @@ def value_in_band(range_str: str, val: float) -> bool:
     return False
 
 
+def _band_partition_start(range_str: str) -> float:
+    """Lower threshold for a continuous partition of the factor axis.
+
+    Library sheets publish inclusive integer ranges with 1° / 1-point holes
+    (e.g. Optimal 20–27 then Warm 28–34). Falling through those holes used to
+    return the last row (Extreme Heat / Severe / …). Instead we treat each
+    band as owning [start, next_start) so every finite value maps to exactly
+    one band.
+    """
+    r = _normalize_band_range(range_str)
+    if r.startswith("<"):
+        return float("-inf")
+    if r.startswith(">"):
+        return math.nextafter(float(r[1:]), float("inf"))
+    if r.endswith("+"):
+        return float(r[:-1])
+    if "-" in r:
+        return float(r.split("-", 1)[0])
+    return float(r)
+
+
 def band_for_value(store: ScenarioStore, factor: str, val: float) -> dict[str, Any]:
     rows = store.bands.get(factor, [])
+    if not rows:
+        return {"label": "?", "range": "", "points": 0, "key": "unknown"}
+
+    # Prefer an exact sheet match when the published range already covers val.
     for row in rows:
         if value_in_band(str(row.get("range", "")), val):
             return row
-    return rows[-1] if rows else {"label": "?", "range": "", "points": 0, "key": "unknown"}
+
+    # Gap / open-edge fallback: continuous lower-bound partition — never the
+    # last sheet row (that wrongly labelled ~27.1°C as Extreme Heat).
+    ordered = sorted(
+        (
+            (_band_partition_start(str(row.get("range", ""))), idx, row)
+            for idx, row in enumerate(rows)
+        ),
+        key=lambda item: (item[0], item[1]),
+    )
+    chosen = ordered[0][2]
+    for start, _idx, row in ordered:
+        if val >= start:
+            chosen = row
+        else:
+            break
+    return chosen
 
 
 def driver_states(store: ScenarioStore, env: EnvironmentalData) -> list[DriverState]:
