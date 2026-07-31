@@ -3,21 +3,23 @@ Clear catalog product_analyses cache for one or more product ids.
 
 Usage (from AI-Tools root):
   python scripts/clear_product_analysis_cache.py 6a0c4108c279308586234325
-  python scripts/clear_product_analysis_cache.py --production 6a0c4108c279308586234325
   python scripts/clear_product_analysis_cache.py --dry-run 6a0c4108c279308586234325
 
-Uses MONGO_URI by default; --production uses PRODUCTION_MONGO_URI.
+Uses MONGO_URI from .env (same as local and production).
+Optional: --mongo-uri to override.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 from bson import ObjectId
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -29,8 +31,12 @@ load_dotenv(ROOT / ".env")
 def main() -> int:
     parser = argparse.ArgumentParser(description="Delete product_analyses docs for product ids")
     parser.add_argument("product_ids", nargs="+", help="Mongo product ObjectId(s)")
-    parser.add_argument("--production", action="store_true", help="Use PRODUCTION_MONGO_URI")
     parser.add_argument("--dry-run", action="store_true", help="Show matches only")
+    parser.add_argument(
+        "--mongo-uri",
+        default=None,
+        help="Override MONGO_URI",
+    )
     parser.add_argument(
         "--db",
         default=None,
@@ -38,22 +44,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    import os
-
-    if args.production:
-        uri = (os.getenv("PRODUCTION_MONGO_URI") or "").strip().strip('"')
-        label = "PRODUCTION_MONGO_URI"
-    else:
-        uri = (os.getenv("MONGO_URI") or os.getenv("MONGODB_URI") or "").strip()
-        label = "MONGO_URI"
+    uri = (args.mongo_uri or os.getenv("MONGO_URI") or os.getenv("MONGODB_URI") or "").strip().strip('"')
     if not uri:
-        print(f"Missing {label}")
+        print("Missing MONGO_URI (or pass --mongo-uri)")
         return 1
 
     db_name = (args.db or os.getenv("DB_NAME") or "skin_bb").strip()
+    source = "--mongo-uri" if args.mongo_uri else "MONGO_URI"
     client = MongoClient(uri, serverSelectionTimeoutMS=15000)
     db = client[db_name]
-    db.command("ping")
+    try:
+        db.command("ping")
+    except ServerSelectionTimeoutError as e:
+        print(f"Cannot reach Mongo ({source}): {e}")
+        return 1
+
     coll = db["product_analyses"]
 
     total = 0
@@ -76,7 +81,7 @@ def main() -> int:
         total += res.deleted_count
         print(f"  deleted={res.deleted_count}")
 
-    print(f"\nDone via {label}/{db_name}. deleted_total={total} dry_run={args.dry_run}")
+    print(f"\nDone via {source}/{db_name}. deleted_total={total} dry_run={args.dry_run}")
     client.close()
     return 0
 
