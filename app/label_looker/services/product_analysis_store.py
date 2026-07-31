@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 from app.label_looker.core.settings import get_label_looker_settings
+from app.label_looker.services.analysis_cache_guards import (
+    is_analysis_fresh_for_product,
+    sanitize_ingredient_categorization,
+)
 
 
 def _normalize_product_ref(product_id: Any) -> Any | None:
@@ -44,12 +48,25 @@ async def find_product_analysis(
     *,
     coll: AsyncIOMotorCollection,
     product_ref: Any,
+    product_updated: datetime | None = None,
+    delete_if_stale: bool = True,
 ) -> dict[str, Any] | None:
+    """
+    Load a successful catalog analysis.
+
+    When product_updated is provided and the cache is older than that timestamp,
+    optionally delete the stale catalog cache and return None so callers regenerate.
+    """
     ref = _normalize_product_ref(product_ref)
     if ref is None:
         return None
-    doc = await coll.find_one(product_analysis_lookup_filter(ref))
+    filt = product_analysis_lookup_filter(ref)
+    doc = await coll.find_one(filt)
     if not is_successful_product_analysis(doc):
+        return None
+    if not is_analysis_fresh_for_product(doc, product_updated):
+        if delete_if_stale:
+            await coll.delete_many(filt)
         return None
     return doc
 
@@ -70,15 +87,20 @@ async def upsert_product_analysis(
     ref = _normalize_product_ref(product_ref)
     if ref is None:
         return
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     product_name = None
     if isinstance(product, dict):
         product_name = product.get("productName") or product.get("name")
+    ing_list = [str(x) for x in ingredients] if isinstance(ingredients, list) else []
+    cleaned_analytic, _ = sanitize_ingredient_categorization(
+        analytic_detail if isinstance(analytic_detail, dict) else {},
+        ing_list,
+    )
     set_doc: dict[str, Any] = {
         "productId": ref,
         "productName": product_name,
-        "analyticDetail": analytic_detail,
-        "ingredients": ingredients,
+        "analyticDetail": cleaned_analytic,
+        "ingredients": ing_list,
         "specificType": specific_type,
         "mainBenefit": main_benefit,
         "source": source,

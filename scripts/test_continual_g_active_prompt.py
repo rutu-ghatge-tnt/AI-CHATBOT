@@ -62,7 +62,6 @@ ALL_INGREDIENTS = [
     "Ethylhexylglycerin",
     "Tetrahydrocurcumin",
     "Fragrance",
-    "BHT",
 ]
 
 # Alias map for marketing names → likely INCI / branded names in DB

@@ -67,6 +67,8 @@ Analyze the following {st} formula for {mb}. Generate a response in {lg}. Retain
            - Unknown (if source cannot be confirmed or if multiple sources available) => with key "unknown"           
  
         Note: Do not include water in any category
+        Note: For ingredientCategorization, ONLY use ingredient names that appear in the Ingredient list below.
+              Do not invent, infer, expand, or add related ingredients (for example common stabilizers or fragrance components not listed).
  
         Ingredient list:  {ingredients_text}
 {dossiers_block}

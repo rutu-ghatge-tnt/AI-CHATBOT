@@ -400,17 +400,40 @@ async def _count_scans_today(coll: AsyncIOMotorCollection, profile_url: str | No
     return await count_scans_today(coll, profile_url)
 
 
-async def _find_latest_product_analysis_detail(*, scan_coll: AsyncIOMotorCollection, product_ref: Any | None) -> dict[str, Any] | None:
+async def _find_latest_product_analysis_detail(
+    *,
+    scan_coll: AsyncIOMotorCollection,
+    product_ref: Any | None,
+    product: dict[str, Any] | None = None,
+    current_ingredients: list[str] | None = None,
+) -> dict[str, Any] | None:
     if product_ref is None:
         return None
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
+    from app.label_looker.services.analysis_cache_guards import (
+        is_analysis_fresh_for_product,
+        product_updated_at,
+        sanitize_ingredient_categorization,
+    )
     from app.label_looker.services.product_analysis_store import find_product_analysis
 
+    def _clean(analytic: dict[str, Any], ingredients: list[str] | None) -> dict[str, Any]:
+        allowed = list(current_ingredients) if current_ingredients is not None else list(ingredients or [])
+        cleaned, _ = sanitize_ingredient_categorization(analytic, allowed)
+        return cleaned
+
+    product_ts = product_updated_at(product)
     db = get_scanner_db()
-    stored = await find_product_analysis(coll=db[s.coll_product_analysis], product_ref=product_ref)
+    stored = await find_product_analysis(
+        coll=db[s.coll_product_analysis],
+        product_ref=product_ref,
+        product_updated=product_ts,
+        delete_if_stale=True,
+    )
     if stored and isinstance(stored.get("analyticDetail"), dict):
-        return stored.get("analyticDetail")
+        ings = stored.get("ingredients") if isinstance(stored.get("ingredients"), list) else []
+        return _clean(stored.get("analyticDetail") or {}, ings)
     doc = await scan_coll.find_one(
         {
             "productId": product_ref,
@@ -421,8 +444,13 @@ async def _find_latest_product_analysis_detail(*, scan_coll: AsyncIOMotorCollect
     )
     if not doc:
         return None
+    if not is_analysis_fresh_for_product(doc, product_ts):
+        return None
     analytic = doc.get("analyticDetail")
-    return analytic if isinstance(analytic, dict) else None
+    if not isinstance(analytic, dict):
+        return None
+    ings = doc.get("ingredients") if isinstance(doc.get("ingredients"), list) else []
+    return _clean(analytic, ings)
 
 
 async def get_profile(*, user: dict[str, Any], product_id: str | None = None) -> dict[str, Any]:
@@ -864,7 +892,17 @@ async def _score_product_impl(
     if linked_analysis and isinstance(linked_analysis.get("analyticDetail"), dict):
         legacy_analytic_detail = linked_analysis["analyticDetail"]
     else:
-        legacy_analytic_detail = await _find_latest_product_analysis_detail(scan_coll=scan_coll, product_ref=product_ref)
+        legacy_analytic_detail = await _find_latest_product_analysis_detail(
+            scan_coll=scan_coll,
+            product_ref=product_ref,
+            product=product if isinstance(product, dict) else None,
+            current_ingredients=[
+                str(x.get("inci_name") or x.get("name") or x)
+                if isinstance(x, dict)
+                else str(x)
+                for x in (tile_product.get("ingredients") or [])
+            ],
+        )
     analysis_ingredients = (
         linked_analysis.get("ingredients")
         if linked_analysis and isinstance(linked_analysis.get("ingredients"), list)
