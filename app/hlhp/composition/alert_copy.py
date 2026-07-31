@@ -285,6 +285,77 @@ def compose_outlook_subline(
     return out if out.endswith(".") else f"{out}."
 
 
+_SKIN_HINT_RE = re.compile(
+    r"\b(your\s+(?:dry|oily|sensitive|combination|normal)\s+skin|"
+    r"t-zone|acne-prone|eczema-prone|moisturis|breakout|pores?)\b",
+    re.I,
+)
+
+
+def _personal_tip_clause(sentences: list[str]) -> str | None:
+    """Prefer the clause that carries skin/concern advice, not the shared weather opener."""
+    if not sentences:
+        return None
+    if len(sentences) == 1:
+        return sentences[0]
+    # Workbook L0/L1 are usually: env opener → skin/concern tip → optional action.
+    for sentence in reversed(sentences[1:]):
+        if len(sentence) >= 12:
+            return sentence
+    return sentences[-1]
+
+
+def _skin_clause_from_l1(sentences: list[str]) -> str | None:
+    if not sentences:
+        return None
+    for sentence in sentences[1:]:
+        if _SKIN_HINT_RE.search(sentence) and len(sentence) >= 12:
+            return sentence
+    if len(sentences) >= 2 and len(sentences[1]) >= 12:
+        return sentences[1]
+    return None
+
+
+def compose_scenario_strip_headline(
+    *,
+    l0: str | None,
+    l1: str | None,
+    guest_mode: bool,
+) -> str:
+    """Home-strip line that surfaces skin/concern tips instead of only shared weather copy.
+
+    Guest library L0 is identical across skins; skin wording lives in L1.
+    Personalised L0 shares an env opener but differs in the tip sentence — lead with that tip.
+    """
+    l0_text = (l0 or "").strip()
+    l1_text = (l1 or "").strip()
+    l0_parts = _split_sentences(l0_text)
+    l1_parts = _split_sentences(l1_text)
+
+    if not guest_mode:
+        tip = _personal_tip_clause(l0_parts)
+        env = l0_parts[0] if l0_parts else None
+        if tip and env and tip.lower() != env.lower():
+            return _strip_clauses(f"{tip} {env}")
+        if tip:
+            return _strip_clauses(tip)
+        if l1_text:
+            return _strip_clauses(l1_text)
+        return "Open for today's skin outlook"
+
+    skin = _skin_clause_from_l1(l1_parts)
+    action = _personal_tip_clause(l0_parts) if len(l0_parts) >= 2 else (l0_parts[-1] if l0_parts else None)
+    if skin and action and skin.lower() != action.lower():
+        return _strip_clauses(f"{skin} {action}")
+    if skin:
+        return _strip_clauses(skin)
+    if l0_text:
+        return _strip_clauses(l0_text)
+    if l1_text:
+        return _strip_clauses(l1_text)
+    return "Open for today's skin outlook"
+
+
 def compose_strip_headline(
     finding: EvidenceFinding | None,
     *,

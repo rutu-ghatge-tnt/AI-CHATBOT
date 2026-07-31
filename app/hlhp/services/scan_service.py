@@ -51,6 +51,7 @@ from app.hlhp.services.weather_fetcher import fetch_environmental_data
 from app.hlhp.services.weather_visuals import extract_weather_visuals
 from app.hlhp.services.v4_scoring_engine import V4Evaluation
 from app.hlhp.services.sfi_unified import resolve_sfi
+from app.hlhp.composition.alert_copy import compose_scenario_strip_headline
 from app.hlhp.composition.vocabulary import mood_headline, symptom_chips
 from app.hlhp.composition.lane_state import resolve_lane_states
 from app.hlhp.composition.feeds import seasonal_tags_for_city
@@ -136,10 +137,17 @@ def _scenario_alert_tile(
     scenario: ScenarioEvaluation,
     *,
     day_phase: DayPhase,
+    guest_mode: bool = True,
 ) -> AlertTile:
     cell = scenario.cell or {}
     body = scenario.flash_alert.l1 or scenario.flash_alert.l0
-    title = scenario.flash_alert.l0 or (body.split(".")[0].strip() if body else scenario.flash_alert.mode)
+    title = compose_scenario_strip_headline(
+        l0=scenario.flash_alert.l0,
+        l1=scenario.flash_alert.l1,
+        guest_mode=guest_mode,
+    ) or scenario.flash_alert.l0 or (
+        body.split(".")[0].strip() if body else scenario.flash_alert.mode
+    )
     if day_phase == "evening":
         lower = f"{title} {body}".lower()
         if any(tok in lower for tok in _NIGHT_BLOCK):
@@ -566,12 +574,16 @@ async def run_scan(req: ScanRequest, *, auth_user: dict | None = None) -> ScanRe
         local_time=req.local_time,
         first_name=ui.get("user_first_name"),
     )
-    alert = _scenario_alert_tile(scenario, day_phase=day_phase)
+    alert = _scenario_alert_tile(scenario, day_phase=day_phase, guest_mode=guest_mode)
     if coach_wrap is not None:
         alert = alert.model_copy(update={"coach_wrap": coach_wrap})
     nugget_out = _pick_scenario_nugget(scenario_store, scenario, req.user_id)
     mood = _mood_for_band(v4_eval.mode)
-    strip_line = scenario.flash_alert.l0 or mood_headline(mood)
+    strip_line = compose_scenario_strip_headline(
+        l0=scenario.flash_alert.l0,
+        l1=scenario.flash_alert.l1,
+        guest_mode=guest_mode,
+    ) or mood_headline(mood)
 
     resp = ScanResponse(
         snapshot_version=scenario_store.version,
@@ -629,7 +641,7 @@ async def run_symptom_tap(req: SymptomTapRequest) -> SymptomTapResponse:
         guest_mode=guest_mode,
         local_time=req.local_time,
     )
-    tile = _scenario_alert_tile(scenario, day_phase=day_phase)
+    tile = _scenario_alert_tile(scenario, day_phase=day_phase, guest_mode=guest_mode)
     decode = _SYMPTOM_SCENARIO_HINTS.get(
         keyword,
         f"Today's {scenario.dominant.name.lower()} reading can shift how skin feels hour to hour.",
