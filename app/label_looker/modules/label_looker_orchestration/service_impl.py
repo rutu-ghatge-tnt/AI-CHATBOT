@@ -122,6 +122,11 @@ async def get_text_analysis(*, user: dict[str, Any], scan_id: str) -> dict[str, 
 
     s = get_label_looker_settings()
     from app.label_looker.core.db import get_scanner_db
+    from app.label_looker.services.analysis_cache_guards import sanitize_ingredient_categorization
+    from app.label_looker.modules.product_analysis.analysis_service_impl import (
+        _fetch_product_by_id,
+        _ingredients_from_product,
+    )
 
     db = get_scanner_db()
     doc = await db[s.coll_scan_analysis].find_one({"_id": ObjectId(scan_id)})
@@ -132,13 +137,37 @@ async def get_text_analysis(*, user: dict[str, Any], scan_id: str) -> dict[str, 
     analytic = doc.get("analyticDetail")
     if not isinstance(analytic, dict):
         raise ScannerApiError(404, "Ingredient analysis not available for this scan")
+
     ingredients = doc.get("ingredients") or doc.get("extractedIngredients") or []
+    if not isinstance(ingredients, list):
+        ingredients = []
+
+    product = await _fetch_product_by_id(
+        products_coll=db[s.coll_products],
+        product_id=doc.get("productId"),
+    )
+    allowed = list(ingredients)
+    if product:
+        from_product = await _ingredients_from_product(
+            product=product,
+            branded_ingredients_coll=db[s.coll_branded_ingredient],
+            ingredient_coll=db[s.coll_ingredient],
+        )
+        if from_product:
+            allowed = from_product
+    cleaned, changed = sanitize_ingredient_categorization(analytic, allowed)
+    if changed:
+        await db[s.coll_scan_analysis].update_one(
+            {"_id": ObjectId(scan_id)},
+            {"$set": {"analyticDetail": cleaned}},
+        )
+
     return {
         "scanId": scan_id,
         "userScanId": scan_id,
         "productId": str(doc.get("productId")) if doc.get("productId") is not None else None,
-        "analyticDetail": analytic,
-        "ingredients": ingredients if isinstance(ingredients, list) else [],
+        "analyticDetail": cleaned,
+        "ingredients": allowed if allowed else ingredients,
         "cacheHit": bool(doc.get("analysisCacheHit")),
         "cacheType": doc.get("analysisCacheType"),
     }

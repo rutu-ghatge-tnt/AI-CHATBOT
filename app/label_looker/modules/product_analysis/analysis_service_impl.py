@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from typing import Any
 
@@ -1434,6 +1434,7 @@ async def _ingredient_analysis_from_text_impl(
 
     # Prefer latest successful analysis for same user+product when available.
     # Enables PDP reuse without creating a new scan row or consuming daily quota.
+    # Must still respect product.updatedAt freshness and strip invented categorization names.
     existing_user_product = await _find_user_product_existing_analysis(
         scan_coll=scan_coll,
         user=user,
@@ -1442,7 +1443,22 @@ async def _ingredient_analysis_from_text_impl(
     )
     if existing_user_product:
         existing_analytic = dict(existing_user_product.get("analyticDetail") or {})
-        if existing_analytic:
+        product_ts = product_updated_at(product)
+        if existing_analytic and is_analysis_fresh_for_product(existing_user_product, product_ts):
+            cleaned_analytic, changed = sanitize_ingredient_categorization(
+                existing_analytic, ing_list
+            )
+            if changed:
+                await scan_coll.update_one(
+                    {"_id": existing_user_product.get("_id")},
+                    {
+                        "$set": {
+                            "analyticDetail": cleaned_analytic,
+                            "ingredients": ing_list if ing_list else existing_user_product.get("ingredients"),
+                            "updatedAt": datetime.now(timezone.utc),
+                        }
+                    },
+                )
             existing_ingredients = existing_user_product.get("ingredients")
             if not isinstance(existing_ingredients, list):
                 existing_ingredients = []
@@ -1470,12 +1486,13 @@ async def _ingredient_analysis_from_text_impl(
                 )
             return {
                 "scanId": str(existing_user_product.get("_id")),
-                "analyticDetail": existing_analytic,
+                "analyticDetail": cleaned_analytic,
                 "ingredients": ingredients_out,
                 "profileValidation": profile_validation,
                 "cacheHit": True,
                 "cacheType": "user_product",
             }
+        # Stale vs product.updatedAt → fall through and regenerate.
 
     from app.label_looker.services.label_looker_scan_store import find_user_product_scan
 
