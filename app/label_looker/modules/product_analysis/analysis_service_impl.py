@@ -26,6 +26,11 @@ from app.label_looker.services.common_flow import (
 from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
 from app.label_looker.services.user_profile_flow import load_full_user_profile, load_merged_user_details, user_details_lookup_filter
 from app.label_looker.services.product_analysis_store import find_product_analysis, upsert_product_analysis
+from app.label_looker.services.analysis_cache_guards import (
+    is_analysis_fresh_for_product,
+    product_updated_at,
+    sanitize_ingredient_categorization,
+)
 from app.label_looker.text_extract import extract_first_json_object
 
 logger = logging.getLogger(__name__)
@@ -826,32 +831,59 @@ async def _resolve_prefetched_product_analysis(
     product_analysis_coll: AsyncIOMotorCollection,
     scan_coll: AsyncIOMotorCollection,
     personalized: bool,
+    product: dict[str, Any] | None = None,
+    current_ingredients: list[str] | None = None,
 ) -> tuple[dict[str, Any], list[str], str, Any | None] | None:
     """
     Return (analyticDetail, ingredients, cacheType, sourceId) from product_analyses
     or legacy scan cache. Catalog store wins over scan_analyses rows.
+
+    If product.updatedAt is newer than the cache timestamp, catalog cache is deleted
+    and skipped so Claude regenerates. Scan fallbacks are skipped (not deleted).
+    Invented categorization names are stripped against the current ingredient list.
     """
     if product_ref is None:
         return None
-    stored = await find_product_analysis(coll=product_analysis_coll, product_ref=product_ref)
+
+    product_ts = product_updated_at(product)
+
+    def _serve(
+        analytic: dict[str, Any],
+        ingredients: list[str],
+        cache_type: str,
+        source_id: Any,
+    ) -> tuple[dict[str, Any], list[str], str, Any | None]:
+        allowed = list(current_ingredients) if current_ingredients is not None else list(ingredients)
+        cleaned, _ = sanitize_ingredient_categorization(analytic, allowed)
+        cleaned = _ensure_profile_match_insights(cleaned, personalized=personalized)
+        return cleaned, ingredients, cache_type, source_id
+
+    stored = await find_product_analysis(
+        coll=product_analysis_coll,
+        product_ref=product_ref,
+        product_updated=product_ts,
+        delete_if_stale=True,
+    )
     if stored:
         analytic = dict(stored.get("analyticDetail") or {})
-        analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
         ingredients = stored.get("ingredients")
         if not isinstance(ingredients, list):
             ingredients = []
-        return analytic, ingredients, "product_catalog", stored.get("_id")
+        return _serve(analytic, ingredients, "product_catalog", stored.get("_id"))
     if not personalized:
         cached = await _find_cached_non_personalized_analysis(
             scan_coll=scan_coll,
             product_ref=product_ref,
         )
         if cached:
+            # Do not delete historical user scans; only skip if older than product.
+            if not is_analysis_fresh_for_product(cached, product_ts):
+                return None
             analytic = dict(cached.get("analyticDetail") or {})
             ingredients = cached.get("ingredients")
             if not isinstance(ingredients, list):
                 ingredients = []
-            return analytic, ingredients, "scan", cached.get("_id")
+            return _serve(analytic, ingredients, "scan", cached.get("_id"))
     return None
 
 
@@ -1190,6 +1222,8 @@ async def _ingredient_analysis_impl(*, body: dict[str, Any], user: dict[str, Any
         product_analysis_coll=product_analysis_coll,
         scan_coll=scan_coll,
         personalized=personalized,
+        product=product,
+        current_ingredients=[str(x) for x in ingredients] if isinstance(ingredients, list) else [],
     )
     if prefetched:
         cached_analytic, cached_ingredients, cache_type, cache_source_id = prefetched
@@ -1493,6 +1527,8 @@ async def _ingredient_analysis_from_text_impl(
         product_analysis_coll=product_analysis_coll,
         scan_coll=scan_coll,
         personalized=personalized,
+        product=product,
+        current_ingredients=list(ing_list),
     )
     if prefetched:
         cached_analytic, cached_ingredients, cache_type, cache_source_id = prefetched

@@ -24,9 +24,12 @@ from app.label_looker.services.active_ingredient_dossiers import (
     format_active_dossiers_for_prompt,
     resolve_active_ingredient_dossiers,
 )
+from app.label_looker.services.analysis_cache_guards import (
+    product_updated_at,
+    sanitize_ingredient_categorization,
+)
 from app.label_looker.services.product_analysis_store import (
     find_product_analysis,
-    is_successful_product_analysis,
     upsert_product_analysis,
 )
 from app.label_looker.text_extract import extract_first_json_object
@@ -103,6 +106,8 @@ async def run_claude_product_analysis(
     raw = "".join(getattr(b, "text", "") for b in msg.content)
     parsed = extract_first_json_object(raw)
     analytic, ing_out = _normalize_analysis_payload(parsed, ing_list)
+    resolved_ings = [str(x) for x in ing_out] if isinstance(ing_out, list) else [str(x) for x in ing_list]
+    analytic, _ = sanitize_ingredient_categorization(analytic, resolved_ings)
     analytic = _apply_db_key_ingredients(analytic, db_key_ingredients)
     analytic = _ensure_profile_match_insights(analytic, personalized=personalized)
     if personalized and body is not None:
@@ -114,7 +119,7 @@ async def run_claude_product_analysis(
             client=cl,
             anthropic_model=model,
         )
-    return analytic, [str(x) for x in ing_out] if isinstance(ing_out, list) else ing_list
+    return analytic, resolved_ings
 
 
 async def analyze_catalog_product(
@@ -135,9 +140,19 @@ async def analyze_catalog_product(
     if product_ref is None:
         raise ScannerApiError(400, "Product document missing _id")
 
+    ing_list, db_key_ingredients = await resolve_product_ingredient_lists(
+        product=product,
+        branded_ingredients_coll=branded_ingredients_coll,
+        ingredient_coll=ingredient_coll,
+    )
+
     if not force:
-        existing = await find_product_analysis(coll=product_analysis_coll, product_ref=product_ref)
-        if is_successful_product_analysis(existing):
+        existing = await find_product_analysis(
+            coll=product_analysis_coll,
+            product_ref=product_ref,
+            product_updated=product_updated_at(product),
+        )
+        if existing is not None:
             return {
                 "productId": str(product_ref),
                 "skipped": True,
@@ -145,11 +160,6 @@ async def analyze_catalog_product(
                 "cacheType": "product_catalog",
             }
 
-    ing_list, db_key_ingredients = await resolve_product_ingredient_lists(
-        product=product,
-        branded_ingredients_coll=branded_ingredients_coll,
-        ingredient_coll=ingredient_coll,
-    )
     if not ing_list:
         await upsert_product_analysis(
             coll=product_analysis_coll,
