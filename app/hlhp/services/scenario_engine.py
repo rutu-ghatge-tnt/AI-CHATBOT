@@ -522,9 +522,9 @@ def lookup_compound_cell(
     skin: str,
     concern: str,
 ) -> dict[str, Any] | None:
+    """Exact concern first, then same concern on Normal skin — never force Acne."""
     keys = [
         f"{slug(scenario_name)}|{slug(skin)}|{slug(concern)}",
-        f"{slug(scenario_name)}|{slug(skin)}|acne",
         f"{slug(scenario_name)}|normal|{slug(concern)}",
     ]
     for key in keys:
@@ -591,8 +591,8 @@ def resolve_alert_cell(
     zone: str | None,
     concern_candidates: list[str] | None = None,
     when: date | None = None,
-) -> tuple[dict[str, Any] | None, str, str | None]:
-    """Return (cell, cell_kind, compound_name)."""
+) -> tuple[dict[str, Any] | None, str, str | None, str]:
+    """Return (cell, cell_kind, compound_name, matched_concern)."""
     compound_index = match_compound_index(store, drivers, zone=zone, when=when)
     compound_name = str(compound_index.get("name", "")) if compound_index else None
     candidates = concern_candidates or [concern]
@@ -601,21 +601,21 @@ def resolve_alert_cell(
         if compound_name:
             cell = lookup_guest_compound_cell(store, compound_name, skin)
             if cell:
-                return cell, "guest_compound", compound_name
+                return cell, "guest_compound", compound_name, concern
         cell = lookup_guest_single_cell(store, drivers, skin)
         if cell:
-            return cell, "guest_single", None
-        return None, "guest_single", None
+            return cell, "guest_single", None, concern
+        return None, "guest_single", None, concern
 
     for concern_name in candidates:
         if compound_name:
             cell = lookup_compound_cell(store, compound_name, skin, concern_name)
             if cell:
-                return cell, "compound", compound_name
+                return cell, "compound", compound_name, concern_name
         cell = lookup_master_cell(store, drivers, skin, concern_name)
         if cell:
-            return cell, "master", compound_name
-    return None, "master", compound_name
+            return cell, "master", compound_name, concern_name
+    return None, "master", compound_name, concern
 
 
 def lookup_master_cell(
@@ -624,10 +624,14 @@ def lookup_master_cell(
     skin: str,
     concern: str,
 ) -> dict[str, Any] | None:
+    """Match factor|band|skin|concern — never hijack with an Acne cell.
+
+    Missing concern rows must return None so ``resolve_alert_cell`` can try the
+    user's next concern (e.g. Dryness) instead of a hard-coded Acne tip.
+    """
     dom = dominant_driver(drivers)
     keys = [
         f"{slug(dom.factor)}|{dom.band_key}|{slug(skin)}|{slug(concern)}",
-        f"{slug(dom.factor)}|{dom.band_key}|{slug(skin)}|acne",
         f"{slug(dom.factor)}|{dom.band_key}|normal|{slug(concern)}",
     ]
     for key in keys:
@@ -702,7 +706,7 @@ def evaluate_scenario(
     concern = library_concerns[0]
     zone = store.city_zone.get((city or "").lower())
     when = local_time.date() if local_time is not None else date.today()
-    cell, cell_kind, compound_name = resolve_alert_cell(
+    cell, cell_kind, compound_name, matched_concern = resolve_alert_cell(
         store,
         drivers,
         skin=skin,
@@ -712,6 +716,9 @@ def evaluate_scenario(
         concern_candidates=library_concerns,
         when=when,
     )
+    concern = matched_concern or concern
+    if cell and cell.get("concern"):
+        concern = str(cell.get("concern") or concern)
 
     # Life-stage modifiers adjust cell risk + L2 copy only — never the SFI number.
     # Lazy import avoids circular dependency with sfi_unified.

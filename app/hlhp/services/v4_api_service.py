@@ -160,7 +160,7 @@ async def assemble_today(
     skin = resolve_skin(profile, guest_mode)
     concerns = resolve_library_concerns(profile, guest_mode)
     zone = store.city_zone.get((city or "").lower())
-    cell, cell_kind, compound_name = resolve_alert_cell(
+    cell, cell_kind, compound_name, matched_concern = resolve_alert_cell(
         store,
         drivers,
         skin=skin,
@@ -169,13 +169,16 @@ async def assemble_today(
         zone=zone,
         concern_candidates=concerns,
     )
+    active_concern = matched_concern or concerns[0]
+    if cell and cell.get("concern"):
+        active_concern = str(cell.get("concern") or active_concern)
 
     base_risk = int(cell["risk"]) if cell and isinstance(cell.get("risk"), (int, float)) else (3 if surge_active else 1)
     life_adj = resolve_life_stage_adjustment(
         base_risk,
         profile,
         guest_mode=guest_mode,
-        concern=concerns[0],
+        concern=active_concern,
     )
     flash = build_flash_alert(
         cell,

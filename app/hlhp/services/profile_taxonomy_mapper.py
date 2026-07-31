@@ -79,8 +79,9 @@ _SKIN_CONCERN_BY_DB_SLUG: dict[str, SkinConcern] = {
     "hyperpigmentation": SkinConcern.PIGMENTATION,
     "pigmentation": SkinConcern.PIGMENTATION,
     "pih": SkinConcern.PIGMENTATION,
-    "uneven-skintone": SkinConcern.PIGMENTATION,
-    "uneven-skin-tone": SkinConcern.PIGMENTATION,
+    "uneven-skintone": SkinConcern.DULLNESS,
+    "uneven-skin-tone": SkinConcern.DULLNESS,
+    "uneven-tone": SkinConcern.DULLNESS,
     "melasma": SkinConcern.MELASMA,
     "scars": SkinConcern.PIGMENTATION,
     "scarring": SkinConcern.PIGMENTATION,
@@ -167,11 +168,18 @@ def _infer_skin_concern(key: str) -> SkinConcern | None:
     except ValueError:
         pass
     # Token heuristics for labels / long slugs from Mongo.
-    if any(t in key for t in ("acne", "breakout", "pimple", "blemish")):
+    if any(t in key for t in ("acne", "breakout", "pimple", "blemish")) and "post-acne" not in key and "pih" not in key:
         return SkinConcern.ACNE
     if any(t in key for t in ("melasma",)):
         return SkinConcern.MELASMA
-    if any(t in key for t in ("pigment", "spot", "uneven", "scar", "pih")):
+    # "Uneven skin tone" is a tone/dullness concern — not active acne.
+    if any(t in key for t in ("uneven", "uneven-tone", "uneven_skin_tone", "dull")):
+        return SkinConcern.DULLNESS
+    if any(t in key for t in ("post-acne", "pih", "dark-mark", "dark_mark", "pigment")):
+        return SkinConcern.PIGMENTATION
+    if "spot" in key and "dark" in key:
+        return SkinConcern.PIGMENTATION
+    if any(t in key for t in ("scar",)):
         return SkinConcern.PIGMENTATION
     if any(t in key for t in ("dark-circle", "under-eye", "puffy", "sleep")):
         return SkinConcern.DARK_CIRCLES
@@ -181,8 +189,6 @@ def _infer_skin_concern(key: str) -> SkinConcern | None:
         return SkinConcern.PORES
     if any(t in key for t in ("dry", "dehydr")):
         return SkinConcern.DEHYDRATION
-    if any(t in key for t in ("dull",)):
-        return SkinConcern.DULLNESS
     if any(t in key for t in ("red", "rosacea")):
         return SkinConcern.REDNESS
     if any(t in key for t in ("sensitive", "eczema")):
