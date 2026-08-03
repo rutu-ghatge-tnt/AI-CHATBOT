@@ -71,7 +71,12 @@ def _product_scalar_values(product: dict[str, Any], *keys: str) -> list[str]:
     return out
 
 
-def _marketing_corpus(*, product: dict[str, Any], tag_names: list[str] | None) -> str:
+def _marketing_corpus(
+    *,
+    product: dict[str, Any],
+    tag_names: list[str] | None,
+    extra_labels: list[str] | None = None,
+) -> str:
     parts: list[str] = []
     parts.extend(_product_scalar_values(product, "productName", "name", "title", "primaryConcern"))
     for key in ("benefit", "benefits", "claims", "claim"):
@@ -90,6 +95,7 @@ def _marketing_corpus(*, product: dict[str, Any], tag_names: list[str] | None) -
     if isinstance(description, str) and description.strip():
         parts.append(_strip_html(description))
     parts.extend(tag_names or [])
+    parts.extend(x for x in (extra_labels or []) if isinstance(x, str) and x.strip())
     return " ".join(parts).lower()
 
 
@@ -104,8 +110,9 @@ def match_benefit_labels_from_marketing(
     product: dict[str, Any],
     tag_names: list[str] | None,
     mode: str,
+    extra_labels: list[str] | None = None,
 ) -> list[str]:
-    corpus = _marketing_corpus(product=product, tag_names=tag_names)
+    corpus = _marketing_corpus(product=product, tag_names=tag_names, extra_labels=extra_labels)
     if not corpus.strip():
         return []
     matched: list[str] = []
@@ -132,13 +139,16 @@ def marketing_claim_tokens(
     product: dict[str, Any],
     tag_names: list[str] | None,
     mode: str,
+    extra_labels: list[str] | None = None,
 ) -> set[str]:
     tokens: set[str] = set()
-    for value in _marketing_corpus(product=product, tag_names=tag_names).split():
+    for value in _marketing_corpus(product=product, tag_names=tag_names, extra_labels=extra_labels).split():
         t = _norm_token(value)
         if t:
             tokens.add(t)
-    for label in match_benefit_labels_from_marketing(product=product, tag_names=tag_names, mode=mode):
+    for label in match_benefit_labels_from_marketing(
+        product=product, tag_names=tag_names, mode=mode, extra_labels=extra_labels
+    ):
         tokens.add(_norm_token(label))
     for name in tag_names or []:
         tokens.add(_norm_token(name))
@@ -156,8 +166,21 @@ def build_product_benefit_signals(
     tag_names: list[str] | None = None,
     mode: str = "skincare",
     active_dossiers: list[dict[str, Any]] | None = None,
+    benefit_labels: list[str] | None = None,
+    concern_labels: list[str] | None = None,
 ) -> list[str]:
+    """Build benefit terms used for profile-match scoring.
+
+    ``benefit_labels`` / ``concern_labels`` should be already-resolved catalog
+    display labels (ObjectId refs → "Nourishing", "Dryness", etc.). Without them,
+    ObjectId-only product fields are invisible to scoring even though the PDP
+    shows those labels — causing false Weak / needs-not-covered results.
+    """
     out: list[str] = []
+    # Catalog benefits + concerns first: declared PDP signals must count when selected.
+    for label in list(benefit_labels or []) + list(concern_labels or []):
+        if isinstance(label, str) and label.strip():
+            out.append(label.strip())
     for key in ("benefit", "benefits", "claims", "claim"):
         raw = product.get(key)
         if isinstance(raw, list):
@@ -174,7 +197,17 @@ def build_product_benefit_signals(
     if isinstance(primary, str) and primary.strip():
         out.append(primary.strip())
     out.extend(tag_names or [])
-    out.extend(match_benefit_labels_from_marketing(product=product, tag_names=tag_names, mode=mode))
+    catalog_extras = list(dict.fromkeys(
+        [*(benefit_labels or []), *(concern_labels or [])]
+    ))
+    out.extend(
+        match_benefit_labels_from_marketing(
+            product=product,
+            tag_names=tag_names,
+            mode=mode,
+            extra_labels=catalog_extras,
+        )
+    )
     for row in (tile_product.get("ingredients") or []) + (tile_product.get("key_ingredients") or []):
         if not isinstance(row, dict):
             continue

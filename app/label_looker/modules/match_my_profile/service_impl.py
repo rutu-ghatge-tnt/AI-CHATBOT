@@ -29,6 +29,7 @@ from app.label_looker.services.product_marketing_signals import (
     build_product_benefit_signals,
     resolve_product_tag_names,
 )
+from app.label_looker.services.profile_taxonomy_resolver import resolve_product_catalog_labels
 from app.label_looker.services.active_ingredient_dossiers import resolve_active_ingredient_dossiers
 from app.label_looker.services.tile_content_flow import generate_tiles_with_fallback
 from app.label_looker.services.user_profile_flow import load_full_user_profile, merge_auth_user_details, resolve_users_collection_id, user_details_lookup_filter
@@ -341,7 +342,12 @@ def _stored_triggered_observations(doc: dict[str, Any]) -> list[Any]:
     )
 
 
-def _build_match_product(product: dict[str, Any]) -> dict[str, Any]:
+def _build_match_product(
+    product: dict[str, Any],
+    *,
+    declared_types: list[str] | None = None,
+    claims: list[str] | None = None,
+) -> dict[str, Any]:
     ingredients = product.get("ingredients")
     out_ingredients: list[dict[str, Any]] = []
     if isinstance(ingredients, list):
@@ -372,12 +378,22 @@ def _build_match_product(product: dict[str, Any]) -> dict[str, Any]:
             except (TypeError, ValueError):
                 position = idx
             out_key_ingredients.append({"position": position, "inci_name": name, "functions": row.get("functions") if isinstance(row.get("functions"), list) else [], "addresses": row.get("addresses") if isinstance(row.get("addresses"), list) else []})
+    resolved_types = (
+        [x.lower().strip() for x in declared_types if str(x).strip()]
+        if declared_types is not None
+        else [x.lower() for x in _product_list_values(product, "skinTypes", "skinType")]
+    )
+    resolved_claims = (
+        list(dict.fromkeys(x for x in claims if isinstance(x, str) and x.strip()))
+        if claims is not None
+        else _product_list_values(product, "benefit", "claims")
+    )
     return {
         "brand": str(product.get("brandName") or "SkinBB").strip() or "SkinBB",
         "name": str(product.get("productName") or product.get("name") or "Product").strip() or "Product",
         "category": str(product.get("productType") or "skincare").strip() or "skincare",
-        "declared_for_skin_types": [x.lower() for x in _product_list_values(product, "skinTypes", "skinType")],
-        "claims": _product_list_values(product, "benefit", "claims"),
+        "declared_for_skin_types": resolved_types,
+        "claims": resolved_claims,
         "ingredients": out_ingredients,
         "key_ingredients": out_key_ingredients,
     }
@@ -662,15 +678,41 @@ async def _score_product_impl(
     if mode == "haircare":
         type_value = _safe_scalar(_first_present(details.get("hairType"), body.get("hairType")))
         concerns = _safe_list(_first_present(details.get("hairConcerns"), body.get("hairConcerns")))
-        declared_types = _product_list_values(product, "hairTypes", "hairType")
+        declared_types = await resolve_product_catalog_labels(
+            db=db, product=product, keys=("hairTypes", "hairType")
+        )
+        product_concern_labels = await resolve_product_catalog_labels(
+            db=db, product=product, keys=("hairConcerns",)
+        )
     else:
         type_value = _safe_scalar(_first_present(details.get("skinType"), body.get("skinType")))
         concerns = _safe_list(_first_present(details.get("skinConcerns"), body.get("skinConcerns")))
-        declared_types = _product_list_values(product, "skinTypes", "skinType")
+        declared_types = await resolve_product_catalog_labels(
+            db=db, product=product, keys=("skinTypes", "skinType")
+        )
+        product_concern_labels = await resolve_product_catalog_labels(
+            db=db, product=product, keys=("skinConcerns",)
+        )
     age = _first_present(details.get("age"), body.get("age"))
     gender = _safe_scalar(_first_present(details.get("gender"), body.get("gender")))
     benefits_from_body = _extract_desired_benefits_from_body(body=body, mode=mode)
     benefit_labels = await resolve_product_benefit_labels(db=db, product=product)
+    claim_labels = await resolve_product_catalog_labels(db=db, product=product, keys=("claims", "claim"))
+    # Free-text claims (schema often stores a single string) + resolved benefit labels for tiles.
+    tile_claims = list(
+        dict.fromkeys(
+            [
+                *benefit_labels,
+                *claim_labels,
+                *(_as_string_list(product.get("claims")) if not isinstance(product.get("claims"), list) else []),
+            ]
+        )
+    )
+    product_primary = (
+        product_concern_labels[0]
+        if product_concern_labels
+        else _safe_scalar(product.get("primaryConcern"))
+    )
     benefit_options = build_expected_benefit_options(
         product=product,
         mode=mode,
@@ -726,7 +768,11 @@ async def _score_product_impl(
         tag_names=tag_names,
     )
 
-    tile_product = _build_match_product(product)
+    tile_product = _build_match_product(
+        product,
+        declared_types=declared_types,
+        claims=tile_claims,
+    )
     tile_product["declared_for_skin_types"] = [x.lower().strip() for x in declared_types if str(x).strip()]
     if isinstance(product.get("keyIngredients"), list):
         tile_product["key_ingredients"] = await _resolve_ingredients_from_rows(rows=product.get("keyIngredients"), branded_ingredients_coll=branded_ingredient_coll, ingredient_coll=ingredient_coll)
@@ -762,13 +808,15 @@ async def _score_product_impl(
             tag_names=tag_names,
             mode=mode,
             active_dossiers=active_dossiers,
+            benefit_labels=benefit_labels,
+            concern_labels=product_concern_labels,
         )
         suitability = profile_match_engines.evaluate_suitability(
             skin_type=type_value.lower(),
             concerns=concerns,
             benefits=benefits,
             declared_types=declared_types,
-            product_primary=str(product.get("primaryConcern") or ""),
+            product_primary=product_primary,
             product_benefits=product_benefits,
             runtime_context=runtime_context,
             base_formula=base_formula,
@@ -802,8 +850,8 @@ async def _score_product_impl(
         state=state or "low",
         safety=safety,
         unmet_needs=scoring.get("unmet_needs", []),
-        product_primary=str(product.get("primaryConcern") or ""),
-        claims=_product_list_values(product, "claims", "benefit"),
+        product_primary=product_primary,
+        claims=tile_claims or _product_list_values(product, "claims", "benefit"),
         base_formula=base_formula,
         user_flags=runtime_context.get("flags"),
         mode=mode,

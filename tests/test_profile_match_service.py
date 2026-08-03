@@ -16,6 +16,35 @@ def test_skin_type_match_exact_adjacent_opposite():
     assert profile_match_engines.skin_type_match("oily", ["combination"]) == "adjacent"
     assert profile_match_engines.skin_type_match("oily", ["dry"]) == "opposite"
     assert profile_match_engines.skin_type_match("combination", []) == "unknown"
+    assert profile_match_engines.skin_type_match("sensitive", ["sensitive"]) == "exact"
+    assert profile_match_engines.skin_type_match("sensitive", ["dry"]) == "adjacent"
+    assert profile_match_engines.skin_type_match("combination", ["All Skin types"]) == "exact"
+
+
+def test_hair_type_match_does_not_use_skin_matrix():
+    assert profile_match_engines.hair_type_match("wavy", ["wavy"]) == "exact"
+    assert profile_match_engines.hair_type_match("wavy", ["straight"]) == "adjacent"
+    assert profile_match_engines.hair_type_match("straight", ["coily"]) == "opposite"
+    assert profile_match_engines.hair_type_match("curly", []) == "unknown"
+    # Critical: wavy must not be scored through oily/dry skin matrix as opposite.
+    assert (
+        profile_match_engines.profile_type_match(
+            user_type="wavy", declared_types=["wavy"], mode="haircare"
+        )
+        == "exact"
+    )
+    result = profile_match_engines.evaluate_suitability(
+        skin_type="wavy",
+        concerns=["frizz"],
+        benefits=["Frizz Control"],
+        declared_types=["wavy", "curly"],
+        product_primary="",
+        product_benefits=["Frizz Control"],
+        mode="haircare",
+    )
+    assert result["type_match"] == "exact"
+    assert result["type_ceiling"] == 100
+
 
 
 def test_score_to_band_thresholds():

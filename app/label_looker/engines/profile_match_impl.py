@@ -98,27 +98,41 @@ def _is_lifestyle_concern(concern: str) -> bool:
 def skin_type_match(user_skin: str, declared_types: list[str]) -> str:
     if not declared_types:
         return "unknown"
+    user = user_skin.lower().strip()
+    normalized_declared = [d.lower().strip() for d in declared_types if str(d).strip()]
+    # Catalog often stores "All Skin types" / "all" as a catch-all suitability row.
+    if any(d in {"all", "all skin types", "all-skin-types", "all skin type"} for d in normalized_declared):
+        return "exact"
     matrix: dict[tuple[str, str], str] = {
         ("oily", "oily"): "exact",
         ("oily", "combination"): "adjacent",
         ("oily", "normal"): "adjacent",
         ("oily", "dry"): "opposite",
+        ("oily", "sensitive"): "adjacent",
         ("combination", "oily"): "adjacent",
         ("combination", "combination"): "exact",
         ("combination", "normal"): "adjacent",
         ("combination", "dry"): "adjacent",
+        ("combination", "sensitive"): "adjacent",
         ("normal", "oily"): "adjacent",
         ("normal", "combination"): "adjacent",
         ("normal", "normal"): "exact",
         ("normal", "dry"): "adjacent",
+        ("normal", "sensitive"): "adjacent",
         ("dry", "oily"): "opposite",
         ("dry", "combination"): "adjacent",
         ("dry", "normal"): "adjacent",
         ("dry", "dry"): "exact",
+        ("dry", "sensitive"): "adjacent",
+        ("sensitive", "sensitive"): "exact",
+        ("sensitive", "dry"): "adjacent",
+        ("sensitive", "normal"): "adjacent",
+        ("sensitive", "combination"): "adjacent",
+        ("sensitive", "oily"): "adjacent",
     }
     matches: list[str] = []
-    for declared in declared_types:
-        m = matrix.get((user_skin, declared.lower().strip()))
+    for declared in normalized_declared:
+        m = matrix.get((user, declared))
         if m:
             matches.append(m)
     if "exact" in matches:
@@ -126,6 +140,39 @@ def skin_type_match(user_skin: str, declared_types: list[str]) -> str:
     if "adjacent" in matches:
         return "adjacent"
     return "opposite"
+
+
+def hair_type_match(user_hair: str, declared_types: list[str]) -> str:
+    """Hair texture fit — must not reuse the oily/dry skin matrix."""
+    if not declared_types:
+        return "unknown"
+    user = user_hair.lower().strip().replace("_", " ").replace("-", " ")
+    declared = [
+        d.lower().strip().replace("_", " ").replace("-", " ")
+        for d in declared_types
+        if str(d).strip()
+    ]
+    if any(d in {"all", "all hair types", "all-hair-types"} for d in declared):
+        return "exact"
+    if user in declared:
+        return "exact"
+    adjacent: dict[str, set[str]] = {
+        "straight": {"wavy"},
+        "wavy": {"straight", "curly"},
+        "curly": {"wavy", "coily", "kinky"},
+        "coily": {"curly", "kinky"},
+        "kinky": {"coily", "curly"},
+    }
+    near = adjacent.get(user, set())
+    if near & set(declared):
+        return "adjacent"
+    return "opposite"
+
+
+def profile_type_match(*, user_type: str, declared_types: list[str], mode: str) -> str:
+    if mode == "haircare":
+        return hair_type_match(user_type, declared_types)
+    return skin_type_match(user_type, declared_types)
 
 
 def score_to_band(score: int) -> str:
@@ -389,7 +436,11 @@ def evaluate_suitability(
     safety_severity: str = "clear",
     mode: str = "skincare",
 ) -> dict[str, Any]:
-    type_match = skin_type_match(skin_type.lower(), [x.lower() for x in declared_types])
+    type_match = profile_type_match(
+        user_type=skin_type.lower(),
+        declared_types=[x.lower() for x in declared_types],
+        mode=mode,
+    )
     type_points, ceiling, type_answer = _skin_type_points_and_ceiling(type_match)
 
     primary = _canonicalize_term(product_primary)

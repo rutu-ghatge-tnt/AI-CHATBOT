@@ -59,3 +59,62 @@ def test_tag_backed_product_scores_partial_for_frizz_goal():
     assert result["matched_desired_benefits"] == ["frizz control"]
     assert "anti-dandruff" in result["unmatched_desired_benefits"]
     assert result["final_score"] >= 30
+
+
+def test_resolved_catalog_benefits_match_even_when_product_stores_object_ids():
+    """PDP lists Nourishing + Sun Protection; catalog stores ObjectId refs only.
+
+    Scoring must use resolved benefit_labels so a selected product benefit is
+    never reported as Weak / needs-not-covered.
+    """
+    from bson import ObjectId
+
+    product = {
+        "productType": "Skincare",
+        "productName": "Eclipse Solaire Active Sunscreen SPF 50 PA+++",
+        "description": "Mineral sunscreen with zinc oxide and titanium dioxide.",
+        "skinTypes": ["dry", "normal", "oily", "combination", "sensitive"],
+        # Catalog shape: ObjectIds only — no embedded label strings.
+        "benefit": [ObjectId("681b224610e9409e12c03ace"), ObjectId("681b224610e9409e12c03acf")],
+        "claims": ["Non-comedogenic", "Paraben and mineral oil free"],
+    }
+    resolved_labels = ["Nourishing", "Sun Protection"]
+
+    # Without resolved labels, ObjectId refs are invisible (historical bug).
+    signals_without = build_product_benefit_signals(
+        product=product,
+        tile_product={},
+        tag_names=[],
+        mode="skincare",
+    )
+    result_without = profile_match_engines.evaluate_suitability(
+        skin_type="combination",
+        concerns=["Uneven Skin Tone", "Dark Circles", "Dryness"],
+        benefits=resolved_labels,
+        declared_types=product["skinTypes"],
+        product_primary="",
+        product_benefits=signals_without,
+        mode="skincare",
+    )
+    assert "nourishing" in result_without["unmatched_desired_benefits"]
+
+    signals = build_product_benefit_signals(
+        product=product,
+        tile_product={},
+        tag_names=[],
+        mode="skincare",
+        benefit_labels=resolved_labels,
+    )
+    result = profile_match_engines.evaluate_suitability(
+        skin_type="combination",
+        concerns=["Uneven Skin Tone", "Dark Circles", "Dryness"],
+        benefits=resolved_labels,
+        declared_types=product["skinTypes"],
+        product_primary="",
+        product_benefits=signals,
+        mode="skincare",
+    )
+    assert set(result["matched_desired_benefits"]) == {"nourishing", "sun protection"}
+    assert result["unmatched_desired_benefits"] == []
+    nourishing_axis = next(a for a in result["fit_axes"] if a["id"] == "goal_nourishing")
+    assert nourishing_axis["status"] == "strong"
