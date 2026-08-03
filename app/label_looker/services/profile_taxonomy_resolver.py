@@ -111,11 +111,21 @@ def _resolve_list_values(raw: Any, resolved: dict[ObjectId, str]) -> list[str]:
             out.append(item.strip())
             continue
         if isinstance(item, dict):
+            labeled = False
             for key in _NAME_KEYS:
                 v = item.get(key)
                 if isinstance(v, str) and v.strip():
                     out.append(v.strip())
+                    labeled = True
                     break
+            if labeled:
+                continue
+            # Extended-JSON / API-shaped refs: {"$oid": "..."} or {"_id": "..."}
+            oid = _normalize_object_id(item)
+            if oid is not None:
+                label = resolved.get(oid)
+                if label:
+                    out.append(label)
             continue
         oid = _normalize_object_id(item)
         if oid is not None:
@@ -123,6 +133,36 @@ def _resolve_list_values(raw: Any, resolved: dict[ObjectId, str]) -> list[str]:
             if label:
                 out.append(label)
     return list(dict.fromkeys(out))
+
+
+async def resolve_product_catalog_labels(
+    *,
+    db: AsyncIOMotorDatabase,
+    product: dict[str, Any],
+    keys: tuple[str, ...] | list[str],
+) -> list[str]:
+    """Resolve product catalog list fields that may be ObjectId refs, dicts, or strings.
+
+    Same class of bug as unresolved ``benefit`` ObjectIds: PDP populates labels,
+    but Label Looker scoring historically kept only bare strings and dropped refs.
+    """
+    combined: list[Any] = []
+    for key in keys:
+        raw = product.get(key)
+        if isinstance(raw, list):
+            combined.extend(raw)
+        elif isinstance(raw, str) and raw.strip():
+            combined.append(raw.strip())
+        elif raw is not None and not isinstance(raw, (list, dict)):
+            # Bare ObjectId scalar
+            combined.append(raw)
+        elif isinstance(raw, dict):
+            combined.append(raw)
+    if not combined:
+        return []
+    ids = _collect_object_ids(combined)
+    resolved = await _resolve_object_ids(db, ids) if ids else {}
+    return _resolve_list_values(combined, resolved)
 
 
 def _resolve_scalar_value(raw: Any, resolved: dict[ObjectId, str]) -> Any:
@@ -141,7 +181,7 @@ def _resolve_scalar_value(raw: Any, resolved: dict[ObjectId, str]) -> Any:
             v = raw.get(key)
             if isinstance(v, str) and v.strip():
                 return v.strip()
-        oid = _normalize_object_id(raw.get("_id"))
+        oid = _normalize_object_id(raw)
         if oid is not None and oid in resolved:
             return resolved[oid]
     oid = _normalize_object_id(raw)
